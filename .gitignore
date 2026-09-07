@@ -1,0 +1,32 @@
+# Secrets and local WeChat data
+all_keys.json
+config.json
+web_cache/
+decrypted/
+exports/
+db_storage/
+msg/
+voice_transcriptions.json
+runtime_probe.txt
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.dat
+
+# Logs and generated output
+logs/
+work/vendor/
+tools/find_all_keys_macos
+*.log
+
+# Python/local environment
+.venv/
+.pycache/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# macOS/editor noise
+.DS_Store

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WeChat Agent</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <div class="brand-title">WeChat Agent</div>
+        <nav class="main-tabs" aria-label="主视图">
+          <button class="main-tab active" data-view="raw">原始聊天内容</button>
+          <button class="main-tab" data-view="qa">聊天问答</button>
+          <button class="main-tab" data-view="rag">RAG 检索</button>
+          <button class="main-tab" data-view="settings">大模型配置</button>
+        </nav>
+      </header>
+
+      <section id="rawView" class="view active">
+        <div class="shell">
+          <aside class="sidebar">
+            <div class="topbar">
+              <div>
+                <h1>微信</h1>
+                <p id="statusLine">载入中</p>
+              </div>
+              <button id="refreshBtn" class="icon-btn" title="刷新聊天列表" aria-label="刷新聊天列表">↻</button>
+            </div>
+            <label class="search">
+              <span>⌕</span>
+              <input id="searchInput" type="search" placeholder="搜索" autocomplete="off" />
+            </label>
+            <div id="chatList" class="chat-list"></div>
+          </aside>
+
+          <section class="conversation">
+            <header class="conversation-header">
+              <div>
+                <h2 id="chatTitle">选择一个聊天</h2>
+                <p id="chatMeta"></p>
+              </div>
+            </header>
+            <div id="messagePane" class="message-pane">
+              <div class="empty-state">从左侧选择会话</div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="qaView" class="view qa-view">
+        <div class="qa-workspace">
+          <aside class="qa-sidebar">
+            <div class="qa-sidebar-header">
+              <h2>问答</h2>
+              <button id="qaNewBtn" class="subtle-btn" type="button">新建对话</button>
+            </div>
+            <div id="qaConversationList" class="qa-conversation-list"></div>
+          </aside>
+          <div class="qa-shell">
+            <header class="tool-header">
+              <div>
+                <h1 id="qaTitle">新对话</h1>
+                <p id="qaMeta">使用全部已解析聊天内容</p>
+              </div>
+            </header>
+            <section id="qaMessages" class="qa-messages">
+              <div class="qa-empty">问一个关于聊天记录的问题</div>
+            </section>
+            <div id="qaProgress" class="qa-progress"></div>
+            <form id="qaForm" class="qa-form">
+              <textarea id="qaQuestion" rows="1" placeholder="问一个关于聊天记录的问题"></textarea>
+              <button id="qaAskBtn" type="submit" aria-label="发送" title="发送">↑</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="ragView" class="view rag-view">
+        <div class="rag-shell">
+          <header class="tool-header rag-header">
+            <div>
+              <h1>RAG 检索</h1>
+              <p id="ragMeta">检查索引与路由</p>
+            </div>
+          </header>
+
+          <section id="ragStatusGrid" class="rag-status-grid"></section>
+
+          <section class="rag-console">
+            <form id="ragSearchForm" class="rag-search-form">
+              <label>
+                检索调试
+                <textarea id="ragQuestion" rows="3" placeholder="输入一个问题，查看路由、召回、排序和入模片段"></textarea>
+              </label>
+              <label>
+                入模片段
+                <input id="ragLimit" type="number" min="8" max="160" step="1" value="60" />
+              </label>
+              <button id="ragSearchBtn" type="submit">运行检索</button>
+            </form>
+            <section class="rag-log-panel">
+              <div class="rag-section-title">索引日志</div>
+              <div id="ragLog" class="rag-log"></div>
+            </section>
+          </section>
+
+          <div class="rag-results-grid">
+            <section id="ragRoute" class="rag-route"></section>
+            <section id="ragSources" class="rag-sources"></section>
+          </div>
+        </div>
+      </section>
+
+      <section id="settingsView" class="view settings-view">
+        <div class="tool-panel settings-panel">
+          <header class="tool-header">
+            <h1>大模型配置</h1>
+            <p id="settingsStatus">载入中</p>
+          </header>
+          <form id="llmConfigForm" class="settings-form">
+            <section class="config-section">
+              <h2>语音转文字</h2>
+              <label>Base URL<input id="voiceBaseUrl" autocomplete="off" /></label>
+              <label>模型<input id="voiceModel" autocomplete="off" /></label>
+              <label>API Key<input id="voiceApiKey" type="password" autocomplete="off" placeholder="留空则保留已保存值" /></label>
+              <label>环境变量<input id="voiceApiKeyEnv" autocomplete="off" /></label>
+              <div class="voice-batch-actions">
+                <button id="voiceTranscribeAllBtn" type="button">一键转文字所有语音</button>
+                <button id="voiceStopBatchBtn" type="button" disabled>停止</button>
+                <span id="voiceBatchCount">已转写 - / -</span>
+                <span id="voiceBatchStatus"></span>
+              </div>
+              <div id="voiceBatchLog" class="voice-batch-log"></div>
+            </section>
+            <section class="config-section">
+              <h2>聊天问答</h2>
+              <label>Base URL<input id="qaBaseUrl" autocomplete="off" /></label>
+              <label>模型<input id="qaModel" autocomplete="off" /></label>
+              <label>API Key<input id="qaApiKey" type="password" autocomplete="off" placeholder="留空则保留已保存值" /></label>
+              <label>环境变量<input id="qaApiKeyEnv" autocomplete="off" /></label>
+              <label>温度<input id="qaTemperature" type="number" min="0" max="2" step="0.1" /></label>
+              <label>检索条数<input id="qaContextLimit" type="number" min="8" max="160" step="1" /></label>
+            </section>
+            <section class="config-section">
+              <h2>Embedding 检索</h2>
+              <label class="settings-checkbox">启用<input id="embeddingEnabled" type="checkbox" /></label>
+              <label>Base URL<input id="embeddingBaseUrl" autocomplete="off" placeholder="留空继承问答 Base URL" /></label>
+              <label>模型<input id="embeddingModel" autocomplete="off" /></label>
+              <label>API Key<input id="embeddingApiKey" type="password" autocomplete="off" placeholder="留空继承问答 API Key" /></label>
+              <label>环境变量<input id="embeddingApiKeyEnv" autocomplete="off" placeholder="留空继承问答环境变量" /></label>
+              <label>向量维度<input id="embeddingDimensions" type="number" min="0" max="3072" step="1" /></label>
+              <label>批量大小<input id="embeddingBatchSize" type="number" min="1" max="128" step="1" /></label>
+              <label>召回块数<input id="embeddingQueryCandidates" type="number" min="10" max="300" step="1" /></label>
+            </section>
+            <section class="config-section">
+              <h2>Rerank 重排</h2>
+              <label class="settings-checkbox">启用<input id="rerankEnabled" type="checkbox" /></label>
+              <label>Base URL<input id="rerankBaseUrl" autocomplete="off" placeholder="留空继承问答 Base URL" /></label>
+              <label>模型<input id="rerankModel" autocomplete="off" /></label>
+              <label>API Key<input id="rerankApiKey" type="password" autocomplete="off" placeholder="留空继承问答 API Key" /></label>
+              <label>环境变量<input id="rerankApiKeyEnv" autocomplete="off" placeholder="留空继承问答环境变量" /></label>
+              <label>候选数量<input id="rerankCandidateLimit" type="number" min="8" max="120" step="1" /></label>
+            </section>
+            <button id="saveLlmConfigBtn" type="submit">保存配置</button>
+          </form>
+        </div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

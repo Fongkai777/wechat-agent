@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wechat-agent"
+version = "0.1.0"
+description = "Local macOS WeChat 4.x database decrypt and export helpers"
+requires-python = ">=3.9"
+dependencies = [
+  "pycryptodome>=3.20",
+  "zstandard>=0.23",
+]
+
+[project.optional-dependencies]
+voice = [
+  "openai-whisper>=20231117",
+  "pilk>=0.2",
+]
+
+[project.scripts]
+wechat-agent = "wechat_agent.cli:main"
