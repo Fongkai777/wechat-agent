@@ -1,15 +1,34 @@
 const state = {
   chats: [],
   activeChat: null,
-  currentOffset: 0,
-  currentLimit: 120,
+  currentLimit: 100,
+  messageWindowLimit: 1000,
   currentMessages: [],
+  beforeCursor: null,
+  afterCursor: null,
+  hasMoreBefore: false,
+  hasMoreAfter: false,
+  chatGeneration: 0,
+  chatListGeneration: 0,
+  chatViewReady: false,
+  chatViewLoading: false,
+  chatViewRetryTimer: null,
+  chatLoading: false,
+  olderLoading: false,
+  newerLoading: false,
   query: "",
   statusSummary: "",
   llmConfig: null,
   qaIndexStatus: null,
   qaMessages: [],
   qaConversations: [],
+  qaHistoryReady: false,
+  qaHistoryLoading: false,
+  qaHistoryError: "",
+  qaHistoryTimer: null,
+  qaHistoryGeneration: 0,
+  qaOpenGeneration: 0,
+  qaRequestedConversationId: null,
   activeQaConversation: null,
   voiceBatchController: null,
   voiceStatus: null,
@@ -20,6 +39,18 @@ const state = {
   qaStreamController: null,
   qaTimer: null,
   activeQaMessage: null,
+  syncRevision: null,
+  syncPolling: false,
+  manualSyncing: false,
+  preparationRunning: false,
+  preparationStopRequested: false,
+  ragStatusTimer: null,
+  ragSchedule: null,
+  ragScheduleDirty: false,
+  ragScheduleSaving: false,
+  ragScheduleLoading: false,
+  ragScheduleTimer: null,
+  ragScheduleRevision: 0,
 };
 
 const mainTabs = document.querySelectorAll(".main-tab");
@@ -30,8 +61,12 @@ const searchInput = document.querySelector("#searchInput");
 const messagePane = document.querySelector("#messagePane");
 const chatTitle = document.querySelector("#chatTitle");
 const chatMeta = document.querySelector("#chatMeta");
+const latestMessagesBtn = document.querySelector("#latestMessagesBtn");
 const refreshBtn = document.querySelector("#refreshBtn");
+const syncStatus = document.querySelector("#syncStatus");
+const syncTime = document.querySelector("#syncTime");
 const qaMeta = document.querySelector("#qaMeta");
+const qaHistoryStatus = document.querySelector("#qaHistoryStatus");
 const qaForm = document.querySelector("#qaForm");
 const qaTitle = document.querySelector("#qaTitle");
 const qaNewBtn = document.querySelector("#qaNewBtn");
@@ -48,6 +83,10 @@ const voiceApiKey = document.querySelector("#voiceApiKey");
 const voiceApiKeyEnv = document.querySelector("#voiceApiKeyEnv");
 const qaBaseUrl = document.querySelector("#qaBaseUrl");
 const qaModel = document.querySelector("#qaModel");
+const taskBaseUrl = document.querySelector("#taskBaseUrl");
+const taskModel = document.querySelector("#taskModel");
+const taskApiKey = document.querySelector("#taskApiKey");
+const taskApiKeyEnv = document.querySelector("#taskApiKeyEnv");
 const qaApiKey = document.querySelector("#qaApiKey");
 const qaApiKeyEnv = document.querySelector("#qaApiKeyEnv");
 const qaTemperature = document.querySelector("#qaTemperature");
@@ -72,8 +111,20 @@ const voiceStopBatchBtn = document.querySelector("#voiceStopBatchBtn");
 const voiceBatchCount = document.querySelector("#voiceBatchCount");
 const voiceBatchStatus = document.querySelector("#voiceBatchStatus");
 const voiceBatchLog = document.querySelector("#voiceBatchLog");
+const voiceBatchDetails = document.querySelector("#voiceBatchDetails");
+const voicePendingCount = document.querySelector("#voicePendingCount");
 const ragMeta = document.querySelector("#ragMeta");
 const ragStatusGrid = document.querySelector("#ragStatusGrid");
+const ragPrepareBtn = document.querySelector("#ragPrepareBtn");
+const ragPrepareStopBtn = document.querySelector("#ragPrepareStopBtn");
+const ragPrepareStatus = document.querySelector("#ragPrepareStatus");
+const ragScheduleForm = document.querySelector("#ragScheduleForm");
+const ragScheduleEnabled = document.querySelector("#ragScheduleEnabled");
+const ragScheduleValue = document.querySelector("#ragScheduleValue");
+const ragScheduleUnit = document.querySelector("#ragScheduleUnit");
+const ragScheduleSaveBtn = document.querySelector("#ragScheduleSaveBtn");
+const ragScheduleFeedback = document.querySelector("#ragScheduleFeedback");
+const ragScheduleStatus = document.querySelector("#ragScheduleStatus");
 const ragSearchForm = document.querySelector("#ragSearchForm");
 const ragQuestion = document.querySelector("#ragQuestion");
 const ragLimit = document.querySelector("#ragLimit");
@@ -102,29 +153,106 @@ function avatarText(title) {
   return Array.from(clean)[0] || "?";
 }
 
+function renderAvatar(title, url, className = "avatar") {
+  const size = className === "mini-avatar" ? 34 : 44;
+  const picture = url ? `<img class="avatar-image" src="${escapeHtml(url)}" alt="" width="${size}" height="${size}" loading="lazy" decoding="async" />` : "";
+  return `<span class="${className}"><span aria-hidden="true">${escapeHtml(avatarText(title))}</span>${picture}</span>`;
+}
+
+function bindAvatarFallbacks(container) {
+  for (const img of container.querySelectorAll(".avatar-image")) {
+    if (img.dataset.bound) continue;
+    img.dataset.bound = "true";
+    img.addEventListener("error", () => img.remove(), { once: true });
+    if (img.complete && !img.naturalWidth) img.remove();
+  }
+}
+
+function setSyncStatus(message, kind = "ready") {
+  syncStatus.textContent = message;
+  syncStatus.dataset.state = kind;
+}
+
 async function getJSON(url) {
-  const response = await fetch(url);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || response.statusText);
-  return data;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, {signal: controller.signal, cache: "no-store"});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || response.statusText);
+    return data;
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("连接服务超时，请求已结束，可自动重试");
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 async function postJSON(url, payload) {
+  if (url === "/api/transcribe_voice" || url === "/api/rag/search") {
+    return window.WechatJobs.run(url, payload);
+  }
   const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
   const data = await response.json();
-  if (!response.ok || data.ok === false) throw new Error(data.error || response.statusText);
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || response.statusText);
+    error.status = response.status;
+    error.code = data.code;
+    throw error;
+  }
   return data;
 }
 
 async function loadStatus() {
   const data = await getJSON("/api/status");
-  state.statusSummary = `${data.total_chats} 个聊天 · ${data.total_messages} 条消息`;
+  if (!state.manualSyncing) renderStatus(data);
+  return data;
+}
+
+function renderStatus(data) {
+  state.statusSummary = `${data.total_chats.toLocaleString()} 个聊天 · ${data.total_messages.toLocaleString()} 条消息`;
+  if (data.demo_mode) state.statusSummary = `合成示例 · ${state.statusSummary}`;
   statusLine.textContent = state.statusSummary;
+  const mode = data.sync_interval > 0 ? "自动同步已开启" : "手动同步";
+  const syncError = data.sync_error || data.decrypt?.warning;
+  setSyncStatus(syncError ? "同步异常" : mode, syncError ? "error" : "ready");
+  syncStatus.title = syncError || (data.sync_interval > 0 ? `每 ${data.sync_interval} 秒检查最新消息` : "点击右侧按钮同步消息");
+  syncTime.textContent = data.last_synced_at ? `${data.last_synced_at.split("T")[1]} 已更新` : "尚未同步";
+  syncTime.title = data.last_synced_at ? `上次同步：${data.last_synced_at.replace("T", " ")}` : "";
+  statusLine.title = `数据源：${data.db_storage}\n最新消息：${data.last_message_time || "未知"}`;
   renderQaMeta();
+  return data;
+}
+
+async function pollSyncedMessages() {
+  if (document.hidden || state.syncPolling || state.manualSyncing) return;
+  if (!state.chatViewReady) return initializeChatView();
+  state.syncPolling = true;
+  try {
+    const data = await loadStatus();
+    if (state.manualSyncing) return;
+    const revision = String(data.sync_revision);
+    if (state.syncRevision !== revision) {
+      const applied = await loadChats();
+      if (state.manualSyncing || applied === false) return;
+      await refreshChatMessages();
+      state.syncRevision = revision;
+    } else if (state.hasMoreAfter && nearMessageBottom()) {
+      await loadNewer();
+    }
+  } catch (error) {
+    if (!state.manualSyncing) {
+      setSyncStatus("消息刷新失败，请重试", "error");
+      syncStatus.title = error.message || String(error);
+    }
+  } finally {
+    state.syncPolling = false;
+  }
 }
 
 async function loadQaIndexStatus() {
@@ -137,6 +265,7 @@ async function loadQaIndexStatus() {
 }
 
 async function loadRagStatus() {
+  window.clearTimeout(state.ragStatusTimer);
   const data = await getJSON("/api/rag/status");
   state.ragStatus = data;
   if (data.person_index) {
@@ -144,16 +273,118 @@ async function loadRagStatus() {
     renderQaMeta();
   }
   renderRagStatus();
-  if (data.search_index?.building) {
-    window.setTimeout(() => loadRagStatus().catch(() => {}), 1600);
+  if (data.maintenance?.running || data.search_index?.building || data.semantic_index?.building) {
+    state.ragStatusTimer = window.setTimeout(() => loadRagStatus().catch(() => {}), 1600);
+  }
+}
+
+function ragScheduleErrorText(error) {
+  const text = String(error || "");
+  if (text.includes("Embedding 请求失败") && /nodename nor servname|Name or service not known|Temporary failure in name resolution/.test(text)) {
+    return "Embedding 服务域名解析失败，请检查网络、DNS 或代理连接";
+  }
+  return text;
+}
+
+function renderRagSchedule() {
+  const schedule = state.ragSchedule;
+  if (!schedule) return;
+  if (!state.ragScheduleDirty && !state.ragScheduleSaving) {
+    ragScheduleEnabled.checked = schedule.enabled;
+    ragScheduleValue.value = schedule.interval_value;
+    ragScheduleUnit.value = schedule.interval_unit;
+  }
+  for (const field of [ragScheduleEnabled, ragScheduleValue, ragScheduleUnit]) field.disabled = state.ragScheduleSaving;
+  ragScheduleValue.max = ragScheduleUnit.value === "hours" ? "8760" : "365";
+  ragScheduleSaveBtn.disabled = state.ragScheduleSaving || !state.ragScheduleDirty;
+  ragScheduleSaveBtn.textContent = state.ragScheduleSaving ? "保存中" : "保存";
+  const date = value => new Date(value * 1000).toLocaleString("zh-CN", {
+    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const labels = {running: "执行中", completed: "已完成", failed: "失败", cancelled: "已停止", interrupted: "已中断"};
+  const latest = schedule.latest_run || (schedule.last_finished_at ? {
+    status: schedule.last_status, finished_at: schedule.last_finished_at, error: schedule.last_error,
+  } : null);
+  const bits = [];
+  if (!schedule.enabled) bits.push("定时已关闭");
+  if (schedule.last_status === "running") bits.push("定时更新执行中");
+  else if (schedule.enabled && schedule.waiting) bits.push("已到更新时间，等待当前操作完成");
+  else if (schedule.enabled && schedule.next_run_at) bits.push(`下次更新 ${date(schedule.next_run_at)}`);
+  if (latest) bits.push(`上次${latest.trigger === "manual" ? "手动" : ""}${labels[latest.status] || "执行"} ${date(latest.finished_at)}`);
+  const error = schedule.scheduler_error || latest?.error || (!latest ? schedule.last_error : "");
+  if (error) bits.push(ragScheduleErrorText(error));
+  ragScheduleStatus.textContent = bits.join(" · ");
+  ragScheduleStatus.setAttribute("data-error", String(Boolean(error)));
+}
+
+function editRagSchedule() {
+  state.ragScheduleDirty = true;
+  ragScheduleFeedback.textContent = "未保存";
+  ragScheduleFeedback.setAttribute("data-error", "false");
+  renderRagSchedule();
+}
+
+async function saveRagSchedule(event) {
+  event.preventDefault();
+  if (state.ragScheduleSaving || !state.ragSchedule) return;
+  const value = Number(ragScheduleValue.value);
+  const unit = ragScheduleUnit.value;
+  const max = unit === "hours" ? 8760 : 365;
+  if (!["hours", "days"].includes(unit) || !Number.isInteger(value) || value < 1 || value > max) {
+    ragScheduleFeedback.textContent = `周期须为 1 至 ${max} 的整数`;
+    ragScheduleFeedback.setAttribute("data-error", "true");
+    return;
+  }
+  state.ragScheduleSaving = true;
+  ++state.ragScheduleRevision;
+  renderRagSchedule();
+  try {
+    const data = await postJSON("/api/rag/schedule", {enabled: ragScheduleEnabled.checked,
+      interval_value: value, interval_unit: unit});
+    state.ragSchedule = data.schedule;
+    state.ragScheduleDirty = false;
+    ragScheduleFeedback.textContent = "已保存";
+    ragScheduleFeedback.setAttribute("data-error", "false");
+  } catch (error) {
+    ragScheduleFeedback.textContent = error.message || "保存失败";
+    ragScheduleFeedback.setAttribute("data-error", "true");
+  } finally {
+    state.ragScheduleSaving = false;
+    renderRagSchedule();
+  }
+}
+
+async function loadRagSchedule() {
+  if (state.ragScheduleLoading) return;
+  state.ragScheduleLoading = true;
+  window.clearTimeout(state.ragScheduleTimer);
+  const revision = state.ragScheduleRevision;
+  try {
+    const data = await getJSON("/api/rag/schedule");
+    if (revision !== state.ragScheduleRevision || state.ragScheduleSaving) return;
+    if (!data.schedule) throw new Error("未能读取定时设置");
+    const previous = state.ragSchedule;
+    state.ragSchedule = data.schedule;
+    renderRagSchedule();
+    const job = data.schedule.job;
+    if (job?.status === "running" && !state.preparationController) {
+      resumeMaintenanceJob(job).catch(showRagError);
+    } else if (previous && ((previous.last_finished_at !== data.schedule.last_finished_at && data.schedule.last_finished_at) ||
+      (previous.latest_run?.id !== data.schedule.latest_run?.id && data.schedule.latest_run?.finished_at))) {
+      Promise.allSettled([loadRagStatus(), loadVoiceStatus()]);
+    }
+  } catch (error) {
+    ragScheduleStatus.textContent = `定时状态暂不可用：${error.message || "读取失败"}`;
+    ragScheduleStatus.setAttribute("data-error", "true");
+  } finally {
+    state.ragScheduleLoading = false;
+    state.ragScheduleTimer = window.setTimeout(loadRagSchedule, 5000);
   }
 }
 
 function renderRagStatus() {
   if (!ragStatusGrid) return;
   const data = state.ragStatus || {};
-  const person = data.person_index || {};
-  const personStats = person.stats || {};
   const search = data.search_index || {};
   const semantic = data.semantic_index || {};
   const retrieval = data.retrieval_config || {};
@@ -183,7 +414,6 @@ function renderRagStatus() {
             : semantic.exists && semantic.schema_ok
               ? "未建立"
               : "未建立";
-  const personReady = person.ready ? "已就绪" : person.building ? "构建中" : person.error ? "异常" : "未就绪";
   const searchDetail = search.building
     ? `${search.build_stats?.message || "正在处理"} · ${formatNumber(search.build_stats?.inserted || 0)} 条`
     : search.error
@@ -194,27 +424,14 @@ function renderRagStatus() {
     : semantic.error
       ? semantic.error
       : `${formatNumber(semantic.chunk_count || 0)} 个文本块 · ${formatNumber(semantic.mapped_message_count || 0)} 条消息 · 待更新 ${formatNumber(semantic.pending_message_count || 0)} 条 · ${semantic.model || retrieval.embedding_model || ""}`;
-  const strategyBits = [
-    "联系人路由",
-    semantic.ready ? "OpenAI Embedding 主召回" : "Embedding 待建",
-    semantic.ready ? "SQLite 精确补漏" : "SQLite FTS/LIKE",
-    "RRF 融合",
-    retrieval.rerank_enabled ? "OpenAI Rerank" : "本地重排",
-  ];
   ragMeta.textContent = [
-    `联系人索引 ${personReady}`,
     `全文索引 ${searchReady}`,
     `语义索引 ${semanticReady}`,
     search.updated_at ? `更新 ${search.updated_at}` : "",
   ].filter(Boolean).join(" · ");
   ragStatusGrid.innerHTML = `
     <div class="rag-status-tile">
-      <span>联系人路由</span>
-      <strong>${escapeHtml(personReady)}</strong>
-      <small>${formatNumber(personStats.people || 0)} 人 · ${formatNumber(personStats.messages || 0)} 条消息 · ${escapeHtml(personStats.cache_hit ? "缓存" : "新建")}</small>
-    </div>
-    <div class="rag-status-tile">
-      <span>全文候选库</span>
+      <div class="rag-stage-heading"><span class="rag-step">2</span><h2>全文索引</h2></div>
       <strong>${escapeHtml(searchReady)}</strong>
       <small>${escapeHtml(searchDetail)}</small>
       <div class="rag-card-actions">
@@ -223,7 +440,7 @@ function renderRagStatus() {
       </div>
     </div>
     <div class="rag-status-tile">
-      <span>语义索引</span>
+      <div class="rag-stage-heading"><span class="rag-step">3</span><h2>语义索引</h2></div>
       <strong>${escapeHtml(semanticReady)}</strong>
       <small>${escapeHtml(semanticDetail)}</small>
       <div class="rag-card-actions">
@@ -231,15 +448,26 @@ function renderRagStatus() {
         <button id="ragEmbeddingFullRebuildBtn" class="subtle-btn" type="button" data-rag-action="embedding-full-rebuild" ${semantic.building ? "disabled" : ""}>重建语义</button>
       </div>
     </div>
-    <div class="rag-status-tile">
-      <span>检索策略</span>
-      <strong>${escapeHtml(semantic.ready || retrieval.rerank_enabled ? "Hybrid + API" : "Hybrid")}</strong>
-      <small>${escapeHtml(strategyBits.join(" · "))}</small>
-      <div class="rag-card-actions">
-        <button class="subtle-btn" type="button" data-rag-action="refresh">刷新状态</button>
-      </div>
-    </div>
   `;
+  renderPreparationControls();
+}
+
+function preparationBusy() {
+  return Boolean(state.preparationRunning || state.voiceBatchController || state.ragRebuildController ||
+    state.ragEmbeddingController || state.ragStatus?.maintenance?.running ||
+    state.ragStatus?.search_index?.building || state.ragStatus?.semantic_index?.building);
+}
+
+function renderPreparationControls() {
+  const busy = preparationBusy();
+  ragPrepareBtn.disabled = busy;
+  ragPrepareBtn.textContent = state.preparationRunning ? "正在准备检索" : "一键准备检索";
+  ragPrepareStopBtn.disabled = !state.preparationRunning || state.preparationStopRequested;
+  voiceTranscribeAllBtn.disabled = busy;
+  voiceStopBatchBtn.disabled = !state.voiceBatchController;
+  for (const button of ragStatusGrid.querySelectorAll("button[data-rag-action]")) {
+    button.disabled = busy;
+  }
 }
 
 function renderQaMeta() {
@@ -268,11 +496,21 @@ function formatMetricValue(value) {
 }
 
 async function loadChats() {
+  const generation = ++state.chatListGeneration;
+  const query = state.query;
   const params = new URLSearchParams({ limit: "1000" });
-  if (state.query) params.set("q", state.query);
-  const data = await getJSON(`/api/chats?${params}`);
-  state.chats = data.chats;
-  renderChats();
+  if (query) params.set("q", query);
+  try {
+    const data = await getJSON(`/api/chats?${params}`);
+    if (generation !== state.chatListGeneration || query !== state.query) return false;
+    if (!Array.isArray(data.chats)) throw new Error("服务未返回有效的聊天列表");
+    state.chats = data.chats;
+    renderChats();
+    return true;
+  } catch (error) {
+    if (generation !== state.chatListGeneration || query !== state.query) return false;
+    throw error;
+  }
 }
 
 async function loadLLMConfig() {
@@ -291,6 +529,7 @@ function renderLLMConfig(config) {
   if (!config) return;
   const voice = config.voice || {};
   const qa = config.qa || {};
+  const task = config.task || qa;
   const embedding = config.embedding || {};
   const rerank = config.rerank || {};
   voiceBaseUrl.value = voice.base_url || "";
@@ -309,6 +548,13 @@ function renderLLMConfig(config) {
   qaApiKeyEnv.value = qa.api_key_env || "OPENAI_API_KEY";
   qaTemperature.value = qa.temperature ?? 1;
   qaContextLimit.value = qa.max_context_messages ?? 40;
+  taskBaseUrl.value = task.base_url || "";
+  taskModel.value = task.model || "";
+  taskApiKey.value = "";
+  taskApiKey.placeholder = task.api_key_set
+    ? `已保存：${task.api_key_preview || "API Key"}`
+    : "留空则使用环境变量";
+  taskApiKeyEnv.value = task.api_key_env || "OPENAI_API_KEY";
   embeddingEnabled.checked = embedding.enabled !== false;
   embeddingBaseUrl.value = embedding.base_url || "";
   embeddingModel.value = embedding.model || "text-embedding-3-small";
@@ -329,7 +575,8 @@ function renderLLMConfig(config) {
     : "留空继承问答 API Key";
   rerankApiKeyEnv.value = rerank.api_key_env || "";
   rerankCandidateLimit.value = rerank.candidate_limit ?? 48;
-  settingsStatus.textContent = "配置就绪";
+  saveLlmConfigBtn.disabled = !config.task;
+  settingsStatus.textContent = config.task ? "配置就绪" : "请重启服务以启用任务助手独立配置";
 }
 
 function renderVoiceStatus(data) {
@@ -337,7 +584,8 @@ function renderVoiceStatus(data) {
     voiceBatchCount.textContent = "已转写 - / -";
     return;
   }
-  voiceBatchCount.textContent = `已转写 ${data.transcribed} / ${data.total}`;
+  voiceBatchCount.textContent = `已转写 ${formatNumber(data.transcribed)} / ${formatNumber(data.total)}`;
+  voicePendingCount.textContent = `待转写 ${formatNumber(data.pending)} 条`;
 }
 
 function resizeQaComposer() {
@@ -346,20 +594,47 @@ function resizeQaComposer() {
 }
 
 async function loadQaConversations() {
-  const data = await getJSON("/api/qa/conversations");
-  state.qaConversations = data.conversations || [];
+  if (state.qaHistoryLoading) return;
+  state.qaHistoryLoading = true;
+  window.clearTimeout(state.qaHistoryTimer);
+  const generation = state.qaHistoryGeneration;
   renderQaConversations();
-  if (!state.activeQaConversation && state.qaConversations[0]) {
-    await openQaConversation(state.qaConversations[0].id);
+  try {
+    const data = await getJSON("/api/qa/conversations");
+    if (generation !== state.qaHistoryGeneration) return;
+    if (!Array.isArray(data.conversations)) throw new Error("服务未返回有效的问答历史");
+    state.qaConversations = data.conversations;
+    state.qaHistoryReady = true;
+    state.qaHistoryError = "";
+    renderQaConversations();
+    if (state.qaRequestedConversationId && !state.qaStreamController) {
+      await openQaConversation(state.qaRequestedConversationId);
+    } else if (!state.activeQaConversation && state.qaConversations[0]) {
+      await openQaConversation(state.qaConversations[0].id);
+    }
+  } catch (error) {
+    if (generation !== state.qaHistoryGeneration) return;
+    state.qaHistoryError = `问答历史加载失败，正在重试：${error.message || "连接中断"}`;
+  } finally {
+    state.qaHistoryLoading = false;
+    renderQaConversations();
+    if (state.qaHistoryError || generation !== state.qaHistoryGeneration) {
+      state.qaHistoryTimer = window.setTimeout(() => loadQaConversations(), 3000);
+    }
   }
 }
 
 function renderQaConversations() {
+  qaHistoryStatus.textContent = state.qaHistoryError || (!state.qaHistoryReady ? "正在加载问答历史" : "");
+  qaHistoryStatus.hidden = !qaHistoryStatus.textContent;
+  const notice = state.qaHistoryError
+    ? `<div class="qa-history-status" role="status">${escapeHtml(state.qaHistoryError)}<button type="button" data-qa-history-retry>重试</button></div>` : "";
   if (!state.qaConversations.length) {
-    qaConversationList.innerHTML = `<div class="qa-conversation-empty">暂无对话</div>`;
+    qaConversationList.innerHTML = notice || `<div class="qa-conversation-empty">${state.qaHistoryReady ? "暂无对话" : "正在加载问答历史"}</div>`;
+    qaConversationList.querySelector("[data-qa-history-retry]")?.addEventListener("click", () => loadQaConversations());
     return;
   }
-  qaConversationList.innerHTML = state.qaConversations
+  qaConversationList.innerHTML = notice + state.qaConversations
     .map((conv) => {
       const active = state.activeQaConversation && state.activeQaConversation.id === conv.id ? " active" : "";
       const title = conv.title || "新对话";
@@ -371,26 +646,36 @@ function renderQaConversations() {
             <small>${escapeHtml(meta)}</small>
           </button>
           <div class="qa-conversation-actions">
-            <button class="qa-conversation-rename" data-conversation="${escapeHtml(conv.id)}" data-title="${escapeHtml(title)}" type="button" aria-label="重命名" title="重命名">✎</button>
-            <button class="qa-conversation-delete" data-conversation="${escapeHtml(conv.id)}" data-title="${escapeHtml(title)}" type="button" aria-label="删除" title="删除">⌫</button>
+            <button class="qa-conversation-rename" data-conversation="${escapeHtml(conv.id)}" data-title="${escapeHtml(title)}" type="button" aria-label="重命名" title="重命名"><img src="/static/icons/pencil.svg" width="14" height="14" alt="" /></button>
+            <button class="qa-conversation-delete" data-conversation="${escapeHtml(conv.id)}" data-title="${escapeHtml(title)}" type="button" aria-label="删除" title="删除"><img src="/static/icons/trash-2.svg" width="14" height="14" alt="" /></button>
           </div>
         </div>
       `;
     })
     .join("");
   for (const item of qaConversationList.querySelectorAll(".qa-conversation-open")) {
-    item.addEventListener("click", () => openQaConversation(item.dataset.conversation).catch(showPanelError));
+    item.addEventListener("click", () => openQaConversation(item.dataset.conversation).catch(showQaHistoryError));
   }
   for (const item of qaConversationList.querySelectorAll(".qa-conversation-rename")) {
-    item.addEventListener("click", () => renameQaConversation(item.dataset.conversation, item.dataset.title).catch(showPanelError));
+    item.addEventListener("click", () => renameQaConversation(item.dataset.conversation, item.dataset.title).catch(showQaHistoryError));
   }
   for (const item of qaConversationList.querySelectorAll(".qa-conversation-delete")) {
-    item.addEventListener("click", () => deleteQaConversation(item.dataset.conversation, item.dataset.title).catch(showPanelError));
+    item.addEventListener("click", () => deleteQaConversation(item.dataset.conversation, item.dataset.title).catch(showQaHistoryError));
   }
+  qaConversationList.querySelector("[data-qa-history-retry]")?.addEventListener("click", () => loadQaConversations());
+}
+
+function showQaHistoryError(error) {
+  state.qaHistoryError = error.message || "问答历史加载失败";
+  renderQaConversations();
+  setQaProgress(state.qaHistoryError);
 }
 
 async function newQaConversation() {
   if (guardActiveQaAnswer()) return;
+  ++state.qaHistoryGeneration;
+  ++state.qaOpenGeneration;
+  state.qaRequestedConversationId = null;
   const data = await postJSON("/api/qa/conversation/new", {});
   state.qaConversations = data.conversations || [];
   state.activeQaConversation = data.conversation;
@@ -404,8 +689,16 @@ async function newQaConversation() {
 async function openQaConversation(id) {
   if (state.activeQaConversation && state.activeQaConversation.id === id) return;
   if (guardActiveQaAnswer()) return;
+  const generation = ++state.qaOpenGeneration;
+  state.qaRequestedConversationId = id;
   const data = await getJSON(`/api/qa/conversation?id=${encodeURIComponent(id)}`);
+  if (generation !== state.qaOpenGeneration || state.qaStreamController) return;
+  if (!data.conversation || data.conversation.id !== id || !Array.isArray(data.conversation.messages)) {
+    throw new Error("服务未返回有效的问答记录，请重试");
+  }
   state.activeQaConversation = data.conversation;
+  state.qaRequestedConversationId = null;
+  state.qaHistoryError = "";
   state.qaMessages = data.conversation.messages || [];
   qaTitle.textContent = data.conversation.title || "新对话";
   renderQaConversations();
@@ -431,6 +724,7 @@ async function renameQaConversation(id, currentTitle = "") {
   if (title === null) return;
   const trimmed = title.trim();
   if (!trimmed) return;
+  ++state.qaHistoryGeneration;
   const data = await postJSON("/api/qa/conversation/rename", { id, title: trimmed });
   state.qaConversations = data.conversations || [];
   if (state.activeQaConversation && state.activeQaConversation.id === id) {
@@ -444,6 +738,9 @@ async function deleteQaConversation(id, title = "") {
   if (guardActiveQaAnswer()) return;
   const label = title || "新对话";
   if (!window.confirm(`删除对话「${label}」？`)) return;
+  ++state.qaHistoryGeneration;
+  ++state.qaOpenGeneration;
+  state.qaRequestedConversationId = null;
   const data = await postJSON("/api/qa/conversation/delete", { id });
   state.qaConversations = data.conversations || [];
   if (state.activeQaConversation && state.activeQaConversation.id === id) {
@@ -469,83 +766,259 @@ function renderChats() {
     .map((chat) => {
       const active = state.activeChat && state.activeChat.id === chat.id ? " active" : "";
       const typeClass = chat.type === "group" ? " group" : "";
-      const summary = chat.summary || `${chat.total_messages} 条消息`;
+      const summary = String(chat.summary || "").trim() || "[暂无预览]";
       return `
         <button class="chat-item${active}" data-chat="${escapeHtml(chat.id)}">
-          <span class="avatar${typeClass}">${escapeHtml(avatarText(chat.title))}</span>
+          ${renderAvatar(chat.title, chat.avatar_url, `avatar${typeClass}`)}
           <span class="chat-main">
             <span class="chat-row">
-              <span class="chat-title">${escapeHtml(chat.title)}</span>
+              <span class="chat-title" title="${escapeHtml(chat.title)}">${escapeHtml(chat.title)}</span>
               <span class="chat-time">${escapeHtml(compactTime(chat.last_time))}</span>
             </span>
-            <span class="chat-summary">${escapeHtml(summary)}</span>
+            <span class="chat-summary" title="${escapeHtml(summary)}">${escapeHtml(summary)}</span>
           </span>
         </button>
       `;
     })
     .join("");
 
+  bindAvatarFallbacks(chatList);
   for (const item of chatList.querySelectorAll(".chat-item")) {
-    item.addEventListener("click", () => openChat(item.dataset.chat));
+    item.addEventListener("click", () => openChat(item.dataset.chat).catch(showError));
   }
 }
 
-async function openChat(chatId, offset = "") {
+async function openChat(chatId) {
+  const generation = ++state.chatGeneration;
+  state.activeChat = state.chats.find(chat => chat.id === chatId) || null;
+  chatTitle.textContent = state.activeChat?.title || "载入中";
+  chatMeta.textContent = "";
+  state.chatLoading = true;
+  state.olderLoading = false;
+  state.newerLoading = false;
+  state.beforeCursor = state.afterCursor = null;
+  state.hasMoreBefore = state.hasMoreAfter = false;
+  state.currentMessages = [];
+  latestMessagesBtn.hidden = true;
   const params = new URLSearchParams({ chat: chatId, limit: String(state.currentLimit) });
-  if (offset !== "") params.set("offset", String(offset));
   messagePane.innerHTML = `<div class="empty-state">载入中</div>`;
-  const data = await getJSON(`/api/messages?${params}`);
-  state.activeChat = data.chat;
-  state.currentOffset = data.offset;
-  state.currentMessages = data.messages;
-  chatTitle.textContent = data.chat.title;
-  chatMeta.textContent = `${data.total} 条消息 · ${data.chat.first_time} 至 ${data.chat.last_time}`;
-  renderChats();
-  renderMessages(data);
-  messagePane.scrollTop = messagePane.scrollHeight;
+  try {
+    const data = await getJSON(`/api/messages?${params}`);
+    if (generation !== state.chatGeneration) return;
+    if (data.messages.some(msg => !msg.id)) throw new Error("请重启原来的 8787 服务以加载消息分页功能");
+    state.activeChat = data.chat;
+    state.currentMessages = data.messages;
+    state.beforeCursor = data.before_cursor;
+    state.afterCursor = data.after_cursor;
+    state.hasMoreBefore = data.has_more_before;
+    state.hasMoreAfter = data.has_more_after;
+    updateChatHeading(data.chat);
+    renderChats();
+    renderMessages(data);
+    messagePane.scrollTop = messagePane.scrollHeight;
+  } catch (error) {
+    if (generation === state.chatGeneration) {
+      messagePane.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "加载失败，请重新选择会话")}</div>`;
+    }
+  } finally {
+    if (generation === state.chatGeneration) state.chatLoading = false;
+  }
+}
+
+function updateChatHeading(chat) {
+  chatTitle.textContent = chat.title;
+  chatTitle.title = chat.title;
+  chatMeta.textContent = `${chat.total_messages} 条消息 · ${chat.first_time} 至 ${chat.last_time}`;
+  chatMeta.title = chatMeta.textContent;
+}
+
+function nearMessageBottom() {
+  return messagePane.scrollHeight - messagePane.scrollTop - messagePane.clientHeight < 100;
+}
+
+function messageAnchor() {
+  const top = messagePane.getBoundingClientRect().top;
+  const entry = [...messagePane.querySelectorAll(".message-entry")].find(node => node.getBoundingClientRect().bottom > top);
+  return entry ? {entry, top: entry.getBoundingClientRect().top} : null;
+}
+
+function restoreMessageAnchor(anchor) {
+  if (anchor?.entry.isConnected) messagePane.scrollTop += anchor.entry.getBoundingClientRect().top - anchor.top;
+}
+
+function updateOlderButton() {
+  const older = messagePane.querySelector("#loadOlderBtn");
+  if (!older) return;
+  older.hidden = !state.hasMoreBefore;
+  older.disabled = state.olderLoading || state.newerLoading;
+  older.textContent = state.olderLoading ? "加载中" : "更早消息";
+}
+
+function trimMessageWindow(edge, anchor = null) {
+  if (state.currentMessages.length <= state.messageWindowLimit) return;
+  const keep = edge === "start" ? state.currentMessages.slice(-state.messageWindowLimit) : state.currentMessages.slice(0, state.messageWindowLimit);
+  const kept = new Set(keep.map(msg => msg.id));
+  // Never evict the message the user is currently reading.
+  if (anchor && !kept.has(anchor.entry.dataset.messageId)) return;
+  for (const msg of state.currentMessages) {
+    if (!kept.has(msg.id)) messagePane.querySelector(`.message-entry[data-message-id="${CSS.escape(msg.id)}"]`)?.remove();
+  }
+  state.currentMessages = keep;
+  state.beforeCursor = keep[0].id;
+  state.afterCursor = keep[keep.length - 1].id;
+  if (edge === "start") state.hasMoreBefore = true;
+  else {
+    state.hasMoreAfter = true;
+    latestMessagesBtn.hidden = false;
+    latestMessagesBtn.textContent = "查看最新消息";
+  }
+  updateMessageDivider(keep[0].id, null);
+  updateOlderButton();
 }
 
 async function loadOlder() {
-  if (!state.activeChat) return;
-  const nextOffset = Math.max(0, state.currentOffset - state.currentLimit);
-  const previousHeight = messagePane.scrollHeight;
+  if (!state.activeChat || state.chatLoading || state.olderLoading || state.newerLoading || !state.hasMoreBefore || !state.beforeCursor) return;
+  const generation = state.chatGeneration;
+  state.olderLoading = true;
+  updateOlderButton();
   const params = new URLSearchParams({
-    chat: state.activeChat.id,
-    offset: String(nextOffset),
-    limit: String(state.currentOffset - nextOffset),
+    chat: state.activeChat.id, before: state.beforeCursor, limit: String(state.currentLimit),
   });
-  const data = await getJSON(`/api/messages?${params}`);
-  state.currentOffset = data.offset;
-  state.currentMessages = [...data.messages, ...state.currentMessages];
-  renderMessages({
-    ...data,
-    messages: state.currentMessages,
-    has_more_before: data.offset > 0,
-  });
-  messagePane.scrollTop = messagePane.scrollHeight - previousHeight;
+  try {
+    const data = await getJSON(`/api/messages?${params}`);
+    if (generation !== state.chatGeneration) return;
+    const anchor = messageAnchor();
+    const ids = new Set(state.currentMessages.map(msg => msg.id));
+    const added = data.messages.filter(msg => !ids.has(msg.id));
+    const previousFirst = state.currentMessages[0];
+    state.currentMessages = [...added, ...state.currentMessages];
+    state.beforeCursor = data.before_cursor || state.beforeCursor;
+    state.hasMoreBefore = data.has_more_before;
+    messagePane.querySelector("#messageEntries").insertAdjacentHTML("afterbegin", messageEntriesHTML(added));
+    if (previousFirst && added.length) updateMessageDivider(previousFirst.id, added[added.length - 1]);
+    trimMessageWindow("end", anchor);
+    state.olderLoading = false;
+    updateOlderButton();
+    bindMessageControls();
+    restoreMessageAnchor(anchor);
+  } catch (error) {
+    if (generation === state.chatGeneration) {
+      const older = messagePane.querySelector("#loadOlderBtn");
+      if (older) older.title = error.message;
+      setSyncStatus("历史消息加载失败，请重试", "error");
+    }
+  } finally {
+    if (generation === state.chatGeneration) {
+      state.olderLoading = false;
+      updateOlderButton();
+    }
+  }
+}
+
+async function loadNewer() {
+  if (!state.activeChat || state.chatLoading || state.newerLoading || state.olderLoading) return;
+  if (!state.afterCursor) return openChat(state.activeChat.id);
+  const generation = state.chatGeneration;
+  state.newerLoading = true;
+  updateOlderButton();
+  try {
+    const params = new URLSearchParams({chat: state.activeChat.id, after: state.afterCursor, limit: String(state.currentLimit)});
+    const data = await getJSON(`/api/messages?${params}`);
+    if (generation !== state.chatGeneration) return;
+    const atBottom = nearMessageBottom();
+    const anchor = atBottom ? null : messageAnchor();
+    const ids = new Set(state.currentMessages.map(msg => msg.id));
+    const added = data.messages.filter(msg => !ids.has(msg.id));
+    const previous = state.currentMessages[state.currentMessages.length - 1];
+    state.currentMessages.push(...added);
+    state.afterCursor = data.after_cursor || state.afterCursor;
+    state.hasMoreAfter = data.has_more_after;
+    state.activeChat = data.chat;
+    updateChatHeading(data.chat);
+    messagePane.querySelector("#messageEntries").insertAdjacentHTML("beforeend", messageEntriesHTML(added, previous));
+    trimMessageWindow("start", anchor);
+    bindMessageControls();
+    if (atBottom) messagePane.scrollTop = messagePane.scrollHeight;
+    else restoreMessageAnchor(anchor);
+    latestMessagesBtn.hidden = !state.hasMoreAfter && (atBottom || !added.length);
+    latestMessagesBtn.textContent = state.hasMoreAfter ? "查看最新消息" : "新消息";
+  } finally {
+    if (generation === state.chatGeneration) {
+      state.newerLoading = false;
+      updateOlderButton();
+    }
+  }
+}
+
+async function refreshChatMessages() {
+  if (!state.activeChat || state.chatLoading) return;
+  const latest = state.chats.find(chat => chat.id === state.activeChat.id);
+  if (!latest) return;
+  updateChatHeading(latest);
+  if (nearMessageBottom() && document.querySelector("#rawView").classList.contains("active")) {
+    await loadNewer();
+    await refreshVisibleMessages();
+  } else if (latest.total_messages !== state.activeChat.total_messages || latest.last_ts !== state.activeChat.last_ts) {
+    latestMessagesBtn.hidden = false;
+    latestMessagesBtn.textContent = "查看最新消息";
+  }
+}
+
+function messageEntriesHTML(messages, previous = null) {
+  let lastDivider = previous ? dividerLabel(previous.time) : "";
+  return messages.map(msg => {
+    const divider = dividerLabel(msg.time);
+    const heading = divider && divider !== lastDivider ? `<div class="day-divider">${escapeHtml(divider)}</div>` : "";
+    lastDivider = divider;
+    return `<div class="message-entry" data-message-id="${escapeHtml(msg.id)}">${heading}${renderMessage(msg, state.activeChat.type, msg.id)}</div>`;
+  }).join("");
+}
+
+function updateMessageDivider(id, previous) {
+  const entry = messagePane.querySelector(`.message-entry[data-message-id="${CSS.escape(id)}"]`);
+  const message = state.currentMessages.find(msg => msg.id === id);
+  if (!entry || !message) return;
+  const heading = entry.querySelector(".day-divider");
+  const label = dividerLabel(message.time);
+  if (label === dividerLabel(previous?.time)) heading?.remove();
+  else if (label && !heading) entry.insertAdjacentHTML("afterbegin", `<div class="day-divider">${escapeHtml(label)}</div>`);
 }
 
 function renderMessages(data) {
-  const blocks = [];
-  if (data.has_more_before) {
-    blocks.push(`<button id="loadOlderBtn" class="load-older">更早消息</button>`);
-  }
+  messagePane.innerHTML = `<button id="loadOlderBtn" class="load-older">更早消息</button><div id="messageEntries">${messageEntriesHTML(data.messages)}</div>`;
+  if (!data.messages.length) messagePane.querySelector("#messageEntries").innerHTML = `<div class="empty-state">没有消息</div>`;
+  updateOlderButton();
+  messagePane.querySelector("#loadOlderBtn").addEventListener("click", loadOlder);
+  bindMessageControls();
+}
 
-  let lastDivider = "";
-  data.messages.forEach((msg, index) => {
-    const divider = dividerLabel(msg.time);
-    if (divider && divider !== lastDivider) {
-      blocks.push(`<div class="day-divider">${escapeHtml(divider)}</div>`);
-      lastDivider = divider;
-    }
-    blocks.push(renderMessage(msg, data.chat.type, index));
-  });
-
-  messagePane.innerHTML = blocks.join("") || `<div class="empty-state">没有消息</div>`;
-  const older = document.querySelector("#loadOlderBtn");
-  if (older) older.addEventListener("click", loadOlder);
+function bindMessageControls() {
   bindVoiceTranscribeButtons();
   bindMediaFallbacks();
+  bindAvatarFallbacks(messagePane);
+}
+
+async function refreshVisibleMessages() {
+  if (!state.activeChat || state.chatLoading || !state.currentMessages.length) return;
+  const generation = state.chatGeneration;
+  const visible = messageAnchor();
+  const index = Math.max(0, state.currentMessages.findIndex(msg => msg.id === visible?.entry.dataset.messageId) - 1);
+  const params = new URLSearchParams({chat: state.activeChat.id, limit: String(state.currentLimit)});
+  if (index > 0) params.set("after", state.currentMessages[index - 1].id);
+  else if (state.currentMessages.length > state.currentLimit) params.set("before", state.currentMessages[state.currentLimit].id);
+  const data = await getJSON(`/api/messages?${params}`);
+  if (generation !== state.chatGeneration) return;
+  const anchor = messageAnchor();
+  for (const msg of data.messages) {
+    const position = state.currentMessages.findIndex(item => item.id === msg.id);
+    if (position < 0 || JSON.stringify(state.currentMessages[position]) === JSON.stringify(msg)) continue;
+    state.currentMessages[position] = msg;
+    const entry = messagePane.querySelector(`.message-entry[data-message-id="${CSS.escape(msg.id)}"]`);
+    const bubble = entry?.querySelector(".message");
+    if (bubble) bubble.outerHTML = renderMessage(msg, state.activeChat.type, msg.id);
+  }
+  bindMessageControls();
+  restoreMessageAnchor(anchor);
 }
 
 function dividerLabel(time) {
@@ -564,7 +1037,7 @@ function renderMessage(msg, chatType, index) {
   const contentClass = msg.type === "text" ? "" : " type-chip";
   return `
     <div class="message${mine}">
-      <div class="mini-avatar">${escapeHtml(avatarText(msg.mine ? "我" : msg.sender || msg.sender_username))}</div>
+      ${renderAvatar(msg.mine ? "我" : msg.sender || msg.sender_username, msg.avatar_url, "mini-avatar")}
       <div class="bubble-wrap">
         ${sender}
         <div class="bubble${contentClass}">${body}</div>
@@ -601,7 +1074,7 @@ function renderMessageBody(msg, index) {
       `;
     }
     const transcribeButton = !media.transcription && media.can_transcribe
-      ? `<button class="voice-transcribe" data-message-index="${index}">转文字</button>`
+      ? `<button class="voice-transcribe" data-message-id="${escapeHtml(index)}">转文字</button>`
       : "";
     if (media.available && media.url) {
       return `
@@ -701,6 +1174,8 @@ function renderRecordItemMedia(item) {
 
 function bindMediaFallbacks() {
   for (const img of messagePane.querySelectorAll("img.media-image, img.sticker-image, img.record-media-image")) {
+    if (img.dataset.bound) continue;
+    img.dataset.bound = "true";
     img.addEventListener("error", () => {
       const note = document.createElement("span");
       note.className = img.classList.contains("record-media-image") ? "record-media-note" : "media-placeholder";
@@ -712,13 +1187,15 @@ function bindMediaFallbacks() {
 
 function bindVoiceTranscribeButtons() {
   for (const button of messagePane.querySelectorAll(".voice-transcribe")) {
+    if (button.dataset.bound) continue;
+    button.dataset.bound = "true";
     button.addEventListener("click", () => transcribeVoice(button));
   }
 }
 
 async function transcribeVoice(button) {
-  const index = Number(button.dataset.messageIndex);
-  const msg = state.currentMessages[index];
+  const msg = state.currentMessages.find(item => item.id === button.dataset.messageId);
+  const generation = state.chatGeneration;
   const media = msg?.media;
   if (!media) return;
   button.disabled = true;
@@ -729,13 +1206,19 @@ async function transcribeVoice(button) {
       local_id: media.local_id,
       create_time: media.create_time,
     });
-    media.transcription = result.text || "（未识别到文字）";
-    media.note = "";
-    renderMessages({
-      chat: state.activeChat,
-      messages: state.currentMessages,
-      has_more_before: state.currentOffset > 0,
-    });
+    if (generation === state.chatGeneration) {
+      const current = state.currentMessages.find(item => item.id === msg.id);
+      if (current?.media) {
+        const anchor = messageAnchor();
+        current.media.transcription = result.text || "（未识别到文字）";
+        current.media.note = "";
+        const entry = messagePane.querySelector(`.message-entry[data-message-id="${CSS.escape(msg.id)}"]`);
+        const bubble = entry?.querySelector(".message");
+        if (bubble) bubble.outerHTML = renderMessage(current, state.activeChat.type, current.id);
+        bindMessageControls();
+        restoreMessageAnchor(anchor);
+      }
+    }
   } catch (error) {
     button.textContent = error.message || "识别失败";
     button.classList.add("error");
@@ -751,6 +1234,7 @@ function switchView(name) {
   for (const view of views) {
     view.classList.toggle("active", view.id === `${name}View`);
   }
+  if (name === "raw") refreshChatMessages().catch(() => setSyncStatus("消息更新失败，请重试", "error"));
   if (name === "settings" && !state.llmConfig) {
     loadLLMConfig().catch(showPanelError);
   }
@@ -759,11 +1243,23 @@ function switchView(name) {
   }
   if (name === "rag") {
     loadRagStatus().catch(showRagError);
+    loadVoiceStatus().catch(showRagError);
   }
+  if (name === "qa") loadQaConversations();
+  document.dispatchEvent(new CustomEvent("viewchange", { detail: name }));
 }
+
+document.addEventListener("goal-open-chat", (event) => {
+  switchView("raw");
+  openChat(event.detail).catch(showPanelError);
+});
 
 async function saveLLMConfig(event) {
   event.preventDefault();
+  if (!state.llmConfig?.task) {
+    settingsStatus.textContent = "请重启服务以启用任务助手独立配置";
+    return;
+  }
   saveLlmConfigBtn.disabled = true;
   saveLlmConfigBtn.textContent = "保存中";
   settingsStatus.textContent = "保存中";
@@ -782,6 +1278,12 @@ async function saveLLMConfig(event) {
         api_key_env: qaApiKeyEnv.value.trim(),
         temperature: Number(qaTemperature.value || 1),
         max_context_messages: Number(qaContextLimit.value || 40),
+      },
+      task: {
+        base_url: taskBaseUrl.value.trim(),
+        model: taskModel.value.trim(),
+        api_key: taskApiKey.value.trim(),
+        api_key_env: taskApiKeyEnv.value.trim(),
       },
       embedding: {
         enabled: embeddingEnabled.checked,
@@ -814,25 +1316,67 @@ async function saveLLMConfig(event) {
   }
 }
 
-async function transcribeAllVoices() {
+async function prepareRag() {
+  if (preparationBusy()) return;
+  state.preparationRunning = true;
+  state.preparationStopRequested = false;
+  ragPrepareStatus.textContent = "1/3 · 语音转文字";
+  renderPreparationControls();
+  let voiceFailures = 0;
+  try {
+    const controller = new AbortController();
+    state.preparationController = controller;
+    const result = await window.WechatJobs.run("/api/rag/prepare", {}, {
+      signal: controller.signal, onEvent: handlePreparationEvent,
+    });
+    voiceFailures = Number(result.voice_failures || 0);
+    ragPrepareStatus.textContent = voiceFailures
+      ? `索引已更新 · ${voiceFailures} 条语音转写失败，可重试`
+      : "检索准备完成";
+  } catch (error) {
+    ragPrepareStatus.textContent = error.message || "准备失败";
+  } finally {
+    state.preparationRunning = false;
+    state.preparationController = null;
+    await Promise.allSettled([loadVoiceStatus(), loadRagStatus()]);
+    renderPreparationControls();
+  }
+}
+
+function stopRagPreparation() {
+  state.preparationStopRequested = true;
+  state.preparationController?.abort();
+  state.voiceBatchController?.abort();
+  state.ragRebuildController?.abort();
+  state.ragEmbeddingController?.abort();
+  ragPrepareStatus.textContent = "正在停止";
+  renderPreparationControls();
+}
+
+function handlePreparationEvent(event) {
+  if (event.event === "stage") {
+    ragPrepareStatus.textContent = `${event.stage}/3 · ${event.message}`;
+    return;
+  }
+  const forwarded = { ...event, event: event.event === "stage_done" ? "done" : event.event };
+  if (event.stage === 1) handleVoiceBatchEvent(forwarded);
+  if (event.stage === 2) handleRagRebuildEvent(forwarded);
+  if (event.stage === 3) handleRagEmbeddingRebuildEvent(forwarded);
+  if (!event.stage && event.message) ragPrepareStatus.textContent = event.message;
+}
+
+async function transcribeAllVoices({ pipeline = false } = {}) {
+  if (!pipeline && preparationBusy()) return null;
   const controller = new AbortController();
   state.voiceBatchController = controller;
-  voiceTranscribeAllBtn.disabled = true;
-  voiceStopBatchBtn.disabled = false;
+  renderPreparationControls();
   voiceBatchStatus.textContent = "准备中";
   voiceBatchLog.innerHTML = "";
+  voiceBatchDetails.hidden = false;
   try {
-    const response = await fetch("/api/transcribe_all_voices_stream", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ force: false }),
-      signal: controller.signal,
+    return await window.WechatJobs.run("/api/transcribe_all_voices_stream", { force: false }, {
+      signal: controller.signal, onEvent: handleVoiceBatchEvent,
     });
-    if (!response.ok || !response.body) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || response.statusText);
-    }
-    await consumeNDJSON(response, handleVoiceBatchEvent);
   } catch (error) {
     if (error.name === "AbortError") {
       voiceBatchStatus.textContent = "已停止";
@@ -841,10 +1385,11 @@ async function transcribeAllVoices() {
       voiceBatchStatus.textContent = error.message || "转写失败";
       appendVoiceBatchLog(error.message || "转写失败", "error");
     }
+    return { ok: false, error: error.message, aborted: error.name === "AbortError" };
   } finally {
     state.voiceBatchController = null;
-    voiceTranscribeAllBtn.disabled = false;
-    voiceStopBatchBtn.disabled = true;
+    await Promise.allSettled([loadVoiceStatus(), loadRagStatus()]);
+    renderPreparationControls();
   }
 }
 
@@ -886,73 +1431,65 @@ function handleVoiceBatchEvent(event) {
   }
   if (event.event === "done") {
     voiceBatchStatus.textContent = `完成：转写 ${event.transcribed} 条 · 跳过 ${event.skipped} 条 · 失败 ${event.failed} 条${formatUsage(event.usage_totals)}`;
-    loadVoiceStatus().catch(showPanelError);
+    loadVoiceStatus().catch((error) => { voiceBatchStatus.textContent = error.message; });
     if (state.activeChat) {
-      openChat(state.activeChat.id, state.currentOffset).catch(showError);
+      refreshVisibleMessages().catch(showError);
     }
     loadStatus().catch(showError);
   }
 }
 
-async function rebuildRagIndex(full = false) {
+async function rebuildRagIndex(full = false, { pipeline = false } = {}) {
+  if (!pipeline && preparationBusy()) return null;
   const controller = new AbortController();
   const rebuildBtn = document.querySelector("#ragRebuildBtn");
   const fullRebuildBtn = document.querySelector("#ragFullRebuildBtn");
   state.ragRebuildController = controller;
+  renderPreparationControls();
   if (rebuildBtn) rebuildBtn.disabled = true;
   if (fullRebuildBtn) fullRebuildBtn.disabled = true;
   if (rebuildBtn) rebuildBtn.textContent = full ? "重建中" : "更新中";
   ragLog.innerHTML = "";
   appendRagLog(full ? "开始全量重建全文候选库" : "开始增量更新全文候选库");
   try {
-    const response = await fetch("/api/rag/rebuild_stream", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ full }),
-      signal: controller.signal,
+    return await window.WechatJobs.run("/api/rag/rebuild_stream", { full }, {
+      signal: controller.signal, onEvent: handleRagRebuildEvent,
     });
-    if (!response.ok || !response.body) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || response.statusText);
-    }
-    await consumeNDJSON(response, handleRagRebuildEvent);
   } catch (error) {
     appendRagLog(error.name === "AbortError" ? "已停止" : error.message || "重建失败", "error");
+    return { ok: false, error: error.message, aborted: error.name === "AbortError" };
   } finally {
     state.ragRebuildController = null;
     if (fullRebuildBtn) fullRebuildBtn.disabled = false;
     await loadRagStatus().catch(() => {});
+    renderPreparationControls();
   }
 }
 
-async function rebuildRagEmbeddingIndex(full = false) {
+async function rebuildRagEmbeddingIndex(full = false, { pipeline = false } = {}) {
+  if (!pipeline && preparationBusy()) return null;
   const controller = new AbortController();
   const embeddingRebuildBtn = document.querySelector("#ragEmbeddingRebuildBtn");
   const embeddingFullRebuildBtn = document.querySelector("#ragEmbeddingFullRebuildBtn");
   state.ragEmbeddingController = controller;
+  renderPreparationControls();
   if (embeddingRebuildBtn) embeddingRebuildBtn.disabled = true;
   if (embeddingFullRebuildBtn) embeddingFullRebuildBtn.disabled = true;
   if (embeddingRebuildBtn) embeddingRebuildBtn.textContent = full ? "重建中" : "更新中";
   ragLog.innerHTML = "";
   appendRagLog(full ? "开始重建语义索引" : "开始更新语义索引");
   try {
-    const response = await fetch("/api/rag/embedding_rebuild_stream", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ full }),
-      signal: controller.signal,
+    return await window.WechatJobs.run("/api/rag/embedding_rebuild_stream", { full }, {
+      signal: controller.signal, onEvent: handleRagEmbeddingRebuildEvent,
     });
-    if (!response.ok || !response.body) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || response.statusText);
-    }
-    await consumeNDJSON(response, handleRagEmbeddingRebuildEvent);
   } catch (error) {
     appendRagLog(error.name === "AbortError" ? "已停止" : error.message || "语义索引失败", "error");
+    return { ok: false, error: error.message, aborted: error.name === "AbortError" };
   } finally {
     state.ragEmbeddingController = null;
     if (embeddingFullRebuildBtn) embeddingFullRebuildBtn.disabled = false;
     await loadRagStatus().catch(() => {});
+    renderPreparationControls();
   }
 }
 
@@ -978,7 +1515,7 @@ function handleRagRebuildEvent(event) {
     const search = event.status?.search_index || {};
     const stats = search.build_stats || {};
     const mode = stats.update_mode === "full" ? "全量重建" : "增量更新";
-    appendRagLog(`${mode}完成${stats.inserted !== undefined ? ` · 写入 ${formatNumber(stats.inserted)} 条` : ""}`);
+    appendRagLog(`${mode}完成${stats.inserted !== undefined ? ` · 新增 ${formatNumber(stats.inserted)} 条` : ""}${stats.removed_messages ? ` · 排除副本记录 ${formatNumber(stats.removed_messages)} 条` : ""}${stats.updated_voices ? ` · 更新语音 ${formatNumber(stats.updated_voices)} 条` : ""}${stats.invalidated_chunks ? ` · 待更新语义块 ${formatNumber(stats.invalidated_chunks)} 个` : ""}`);
     if (event.status) {
       state.ragStatus = event.status;
       renderRagStatus();
@@ -1233,23 +1770,6 @@ function showRagError(error) {
   ragRoute.innerHTML = `<div class="rag-placeholder error">${escapeHtml(error.message || error)}</div>`;
 }
 
-async function consumeNDJSON(response, onEvent) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      if (line.trim()) onEvent(JSON.parse(line));
-    }
-  }
-  if (buffer.trim()) onEvent(JSON.parse(buffer));
-}
-
 function appendVoiceBatchLog(text, kind = "") {
   const line = document.createElement("div");
   line.className = `voice-batch-line${kind ? ` ${kind}` : ""}`;
@@ -1272,11 +1792,17 @@ async function askQuestion(event) {
   event.preventDefault();
   const question = qaQuestion.value.trim();
   if (!question) return;
-  if (state.qaStreamController) return;
-  if (!state.activeQaConversation) {
-    await newQaConversation();
-  }
+  if (state.qaStreamController || state.qaStarting) return;
+  state.qaStarting = true;
+  try {
+    if (!state.activeQaConversation) await newQaConversation();
+  } catch (error) {
+    setQaProgress(error.message || "创建对话失败");
+    return;
+  } finally { state.qaStarting = false; }
   const conversationId = state.activeQaConversation?.id || "";
+  const controller = new AbortController();
+  state.qaStreamController = controller;
   qaQuestion.value = "";
   resizeQaComposer();
   state.qaMessages.push({ role: "user", content: question });
@@ -1300,14 +1826,13 @@ async function askQuestion(event) {
   updateQaProgressFromMessage(assistantMessage);
   try {
     await saveActiveQaConversation().catch(() => {});
-    await streamQuestion(question, assistantMessage, conversationId);
+    await streamQuestion(question, assistantMessage, conversationId, controller);
   } catch (error) {
     assistantMessage.pending = false;
     assistantMessage.elapsed_ms = elapsedForMessage(assistantMessage);
     if (error.name === "AbortError") {
       assistantMessage.stopped = true;
       assistantMessage.content = assistantMessage.content || "已停止回答";
-      saveActiveQaConversation().catch(() => {});
     } else {
       assistantMessage.error = error.message || "问答失败";
       assistantMessage.content = assistantMessage.error;
@@ -1322,24 +1847,16 @@ async function askQuestion(event) {
   }
 }
 
-async function streamQuestion(question, assistantMessage, conversationId) {
-  const controller = new AbortController();
+async function streamQuestion(question, assistantMessage, conversationId, controller = new AbortController()) {
   state.qaStreamController = controller;
   const history = state.qaMessages
     .filter((item) => !item.pending && !item.error)
     .slice(0, -1)
     .map((item) => ({ role: item.role, content: item.content }));
-  const response = await fetch("/api/qa_stream", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
+  await window.WechatJobs.run("/api/qa_stream", { question, history, conversation_id: conversationId }, {
     signal: controller.signal,
-    body: JSON.stringify({ question, history, conversation_id: conversationId }),
+    onEvent: (event) => handleQaStreamEvent(event, assistantMessage),
   });
-  if (!response.ok || !response.body) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || response.statusText);
-  }
-  await consumeNDJSON(response, (event) => handleQaStreamEvent(event, assistantMessage));
 }
 
 function handleQaStreamEvent(event, assistantMessage) {
@@ -1366,7 +1883,7 @@ function handleQaStreamEvent(event, assistantMessage) {
     assistantMessage.sources = event.sources || [];
     assistantMessage.context_count = event.context_count || 0;
     assistantMessage.retrieval = event.retrieval || null;
-    if (event.conversation) {
+    if (event.conversation && state.activeQaConversation?.id === event.conversation.id) {
       state.activeQaConversation = event.conversation;
       qaTitle.textContent = event.conversation.title || "新对话";
     }
@@ -1548,6 +2065,16 @@ function showPanelError(error) {
 }
 
 let searchTimer = null;
+let lastMessageScrollTop = 0;
+messagePane.addEventListener("scroll", () => {
+  const movingUp = messagePane.scrollTop < lastMessageScrollTop;
+  lastMessageScrollTop = messagePane.scrollTop;
+  if (movingUp && messagePane.scrollTop < 100) loadOlder();
+  if (!movingUp && nearMessageBottom() && state.hasMoreAfter) loadNewer().catch(() => setSyncStatus("消息更新失败，请重试", "error"));
+});
+latestMessagesBtn.addEventListener("click", () => {
+  if (state.activeChat && !state.chatLoading) openChat(state.activeChat.id).catch(showError);
+});
 searchInput.addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
@@ -1562,9 +2089,71 @@ for (const tab of mainTabs) {
   });
 }
 
-refreshBtn.addEventListener("click", () => {
-  Promise.all([loadStatus(), loadChats()]).catch(showError);
-});
+function isSyncBusy(error) {
+  // Older servers return the same 409 for busy readers and actual sync failures.
+  return error.status === 409 && (error.code === "sync_busy" ||
+    error.message === "正在处理其他请求，请稍后同步");
+}
+
+function waitForSyncRetry(milliseconds) {
+  return new Promise(resolve => window.setTimeout(resolve, milliseconds));
+}
+
+async function syncLatestMessages() {
+  if (state.manualSyncing) return;
+  state.manualSyncing = true;
+  refreshBtn.disabled = true;
+  refreshBtn.setAttribute("aria-busy", "true");
+  refreshBtn.querySelector("span").textContent = "正在同步";
+  setSyncStatus("正在读取最新消息", "loading");
+  syncStatus.title = "";
+  let phase = "sync";
+  try {
+    let result;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        result = await postJSON("/api/sync", {});
+        break;
+      } catch (error) {
+        if (!isSyncBusy(error) || attempt === 4) throw error;
+        setSyncStatus("等待当前读取完成", "loading");
+        syncStatus.title = "其他请求正在使用数据快照，稍后自动重试；不会中断正在运行的任务";
+        await waitForSyncRetry(500 * (attempt + 1));
+      }
+    }
+    phase = "chats";
+    renderStatus(result.status);
+    setSyncStatus("正在更新聊天列表", "loading");
+    const applied = await loadChats();
+    phase = "messages";
+    await refreshChatMessages();
+    if (applied !== false) state.syncRevision = String(result.status.sync_revision);
+    renderStatus(result.status);
+    if (!result.status.sync_error && !result.status.decrypt?.warning) {
+      setSyncStatus("已同步最新消息");
+      syncStatus.title = "已检查本地微信数据库并刷新聊天列表";
+    }
+    // Index status is ancillary; it cannot turn a successful message sync into a failure.
+    Promise.allSettled([loadRagStatus(), loadQaIndexStatus()]);
+  } catch (error) {
+    const detail = error.message || String(error);
+    if (isSyncBusy(error)) {
+      setSyncStatus("服务忙，请稍后同步", "warning");
+      syncStatus.title = "其他读取或后台任务仍在运行，本次未执行同步；没有中断现有任务";
+    } else {
+      const label = phase === "sync" ? "同步失败" : phase === "chats" ? "已同步，聊天列表刷新失败" : "已同步，消息刷新失败";
+      setSyncStatus(`${label}：${detail}`, "error");
+      syncStatus.title = `${label}：${detail}`;
+    }
+  } finally {
+    state.manualSyncing = false;
+    refreshBtn.disabled = false;
+    refreshBtn.setAttribute("aria-busy", "false");
+    refreshBtn.querySelector("span").textContent = "同步最新消息";
+  }
+}
+
+refreshBtn.addEventListener("click", syncLatestMessages);
 
 qaForm.addEventListener("submit", askQuestion);
 qaQuestion.addEventListener("input", resizeQaComposer);
@@ -1576,20 +2165,25 @@ qaQuestion.addEventListener("keydown", (event) => {
   }
 });
 qaNewBtn.addEventListener("click", () => {
-  newQaConversation().catch(showPanelError);
+  newQaConversation().catch(showQaHistoryError);
 });
 voiceTranscribeAllBtn.addEventListener("click", transcribeAllVoices);
+ragPrepareBtn.addEventListener("click", prepareRag);
+ragScheduleForm.addEventListener("submit", saveRagSchedule);
+ragScheduleEnabled.addEventListener("change", editRagSchedule);
+ragScheduleValue.addEventListener("input", editRagSchedule);
+ragScheduleUnit.addEventListener("change", editRagSchedule);
+ragPrepareStopBtn.addEventListener("click", stopRagPreparation);
 voiceStopBatchBtn.addEventListener("click", () => {
-  state.voiceBatchController?.abort();
+  if (state.preparationRunning) stopRagPreparation();
+  else state.voiceBatchController?.abort();
 });
 llmConfigForm.addEventListener("submit", saveLLMConfig);
 ragStatusGrid.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-rag-action]");
   if (!button || button.disabled) return;
   const action = button.dataset.ragAction;
-  if (action === "refresh") {
-    loadRagStatus().catch(showRagError);
-  } else if (action === "rebuild") {
+  if (action === "rebuild") {
     rebuildRagIndex(false);
   } else if (action === "full-rebuild") {
     rebuildRagIndex(true);
@@ -1612,8 +2206,140 @@ function showError(error) {
   messagePane.innerHTML = `<div class="empty-state">${escapeHtml(error.message || error)}</div>`;
 }
 
-Promise.all([loadStatus(), loadChats(), loadLLMConfig(), loadVoiceStatus(), loadQaConversations(), loadQaIndexStatus(), loadRagStatus()])
-  .then(() => {
-    if (state.chats[0]) return openChat(state.chats[0].id);
-  })
-  .catch(showError);
+async function initializeChatView() {
+  if (state.chatViewReady || state.chatViewLoading || state.manualSyncing) return;
+  state.chatViewLoading = true;
+  window.clearTimeout(state.chatViewRetryTimer);
+  state.chatViewRetryTimer = null;
+  try {
+    // A failed status request must not prevent a successful chat list from rendering.
+    const results = await Promise.allSettled([loadStatus(), loadChats()]);
+    if (state.manualSyncing) return;
+    const failures = results.filter(result => result.status === "rejected");
+    state.chatViewReady = !failures.length;
+    if (failures.length) {
+      statusLine.textContent = state.statusSummary || "等待连接";
+      setSyncStatus("连接暂时中断，正在重试", "warning");
+      syncStatus.title = failures.map(result => result.reason.message || String(result.reason)).join("；");
+    }
+    if (!state.activeChat && !state.query && state.chats[0]) await openChat(state.chats[0].id);
+  } finally {
+    state.chatViewLoading = false;
+    if (!state.chatViewReady) state.chatViewRetryTimer = window.setTimeout(initializeChatView, 3000);
+  }
+}
+
+initializeChatView().catch(showError);
+loadRagSchedule();
+
+Promise.allSettled([loadLLMConfig(), loadVoiceStatus(), loadQaConversations(), loadQaIndexStatus(), loadRagStatus()])
+  .then(() => recoverBackgroundJobs()).catch(showPanelError);
+window.setInterval(pollSyncedMessages, 15000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    pollSyncedMessages();
+    recoverBackgroundJobs().catch(showPanelError);
+  }
+});
+window.addEventListener("online", () => {
+  pollSyncedMessages();
+  loadQaConversations();
+});
+
+async function recoverBackgroundJobs() {
+  if (!window.WechatJobs || state.recoveringJobs) return;
+  state.recoveringJobs = true;
+  try {
+    const jobs = await window.WechatJobs.recoverable();
+    for (const job of jobs) {
+      // Observation does not submit a new model request.
+      if (job.kind === "/api/qa_stream" || job.kind === "/api/qa") {
+        if (!state.qaStreamController) resumeQaJob(job).catch(showPanelError);
+      } else {
+        resumeMaintenanceJob(job).catch(showPanelError);
+      }
+    }
+  } finally { state.recoveringJobs = false; }
+}
+
+async function resumeQaJob(job) {
+  const controller = new AbortController();
+  state.qaStreamController = controller;
+  qaAskBtn.disabled = true;
+  let message;
+  try {
+    const data = await getJSON(`/api/qa/conversation?id=${encodeURIComponent(job.conversation_id)}`);
+    state.activeQaConversation = data.conversation;
+    state.qaMessages = (data.conversation.messages || []).filter(item => !item.pending);
+    message = { id: makeClientId("qa"), role: "assistant", pending: true, content: "",
+      progress: "恢复后台进度", started_at: (job.started_at || Date.now()/1000) * 1000,
+      conversation_id: job.conversation_id };
+    // A completed answer may already be in history; do not append it twice.
+    if (job.status && job.status !== "running") {
+      await window.WechatJobs.watch(job);
+      return;
+    }
+    state.qaMessages.push(message);
+    qaTitle.textContent = data.conversation.title;
+    renderQaMessages();
+    startQaTimer(message);
+    await window.WechatJobs.watch(job, { signal: controller.signal,
+      onEvent: event => handleQaStreamEvent(event, message) });
+  } catch (error) {
+    if (message) {
+      message.pending = false;
+      message.content = error.message;
+      message.stopped = error.name === "AbortError";
+      if (!message.stopped) message.error = error.message;
+    }
+  } finally {
+    stopQaTimer(message);
+    state.qaStreamController = null;
+    qaAskBtn.disabled = false;
+    qaAskBtn.textContent = "↑";
+    // The server is the source of truth for completed, failed and cancelled answers.
+    const data = await getJSON(`/api/qa/conversation?id=${encodeURIComponent(job.conversation_id)}`).catch(() => null);
+    if (data?.conversation && state.activeQaConversation?.id === job.conversation_id) {
+      state.qaMessages = data.conversation.messages || [];
+      qaTitle.textContent = data.conversation.title || "新对话";
+    }
+    renderQaMessages();
+    setQaProgress("");
+    await loadQaConversations();
+  }
+}
+
+async function resumeMaintenanceJob(job) {
+  const bindings = {
+    "/api/rag/prepare": ["preparationController", handlePreparationEvent],
+    "/api/transcribe_all_voices_stream": ["voiceBatchController", handleVoiceBatchEvent],
+    "/api/transcribe_chat_voices_stream": ["voiceBatchController", handleVoiceBatchEvent],
+    "/api/rag/rebuild_stream": ["ragRebuildController", handleRagRebuildEvent],
+    "/api/rag/embedding_rebuild_stream": ["ragEmbeddingController", handleRagEmbeddingRebuildEvent],
+  };
+  const [slot, onEvent] = bindings[job.kind] || [];
+  if (slot && state[slot]) return;
+  const controller = new AbortController();
+  if (slot) state[slot] = controller;
+  if (slot === "preparationController") {
+    state.preparationRunning = true;
+    state.preparationStopRequested = false;
+  }
+  renderPreparationControls();
+  try {
+    const result = await window.WechatJobs.watch(job, { signal: controller.signal, onEvent });
+    if (job.kind === "/api/rag/search") renderRagSearchResult(result);
+    if (slot === "preparationController") ragPrepareStatus.textContent = result.voice_failures
+      ? `索引已更新 · ${result.voice_failures} 条语音转写失败，可重试` : "检索准备完成";
+    if (job.kind === "/api/transcribe_voice" && state.activeChat) await refreshVisibleMessages();
+  } catch (error) {
+    if (slot === "preparationController") ragPrepareStatus.textContent = error.message;
+    else if (slot === "voiceBatchController") voiceBatchStatus.textContent = error.message;
+    else appendRagLog(error.message, "error");
+  } finally {
+    if (slot) state[slot] = null;
+    if (slot === "preparationController") state.preparationRunning = false;
+    await Promise.allSettled([loadVoiceStatus(), loadRagStatus()]);
+    renderPreparationControls();
+  }
+}

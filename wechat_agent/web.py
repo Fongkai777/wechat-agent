@@ -9,8 +9,12 @@ import math
 import mimetypes
 import os
 import pickle
+import random
 import re
+import shutil
+import socket
 import sqlite3
+import ssl
 import subprocess
 import tempfile
 import threading
@@ -22,9 +26,14 @@ import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
+from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+
+from .jobs import JobRegistry, JobConflict, JobCancelled, check_job_cancelled, run_preparation, wait_for_job_retry
+from .rag_schedule import RagScheduler
+from .message_pages import select_message_page, encode_cursor, target_filter
 
 from .cli import (
     classify_type,
@@ -35,11 +44,13 @@ from .cli import (
     find_message_dbs,
     fmt_ts,
     iter_db_files,
+    is_message_db,
     key_for_rel,
     load_contacts,
     load_keys,
     load_name2id,
     load_sessions,
+    open_snapshot,
     rel_display,
     table_names,
 )
@@ -53,8 +64,11 @@ from .voice_transcribe import (
     transcribe_voice_data,
     voice_cache_key,
     voice_cache_path,
+    voice_transcription_from_cache,
     voice_dependency_note,
 )
+from .goals import GoalConflict, GoalScheduler, GoalStore, GOAL_MODEL_TIMEOUT_SECONDS, run_goal_agent
+from .goal_tools import GoalChatTools
 
 
 DEFAULT_DB_STORAGE = Path(os.environ.get("WECHAT_AGENT_DB_STORAGE", "db_storage"))
@@ -161,15 +175,24 @@ class AppState:
     qa_index_cache: Path
     qa_search_db: Path
     account: str = ""
+    demo_mode: bool = False
     since_ts: int | None = None
     since_label: str = ""
     image_aes_key: bytes | None = None
     image_xor_key: int = 0
     chats: list[dict[str, Any]] = field(default_factory=list)
     contacts: dict[str, str] = field(default_factory=dict)
+    avatar_versions: dict[str, str] = field(default_factory=dict)
     sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
     qa_item_cache: dict[str, tuple[dict[str, Any], ...]] = field(default_factory=dict)
     decrypt_summary: dict[str, Any] = field(default_factory=dict)
+    last_synced_at: str = ""
+    sync_interval: int = 60
+    sync_revision: int = 0
+    sync_error: str = ""
+    last_sync_trigger: str = "startup"
+    sync_stop: threading.Event = field(default_factory=threading.Event)
+    sync_thread: Any = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def chat_by_id(self, chat_id: str) -> dict[str, Any] | None:
@@ -205,13 +228,24 @@ def parse_since(value: str) -> tuple[int | None, str]:
 
 def ensure_decrypted(state: AppState) -> dict[str, Any]:
     keys = load_keys(state.keys)
-    summary = {"ok": 0, "failed": 0, "skipped": 0, "missing_keys": []}
+    summary = {"ok": 0, "failed": 0, "skipped": 0, "updated": 0, "missing_keys": [], "errors": []}
     state.decrypted.mkdir(parents=True, exist_ok=True)
+    manifest_path = state.decrypted / ".source_state.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    if not isinstance(manifest, dict) or manifest.get("source_root") != str(state.db_storage):
+        manifest = {"source_root": str(state.db_storage), "files": {}}
+    if not isinstance(manifest.get("files"), dict):
+        manifest["files"] = {}
+    fingerprints = manifest.setdefault("files", {})
 
     source_dbs = list(iter_db_files(state.db_storage)) if state.db_storage.exists() else []
     summary["source_dbs"] = len(source_dbs)
     if not source_dbs:
         summary["using_existing_decrypted"] = state.decrypted.exists()
+        summary["warning"] = "未找到源数据库，当前显示的是已有解密副本"
         return summary
 
     for src in source_dbs:
@@ -223,28 +257,77 @@ def ensure_decrypted(state: AppState) -> dict[str, Any]:
             continue
 
         dst = state.decrypted / rel
-        should_decrypt = not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime
-        if not should_decrypt:
+        fingerprint = source_db_fingerprint(src)
+        entry = {"source": fingerprint, "destination": file_fingerprint(dst, state.decrypted)}
+        if dst.exists() and fingerprints.get(rel) == entry:
             summary["ok"] += 1
             continue
 
-        if decrypt_db(src, dst, key_hex):
-            cleanup_sqlite_sidecars(dst)
+        try:
+            # Decode a stable DB/WAL pair, then publish only a checked SQLite copy.
+            with tempfile.TemporaryDirectory(prefix="sync-", dir=state.decrypted) as temp_dir:
+                snapshot = Path(temp_dir) / src.name
+                shutil.copy2(src, snapshot)
+                wal = src.with_name(src.name + "-wal")
+                if wal.exists():
+                    shutil.copy2(wal, snapshot.with_name(snapshot.name + "-wal"))
+                if fingerprint != source_db_fingerprint(src):
+                    raise RuntimeError("源数据库正在写入，请稍后重试同步")
+                candidate = Path(temp_dir) / "decoded.sqlite"
+                if not decrypt_db(snapshot, candidate, key_hex):
+                    raise RuntimeError("数据库密钥校验或解密失败")
+                validate_sqlite_snapshot(candidate)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                cleanup_sqlite_sidecars(dst)
+                os.replace(candidate, dst)
+            fingerprints[rel] = {"source": fingerprint, "destination": file_fingerprint(dst, state.decrypted)}
             summary["ok"] += 1
-        else:
+            summary["updated"] += 1
+        except (OSError, sqlite3.Error, RuntimeError, ValueError) as exc:
             summary["failed"] += 1
+            summary["errors"].append({"db": rel, "error": str(exc)})
 
+    tmp = manifest_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, manifest_path)
     return summary
+
+
+def source_db_fingerprint(path: Path) -> dict[str, Any]:
+    return {
+        "db": file_fingerprint(path, path.parent),
+        "wal": file_fingerprint(path.with_name(path.name + "-wal"), path.parent),
+    }
+
+
+def validate_sqlite_snapshot(path: Path) -> None:
+    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True)
+    try:
+        tables = conn.execute("SELECT name, sql, rootpage FROM sqlite_master WHERE type = 'table'").fetchall()
+        custom_fts = any("MMFtsTokenizer" in (sql or "") for _, sql, _ in tables)
+        # WeChat's tokenizer is unavailable here; check its stored tables directly.
+        checks = ["PRAGMA quick_check"]
+        if custom_fts:
+            names = ["sqlite_master"] + [name for name, _, rootpage in tables if rootpage > 0]
+            checks = ['PRAGMA quick_check("' + name.replace('"', '""') + '")' for name in names]
+        for query in checks:
+            if conn.execute(query).fetchall() != [("ok",)]:
+                raise RuntimeError("解密副本完整性检查失败，保留上次数据")
+    finally:
+        conn.close()
 
 
 def build_chat_index(state: AppState) -> list[dict[str, Any]]:
     contacts = load_contacts(state.decrypted)
     sessions = load_sessions(state.decrypted, contacts)
+    for username, title in unnamed_group_titles(state.decrypted, contacts, sessions, state.account).items():
+        contacts[username] = title
+        sessions[username]["display_name"] = title
     session_by_hash = {hashlib.md5(k.encode("utf-8")).hexdigest().lower(): v for k, v in sessions.items()}
 
     chats: dict[str, dict[str, Any]] = {}
     for db_path in find_message_dbs(state.decrypted, include_biz=False):
-        conn = sqlite3.connect(db_path)
+        conn = open_snapshot(db_path)
         try:
             msg_tables = [t for t in table_names(conn) if t.startswith(("Msg_", "Chat_", "msg_", "chat_"))]
             for table in msg_tables:
@@ -296,7 +379,150 @@ def build_chat_index(state: AppState) -> list[dict[str, Any]]:
         rec["title"] = rec.get("display_name") or rec.get("chat") or f"未知聊天 {rec['table_hash'][:8]}"
         rec["last_time"] = fmt_ts(rec.get("last_ts"))
         rec["first_time"] = fmt_ts(rec.get("first_ts"))
+        rec["avatar_url"] = avatar_url(state, rec.get("chat") or "")
+        if not str(rec.get("summary") or "").strip():
+            try:
+                rec["summary"] = latest_message_preview(state, rec)
+            except (sqlite3.Error, ValueError):
+                rec["summary"] = "[暂无预览]"
     return records
+
+
+def unnamed_group_titles(
+    decrypted: Path, contacts: dict[str, str], sessions: dict[str, dict[str, Any]], account: str
+) -> dict[str, str]:
+    def known_title(value: Any, username: str) -> str:
+        title = str(value or "").strip()
+        return title if title != username else ""
+
+    missing = {
+        username for username, session in sessions.items()
+        if username.endswith("@chatroom") and not known_title(session.get("display_name"), username)
+    }
+    if not missing:
+        return {}
+    titles = {username: "未命名群" for username in missing}
+    session_db = decrypted / "session" / "session.db"
+    if session_db.exists():
+        conn = open_snapshot(session_db)
+        try:
+            if "SessionNoContactInfoTable" in table_names(conn):
+                for username, value in conn.execute("SELECT username, session_title FROM SessionNoContactInfoTable"):
+                    title = known_title(value, username)
+                    if username in missing and title:
+                        titles[username] = title
+                        missing.remove(username)
+        except sqlite3.Error:
+            pass
+        finally:
+            conn.close()
+    contact_db = decrypted / "contact" / "contact.db"
+    if not missing or not contact_db.exists():
+        return titles
+    conn = open_snapshot(contact_db)
+    try:
+        # Member IDs resolve through contact/name2id, not a message shard's Name2Id.
+        members: dict[str, dict[Any, str]] = {username: {} for username in missing}
+        groups = sorted(missing)
+        for start in range(0, len(groups), 500):
+            batch = groups[start:start + 500]
+            placeholders = ",".join("?" for _ in batch)
+            rows = conn.execute(f"""
+                SELECT room.username, m.member_id, member.username
+                FROM chatroom_member m
+                JOIN name2id room ON room.rowid = m.room_id
+                LEFT JOIN name2id member ON member.rowid = m.member_id
+                WHERE room.username IN ({placeholders})
+                ORDER BY room.username, m.member_id
+            """, batch)
+            for room, member_id, username in rows:
+                members[room][username or member_id] = username or ""
+        for room, room_members in members.items():
+            if not room_members:
+                continue
+            others = [username for username in room_members.values() if not account or username != account]
+            names = [known_title(contacts.get(username), username) for username in others]
+            names = [name for name in names if name][:2]
+            title = "、".join(names) if names else "未命名群"
+            if names and len(others) > len(names):
+                title += "…"
+            titles[room] = f"{title}（{len(room_members)}）"
+    except sqlite3.Error:
+        pass
+    finally:
+        conn.close()
+    return titles
+
+
+def latest_message_preview(state: AppState, rec: dict[str, Any]) -> str:
+    # Select the latest row across shards without resolving attachments or voice data.
+    page = select_message_page(state.decrypted, rec, state.since_ts, limit=1)
+    if not page["rows"]:
+        return "[暂无预览]"
+    row = page["rows"][-1]
+    kind = classify_type(int(row.get("local_type") or 0))
+    labels = {"image": "[图片]", "video": "[视频]", "voice": "[语音]", "sticker": "[表情包]"}
+    if kind in labels:
+        return labels[kind]
+    content = decode_content(row)
+    if rec.get("type") == "group" and row.get("real_sender_id") is not None:
+        conn = open_snapshot(state.decrypted / row["source_db"])
+        try:
+            sender = conn.execute("SELECT user_name FROM Name2Id WHERE rowid = ?", (row["real_sender_id"],)).fetchone()
+            if sender:
+                content = strip_group_sender_prefix(content, sender[0])
+        except sqlite3.Error:
+            pass
+        finally:
+            conn.close()
+    return compact_long_text(" ".join(display_content(content, kind).split()), "[消息]")
+
+
+def load_avatar_versions(state: AppState) -> dict[str, str]:
+    path = state.decrypted / "head_image" / "head_image.db"
+    if not path.exists():
+        return {}
+    try:
+        conn = open_snapshot(path)
+        try:
+            return {
+                str(username): str(md5 or update_time or path.stat().st_mtime_ns)
+                for username, md5, update_time in conn.execute(
+                    "SELECT username, md5, update_time FROM head_image WHERE length(image_buffer) > 0"
+                )
+                if username
+            }
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return {}
+
+
+def avatar_url(state: AppState, username: str) -> str:
+    version = state.avatar_versions.get(username)
+    if version is None:
+        return ""
+    return "/avatar?" + urllib.parse.urlencode({"username": username, "v": version})
+
+
+def read_avatar(state: AppState, username: str) -> tuple[bytes, str] | None:
+    if not username or len(username) > 512 or username not in state.avatar_versions:
+        return None
+    path = state.decrypted / "head_image" / "head_image.db"
+    try:
+        conn = open_snapshot(path)
+        try:
+            row = conn.execute("SELECT image_buffer FROM head_image WHERE username = ?", (username,)).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+    if not row or not isinstance(row[0], bytes):
+        return None
+    content_type = sniff_mime(row[0], "")
+    if content_type not in {"image/jpeg", "image/png", "image/gif", "image/webp"}:
+        return None
+    return row[0], content_type
 
 
 def min_ts(a: Any, b: Any) -> Any:
@@ -331,12 +557,16 @@ def load_state(args: argparse.Namespace) -> AppState:
         qa_search_db=args.qa_search_db.resolve(),
         since_ts=since_ts,
         since_label=since_label,
+        sync_interval=max(0, args.sync_interval),
         image_aes_key=image_aes_key,
         image_xor_key=image_xor_key,
     )
     state.account = args.account or infer_account(state.db_storage)
     state.decrypt_summary = ensure_decrypted(state)
+    state.avatar_versions = load_avatar_versions(state)
     state.chats = build_chat_index(state)
+    if state.decrypt_summary.get("source_dbs") and not state.decrypt_summary.get("failed"):
+        state.last_synced_at = datetime.now().isoformat(timespec="seconds")
     return state
 
 
@@ -384,90 +614,77 @@ def parse_xor_key(value: Any) -> int:
 
 
 def collect_messages_for_chat(state: AppState, rec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Full collection for explicit bulk callers, never used by the browser endpoint."""
     messages: list[dict[str, Any]] = []
-    resources = build_resource_map(state, rec)
-    voices = build_voice_map(state, rec)
-    for shard in rec.get("shards", []):
-        db_path = state.decrypted / shard["db"]
-        table = shard["table"]
-        if not db_path.exists():
+    before = ""
+    while True:
+        page = collect_message_page(state, rec, 200, before=before)
+        messages[0:0] = page["messages"]
+        if not page["has_more_before"] or not page["messages"]:
+            return messages
+        before = page["before_cursor"]
+
+
+def collect_message_page(state: AppState, rec: dict[str, Any], limit: int = 100,
+                         before: str = "", after: str = "") -> dict[str, Any]:
+    page = select_message_page(state.decrypted, rec, state.since_ts, limit, before, after)
+    rows = page.pop("rows")
+    voice_rows = [row for row in rows if classify_type(row.get("local_type") or 0) == "voice"]
+    resource_rows = [row for row in rows if classify_type(row.get("local_type") or 0) in {"image", "video"}]
+    resources = build_resource_map(state, rec, resource_rows) if resource_rows else {}
+    voices = build_voice_map(state, rec, voice_rows) if voice_rows else {}
+    voice_cache = load_voice_cache(state.voice_cache) if voice_rows else {}
+    # Resolve only senders present in the selected page, not the entire Name2Id table.
+    names = {}
+    for db in {row["source_db"] for row in rows}:
+        ids = {row.get("real_sender_id") for row in rows if row["source_db"] == db}
+        ids.discard(None)
+        if not ids:
             continue
-        conn = sqlite3.connect(db_path)
+        conn = open_snapshot(state.decrypted / db)
         conn.row_factory = sqlite3.Row
         try:
-            existing = set(table_names(conn))
-            if table not in existing:
-                continue
-            cols = {r["name"] for r in conn.execute(f'PRAGMA table_info("{table}")').fetchall()}
-            needed = [
-                c
-                for c in (
-                    "local_id",
-                    "server_id",
-                    "local_type",
-                    "real_sender_id",
-                    "create_time",
-                    "message_content",
-                    "compress_content",
-                )
-                if c in cols
-            ]
-            if "create_time" not in needed:
-                continue
-            name2id = load_name2id(conn)
-            where = ""
-            params: tuple[Any, ...] = ()
-            if state.since_ts is not None:
-                where = " WHERE create_time >= ?"
-                params = (state.since_ts,)
-            rows = conn.execute(f'SELECT {", ".join(needed)} FROM "{table}"{where} ORDER BY create_time ASC', params).fetchall()
-            for row in rows:
-                local_type = int(row["local_type"]) if "local_type" in row.keys() and row["local_type"] is not None else 0
-                sender_id = row["real_sender_id"] if "real_sender_id" in row.keys() else None
-                sender_username = name2id.get(sender_id, str(sender_id) if sender_id is not None else "")
-                msg_type = classify_type(local_type)
-                raw_content = decode_content(row)
-                if rec.get("type") == "group":
-                    raw_content = strip_group_sender_prefix(raw_content, sender_username)
-                local_id = row["local_id"] if "local_id" in row.keys() else None
-                server_id = row["server_id"] if "server_id" in row.keys() else None
-                resource = resources.get((row["create_time"], local_id)) or resources.get(("server", server_id))
-                media = resolve_message_media(state, rec, msg_type, row["create_time"], resource)
-                if msg_type == "voice":
-                    voice = match_voice_info(voices, row["create_time"], local_id, server_id)
-                    media = resolve_voice_media(state, voice) or resolve_missing_voice_media(raw_content)
-                    content = format_voice_content(raw_content, voice)
-                elif msg_type == "sticker":
-                    media = resolve_sticker_media(state, raw_content, row["create_time"])
-                    content = summarize_sticker_message(state, raw_content)
-                else:
-                    content = display_content(raw_content, msg_type)
-                app = parse_app_message(raw_content) if msg_type == "app" else None
-                record = parse_forwarded_record(state, rec, row["create_time"], raw_content) if msg_type == "app" else None
-                if record:
-                    content = format_forwarded_record_summary(record)
-                    app = None
-                messages.append(
-                    {
-                        "local_id": local_id,
-                        "server_id": server_id,
-                        "timestamp": row["create_time"],
-                        "time": fmt_ts(row["create_time"]),
-                        "sender": state.contacts.get(sender_username, sender_username),
-                        "sender_username": sender_username,
-                        "mine": bool(state.account and sender_username == state.account),
-                        "type": msg_type,
-                        "local_type": local_type,
-                        "content": content,
-                        "media": media,
-                        "app": app,
-                        "record": record,
-                    }
-                )
+            if "Name2Id" in table_names(conn):
+                names.update({(db, r["rowid"]): r["user_name"] for r in conn.execute(
+                    f"SELECT rowid, user_name FROM Name2Id WHERE rowid IN ({','.join('?' for _ in ids)})", list(ids))})
         finally:
             conn.close()
-    messages.sort(key=lambda m: (m["timestamp"] or 0, m.get("sender_username") or ""))
-    return messages
+    messages = []
+    for row in rows:
+        local_type = int(row.get("local_type") or 0)
+        sender_id = row.get("real_sender_id")
+        sender_username = names.get((row["source_db"], sender_id), str(sender_id) if sender_id is not None else "")
+        msg_type = classify_type(local_type)
+        raw_content = decode_content(row)
+        if rec.get("type") == "group":
+            raw_content = strip_group_sender_prefix(raw_content, sender_username)
+        local_id, server_id = row.get("local_id"), row.get("server_id")
+        resource = resources.get((row["create_time"], local_id)) or resources.get(("server", server_id))
+        media = resolve_message_media(state, rec, msg_type, row["create_time"], resource)
+        if msg_type == "voice":
+            voice = match_voice_info(voices, row["create_time"], local_id, server_id)
+            media = resolve_voice_media(state, voice, voice_cache) or resolve_missing_voice_media(raw_content)
+            content = format_voice_content(raw_content, voice)
+        elif msg_type == "sticker":
+            media = resolve_sticker_media(state, raw_content, row["create_time"])
+            content = summarize_sticker_message(state, raw_content)
+        else:
+            content = display_content(raw_content, msg_type)
+        app = parse_app_message(raw_content) if msg_type == "app" else None
+        record = parse_forwarded_record(state, rec, row["create_time"], raw_content) if msg_type == "app" else None
+        if record:
+            content = format_forwarded_record_summary(record)
+            app = None
+        messages.append({
+            "id": encode_cursor(rec["id"], row), "local_id": local_id, "server_id": server_id,
+            "timestamp": row["create_time"], "time": fmt_ts(row["create_time"]),
+            "sender": state.contacts.get(sender_username, sender_username), "sender_username": sender_username,
+            "avatar_url": avatar_url(state, sender_username),
+            "mine": bool(state.account and sender_username == state.account),
+            "type": msg_type, "local_type": local_type, "content": content,
+            "media": media, "app": app, "record": record,
+        })
+    return {**page, "messages": messages, "chat": rec, "total": rec.get("total_messages", 0), "limit": limit}
 
 
 def collect_qa_items_for_chat(
@@ -476,6 +693,12 @@ def collect_qa_items_for_chat(
     person_ids: set[str] | None = None,
     since_ts: int | None = None,
     since_by_source: dict[tuple[str, str], int] | None = None,
+    voice_only: bool = False,
+    voice_cache: dict[str, Any] | None = None,
+    until_ts: int | None = None,
+    max_items: int | None = None,
+    max_text_chars: int | None = 1200,
+    check_cancelled: Any = None,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     chat_id = str(rec.get("chat") or rec.get("id") or "")
@@ -483,12 +706,14 @@ def collect_qa_items_for_chat(
         return items
     voice_map: dict[tuple[Any, Any], dict[str, Any]] | None = None
     for shard in rec.get("shards", []):
+        if check_cancelled:
+            check_cancelled()
         db_path = state.decrypted / shard["db"]
         table = shard["table"]
         source_key = (rel_display(db_path, state.decrypted), str(table))
         if not db_path.exists():
             continue
-        conn = sqlite3.connect(db_path)
+        conn = open_snapshot(db_path)
         conn.row_factory = sqlite3.Row
         try:
             existing = set(table_names(conn))
@@ -518,6 +743,13 @@ def collect_qa_items_for_chat(
             if effective_since is not None:
                 filters.append("create_time >= ?")
                 params.append(effective_since)
+            if until_ts is not None:
+                filters.append("create_time <= ?")
+                params.append(until_ts)
+            if voice_only:
+                if "local_type" not in cols:
+                    continue
+                filters.append("(local_type & 4294967295) = 34")
             if person_ids and rec.get("type") == "group" and "real_sender_id" in cols:
                 sender_ids = [sender_id for sender_id, username in name2id.items() if username in person_ids]
                 if not sender_ids:
@@ -526,8 +758,14 @@ def collect_qa_items_for_chat(
                 filters.append(f"real_sender_id IN ({placeholders})")
                 params.extend(sender_ids)
             where = " WHERE " + " AND ".join(filters) if filters else ""
-            rows = conn.execute(f'SELECT {", ".join(needed)} FROM "{table}"{where} ORDER BY create_time ASC', params).fetchall()
+            order = "DESC" if max_items is not None else "ASC"
+            limit_sql = " LIMIT ?" if max_items is not None else ""
+            if max_items is not None:
+                params.append(max(1, int(max_items)))
+            rows = conn.execute(f'SELECT {", ".join(needed)} FROM "{table}"{where} ORDER BY create_time {order}{limit_sql}', params).fetchall()
             for row in rows:
+                if check_cancelled:
+                    check_cancelled()
                 local_type = int(row["local_type"]) if "local_type" in row.keys() and row["local_type"] is not None else 0
                 msg_type = classify_type(local_type)
                 raw_content = decode_content(row)
@@ -542,7 +780,8 @@ def collect_qa_items_for_chat(
                     if voice_map is None:
                         voice_map = build_voice_map(state, rec)
                     voice = match_voice_info(voice_map, row["create_time"], local_id, server_id)
-                content = qa_text_from_raw_message(state, rec, row["create_time"], raw_content, msg_type, voice)
+                content = qa_text_from_raw_message(state, rec, row["create_time"], raw_content, msg_type, voice, voice_cache,
+                                                   full_text=max_text_chars is None)
                 if not content:
                     continue
                 sender_name = state.contacts.get(sender_username, sender_username)
@@ -565,13 +804,13 @@ def collect_qa_items_for_chat(
                         "person_id": person_id,
                         "person_name": person_name,
                         "type": msg_type,
-                        "text": compact_for_context(content, 1200),
+                        "text": compact_for_context(content, max_text_chars) if max_text_chars is not None else content,
                     }
                 )
         finally:
             conn.close()
     items.sort(key=lambda item: (item["timestamp"] or 0, item.get("sender_username") or ""))
-    return items
+    return items[-max_items:] if max_items else items
 
 
 def cached_qa_items_for_chat(
@@ -604,29 +843,34 @@ def qa_text_from_raw_message(
     raw_content: str,
     msg_type: str,
     voice: dict[str, Any] | None,
+    voice_cache: dict[str, Any] | None = None,
+    full_text: bool = False,
 ) -> str:
     if msg_type == "voice":
         transcription = ""
         if voice:
-            transcription = cached_voice_transcription(voice["db"], voice["local_id"], voice["create_time"], state.voice_cache)
+            transcription = voice_transcription_from_cache(
+                voice_cache if voice_cache is not None else load_voice_cache(state.voice_cache),
+                voice["db"], voice["local_id"], voice["create_time"],
+            )
         base = format_voice_content(raw_content, voice)
         return f"{base}\n语音转文字：{transcription}" if transcription else base
     if msg_type == "app":
         record = parse_forwarded_record(None, None, create_time, raw_content)
         if record:
-            return qa_text_from_forwarded_record(record)
+            return qa_text_from_forwarded_record(record, max_items=None if full_text else 80)
         return summarize_app_message(raw_content)
     if msg_type == "sticker":
         return summarize_sticker_message(state, raw_content)
     return display_content(raw_content, msg_type)
 
 
-def qa_text_from_forwarded_record(record: dict[str, Any]) -> str:
+def qa_text_from_forwarded_record(record: dict[str, Any], max_items: int | None = 80) -> str:
     parts = [format_forwarded_record_summary(record)]
     desc = str(record.get("description") or "").strip()
     if desc:
         parts.append(desc)
-    for item in (record.get("items") or [])[:80]:
+    for item in (record.get("items") or [])[:max_items]:
         if not isinstance(item, dict):
             continue
         item_text = " ".join(
@@ -644,13 +888,13 @@ def qa_text_from_forwarded_record(record: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def build_voice_map(state: AppState, rec: dict[str, Any]) -> dict[tuple[Any, Any], dict[str, Any]]:
+def build_voice_map(state: AppState, rec: dict[str, Any], targets: list[dict[str, Any]] | None = None) -> dict[tuple[Any, Any], dict[str, Any]]:
     chat = rec.get("chat")
     if not chat:
         return {}
     out: dict[tuple[Any, Any], dict[str, Any]] = {}
     for db_path in sorted((state.decrypted / "message").glob("media_*.db")):
-        conn = sqlite3.connect(db_path)
+        conn = open_snapshot(db_path)
         conn.row_factory = sqlite3.Row
         try:
             existing = set(table_names(conn))
@@ -664,6 +908,9 @@ def build_voice_map(state: AppState, rec: dict[str, Any]) -> dict[tuple[Any, Any
             if state.since_ts is not None:
                 where += " AND create_time >= ?"
                 params.append(state.since_ts)
+            restriction, target_params = target_filter(targets, ("create_time", "local_id", "svr_id"))
+            where += restriction
+            params.extend(target_params)
             rows = conn.execute(
                 f"""
                 SELECT create_time, local_id, svr_id, length(voice_data) AS size, data_index
@@ -706,13 +953,13 @@ def match_voice_info(
     )
 
 
-def build_resource_map(state: AppState, rec: dict[str, Any]) -> dict[tuple[Any, Any], dict[str, Any]]:
+def build_resource_map(state: AppState, rec: dict[str, Any], targets: list[dict[str, Any]] | None = None) -> dict[tuple[Any, Any], dict[str, Any]]:
     db_path = state.decrypted / "message" / "message_resource.db"
     chat = rec.get("chat")
     if not db_path.exists() or not chat:
         return {}
 
-    conn = sqlite3.connect(db_path)
+    conn = open_snapshot(db_path)
     conn.row_factory = sqlite3.Row
     try:
         chat_row = conn.execute("SELECT rowid FROM ChatName2Id WHERE user_name = ?", (chat,)).fetchone()
@@ -723,6 +970,9 @@ def build_resource_map(state: AppState, rec: dict[str, Any]) -> dict[tuple[Any, 
         if state.since_ts is not None:
             where += " AND message_create_time >= ?"
             params.append(state.since_ts)
+        restriction, target_params = target_filter(targets, ("message_create_time", "message_local_id", "message_svr_id"))
+        where += restriction
+        params.extend(target_params)
         rows = conn.execute(
             f"""
             SELECT message_local_type, message_create_time, message_local_id, message_svr_id, packed_info
@@ -817,11 +1067,14 @@ def resolve_message_media(
     return None
 
 
-def resolve_voice_media(state: AppState, voice: dict[str, Any] | None) -> dict[str, Any] | None:
+def resolve_voice_media(state: AppState, voice: dict[str, Any] | None,
+                        voice_cache: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if not voice:
         return None
     params = urllib.parse.urlencode({"db": voice["db"], "local_id": voice["local_id"], "create_time": voice["create_time"]})
-    transcription = cached_voice_transcription(voice["db"], voice["local_id"], voice["create_time"], state.voice_cache)
+    transcription = (cached_voice_transcription(voice["db"], voice["local_id"], voice["create_time"], state.voice_cache)
+                     if voice_cache is None else voice_transcription_from_cache(
+                         voice_cache, voice["db"], voice["local_id"], voice["create_time"]))
     playable = can_decode_silk()
     transcribable = playable and can_transcribe_locally()
     return {
@@ -947,7 +1200,7 @@ def lookup_sticker_caption(decrypted_root: str, md5: str) -> str:
     db_path = Path(decrypted_root) / "emoticon" / "emoticon.db"
     if not db_path.exists():
         return ""
-    conn = sqlite3.connect(db_path)
+    conn = open_snapshot(db_path)
     try:
         row = conn.execute("SELECT caption FROM kNonStoreEmoticonTable WHERE md5 = ? LIMIT 1", (md5,)).fetchone()
         if row and row[0]:
@@ -1048,7 +1301,7 @@ def fetch_voice_data(state: AppState, rel_db: str, local_id: int, create_time: i
     db_path = (state.decrypted / rel_db).resolve()
     if not str(db_path).startswith(str(state.decrypted.resolve()) + os.sep) or not db_path.exists():
         return None
-    conn = sqlite3.connect(db_path)
+    conn = open_snapshot(db_path)
     try:
         row = conn.execute(
             "SELECT voice_data FROM VoiceInfo WHERE local_id = ? AND create_time = ? LIMIT 1",
@@ -1066,7 +1319,7 @@ def iter_voice_items(state: AppState) -> list[dict[str, Any]]:
     seen: set[tuple[str, int, int]] = set()
     for db_path in sorted((state.decrypted / "message").glob("media_*.db")):
         rel_db = rel_display(db_path, state.decrypted)
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn = open_snapshot(db_path)
         conn.row_factory = sqlite3.Row
         try:
             existing = set(table_names(conn))
@@ -1153,6 +1406,12 @@ DEFAULT_LLM_CONFIG = {
         "temperature": 1.0,
         "max_context_messages": 60,
     },
+    "task": {
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-5-mini",
+        "api_key": "",
+        "api_key_env": "OPENAI_API_KEY",
+    },
     "embedding": {
         "enabled": True,
         "base_url": "",
@@ -1176,6 +1435,7 @@ DEFAULT_LLM_CONFIG = {
 
 def load_llm_config(path: Path) -> dict[str, Any]:
     config = json.loads(json.dumps(DEFAULT_LLM_CONFIG))
+    raw = {}
     if path.exists():
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -1186,6 +1446,9 @@ def load_llm_config(path: Path) -> dict[str, Any]:
                 incoming = raw.get(name)
                 if isinstance(incoming, dict):
                     config[name].update({k: v for k, v in incoming.items() if k in defaults})
+    # Legacy tasks used QA settings; snapshot them before independent edits.
+    if not isinstance(raw, dict) or not isinstance(raw.get("task"), dict):
+        config["task"] = {key: config["qa"][key] for key in DEFAULT_LLM_CONFIG["task"]}
     return normalize_llm_config(config)
 
 
@@ -1500,7 +1763,7 @@ def build_person_qa_index(state: AppState) -> dict[str, Any]:
             table = shard["table"]
             if not db_path.exists():
                 continue
-            conn = sqlite3.connect(db_path)
+            conn = open_snapshot(db_path)
             conn.row_factory = sqlite3.Row
             try:
                 existing = set(table_names(conn))
@@ -1651,14 +1914,13 @@ def qa_index_fingerprint(state: AppState) -> dict[str, Any]:
         "version": QA_INDEX_VERSION,
         "account": state.account,
         "since_ts": state.since_ts,
+        "voice_cache_file": state.voice_cache.name,
         "files": sorted(files, key=lambda row: row["path"]),
     }
 
 
 def qa_db_file_fingerprint(state: AppState, rel: str) -> dict[str, Any]:
-    source = state.db_storage / rel
-    if source.exists():
-        return file_fingerprint(source, state.db_storage)
+    # Retrieval describes the published snapshot, not live data not yet imported.
     return file_fingerprint(state.decrypted / rel, state.decrypted)
 
 
@@ -1807,10 +2069,7 @@ def fingerprint_file_soft_key(files: list[Any]) -> list[tuple[Any, ...]]:
             continue
         path = str(item.get("path") or "")
         size = int(item.get("size") or -1)
-        if path.endswith(".db"):
-            out.append((path, size))
-        else:
-            out.append((path, size, int(item.get("mtime_ns") or -1)))
+        out.append((path, size, int(item.get("mtime_ns") or -1)))
     return sorted(out)
 
 
@@ -1826,7 +2085,10 @@ def fingerprint_incremental_possible(stored_text: str, current: dict[str, Any]) 
             return False, "账号或时间范围变化，需要全量重建"
     stored_files = {str(item.get("path") or ""): item for item in stored.get("files") or [] if isinstance(item, dict)}
     current_files = {str(item.get("path") or ""): item for item in current.get("files") or [] if isinstance(item, dict)}
+    voice_paths = voice_fingerprint_paths(stored, current)
     for path, current_item in current_files.items():
+        if path in voice_paths:
+            continue
         stored_item = stored_files.get(path)
         if stored_item is None:
             if path.startswith("message/message_") and path.endswith(".db"):
@@ -1844,10 +2106,36 @@ def fingerprint_incremental_possible(stored_text: str, current: dict[str, Any]) 
             return False, f"{path} 变化，需要全量重建"
     for path in stored_files:
         if path not in current_files:
-            if path in {"contact/contact.db", "emoticon/emoticon.db"}:
+            if path in {"contact/contact.db", "emoticon/emoticon.db"} | voice_paths:
+                continue
+            if is_excluded_message_source(path):
                 continue
             return False, f"{path} 不存在，需要全量重建"
-    return True, "消息库可按时间戳追加"
+    return True, "新消息增量追加，语音文本按需更新"
+
+
+def voice_fingerprint_paths(stored: dict[str, Any], current: dict[str, Any]) -> set[str]:
+    return {str(item.get("voice_cache_file") or "voice_transcriptions.json") for item in (stored, current)}
+
+
+def voice_fingerprint_changed(stored_text: str, current: dict[str, Any]) -> bool:
+    stored = json.loads(stored_text)
+    paths = voice_fingerprint_paths(stored, current)
+    before = [item for item in stored.get("files", []) if item.get("path") in paths]
+    after = [item for item in current.get("files", []) if item.get("path") in paths]
+    return before != after
+
+
+def voice_cache_snapshot_for_index(state: AppState) -> dict[str, Any]:
+    if not state.voice_cache.exists():
+        return {}
+    try:
+        data = json.loads(state.voice_cache.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("expected an object")
+        return data
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("语音转写缓存无法读取，保留已有索引；请稍后重试") from exc
 
 
 def build_qa_search_db(state: AppState, progress: Any = None) -> dict[str, Any]:
@@ -1968,6 +2256,9 @@ def update_qa_search_db_incremental(state: AppState, progress: Any = None) -> di
             full_status["update_mode"] = "full"
             return full_status
 
+        voices_changed = voice_fingerprint_changed(stored, fingerprint)
+        voice_cache = voice_cache_snapshot_for_index(state) if voices_changed else None
+        cleanup = remove_excluded_qa_sources(conn, progress)
         since_by_source = qa_search_high_watermarks(conn)
         inserted = 0
         changed_chats, checked_shards = qa_search_changed_chats_for_incremental(state, conn, since_by_source)
@@ -1989,11 +2280,14 @@ def update_qa_search_db_incremental(state: AppState, progress: Any = None) -> di
                     total=total_chats,
                     inserted=inserted,
                 )
-            items = collect_qa_items_for_chat(state, chat, since_by_source=since_by_source)
+            items = collect_qa_items_for_chat(state, chat, since_by_source=since_by_source, voice_cache=voice_cache)
             if not items:
                 continue
             rows = [qa_search_row_from_item(item) for item in items]
             inserted += insert_qa_search_rows(conn, rows)
+        voice_updates = {"updated_voices": 0, "invalidated_chunks": 0}
+        if voices_changed:
+            voice_updates = refresh_qa_voice_rows(state, conn, voice_cache, progress)
         with conn:
             conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", ("fingerprint", json.dumps(fingerprint, sort_keys=True, ensure_ascii=False)))
             conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", ("updated_at", datetime.now().isoformat(timespec="seconds")))
@@ -2010,7 +2304,94 @@ def update_qa_search_db_incremental(state: AppState, progress: Any = None) -> di
     status = qa_search_db_status(state)
     status["update_mode"] = "incremental"
     status["inserted"] = inserted
+    status.update(voice_updates)
+    status["removed_messages"] = cleanup["removed_messages"]
+    status["invalidated_chunks"] += cleanup["invalidated_chunks"]
     return status
+
+
+def is_excluded_message_source(source: str) -> bool:
+    path = Path(source)
+    return (
+        path.parent == Path("message")
+        and path.name.startswith(("message_", "biz_message_"))
+        and path.suffix == ".db"
+        and not is_message_db(path, include_biz=True)
+    )
+
+
+def remove_excluded_qa_sources(conn: sqlite3.Connection, progress: Any = None) -> dict[str, int]:
+    sources = [str(row[0]) for row in conn.execute("SELECT DISTINCT source_db FROM messages")
+               if is_excluded_message_source(str(row[0]))]
+    removed = 0
+    invalidated = 0
+    # Remove derived rows only. The original databases and unrelated vectors
+    # remain intact, and a failed cleanup rolls back the whole migration.
+    with conn:
+        for source in sources:
+            ids = [int(row[0]) for row in conn.execute("SELECT id FROM messages WHERE source_db=?", (source,))]
+            invalidated += invalidate_semantic_chunks_for_messages(conn, ids)
+            conn.executemany("DELETE FROM messages_fts WHERE rowid=?", ((message_id,) for message_id in ids))
+            removed += conn.execute("DELETE FROM messages WHERE source_db=?", (source,)).rowcount
+    if removed and progress:
+        progress("progress", message=f"已排除数据库副本的 {removed} 条索引记录，待更新语义块 {invalidated} 个",
+                 removed_messages=removed, invalidated_chunks=invalidated)
+    return {"removed_messages": removed, "invalidated_chunks": invalidated}
+
+
+def refresh_qa_voice_rows(
+    state: AppState,
+    conn: sqlite3.Connection,
+    voice_cache: dict[str, Any],
+    progress: Any = None,
+) -> dict[str, int]:
+    chat_ids = {str(row[0]) for row in conn.execute("SELECT DISTINCT chat_id FROM messages WHERE type = 'voice'")}
+    chats = [chat for chat in state.chats if str(chat.get("id") or chat.get("chat") or "") in chat_ids]
+    updated = 0
+    invalidated = 0
+    for index, chat in enumerate(chats, 1):
+        if progress:
+            progress("progress", message=f"核对语音转写 {index}/{len(chats)} 个会话", updated_voices=updated)
+        items = collect_qa_items_for_chat(state, chat, voice_only=True, voice_cache=voice_cache)
+        with conn:
+            changed_ids = []
+            for item in items:
+                values = qa_search_row_from_item(item)
+                row = conn.execute(
+                    """SELECT id, text, search_text FROM messages
+                    WHERE source_db=? AND source_table=? AND local_id=? AND server_id=?
+                    AND timestamp=? AND sender_username=?""",
+                    (*values[:4], values[11], values[10]),
+                ).fetchone()
+                if row is None or (row["text"], row["search_text"]) == values[-2:]:
+                    continue
+                conn.execute("UPDATE messages SET text=?, search_text=? WHERE id=?", (*values[-2:], row["id"]))
+                conn.execute("DELETE FROM messages_fts WHERE rowid=?", (row["id"],))
+                conn.execute("INSERT INTO messages_fts(rowid, search_text) VALUES (?, ?)", (row["id"], values[-1]))
+                changed_ids.append(int(row["id"]))
+            # A vector represents a whole chunk. Its unchanged neighboring
+            # messages also become pending, while unrelated chunks stay intact.
+            invalidated += invalidate_semantic_chunks_for_messages(conn, changed_ids)
+            updated += len(changed_ids)
+    if progress:
+        progress("progress", message=f"语音文本更新 {updated} 条，待更新语义块 {invalidated} 个", updated_voices=updated, invalidated_chunks=invalidated)
+    return {"updated_voices": updated, "invalidated_chunks": invalidated}
+
+
+def invalidate_semantic_chunks_for_messages(conn: sqlite3.Connection, message_ids: list[int]) -> int:
+    if not message_ids or not semantic_schema_ok(conn):
+        return 0
+    invalidated = 0
+    for offset in range(0, len(message_ids), 400):
+        ids = message_ids[offset:offset + 400]
+        placeholders = ",".join("?" for _ in ids)
+        chunk_ids = [row[0] for row in conn.execute(
+            f"SELECT DISTINCT chunk_id FROM semantic_message_map WHERE message_id IN ({placeholders})", ids
+        )]
+        for chunk_id in chunk_ids:
+            conn.execute("DELETE FROM semantic_message_map WHERE chunk_id=?", (chunk_id,))
+            invalidated += conn.execute("DELETE FROM semantic_chunks WHERE id=?", (chunk_id,)).rowcount
+    return invalidated
 
 
 def qa_search_changed_chats_for_incremental(
@@ -2048,7 +2429,7 @@ def qa_message_table_max_ts(state: AppState, rel_db: str, table: str) -> int | N
     if not db_path.exists():
         return None
     try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn = open_snapshot(db_path)
         try:
             existing = set(table_names(conn))
             if table not in existing:
@@ -2882,7 +3263,7 @@ def build_or_update_qa_semantic_index(
                     inserted=inserted_chunks,
                     usage_totals=usage_totals if usage_seen else {},
                 )
-            vectors, usage = call_embeddings(profile, api_key, [chunk["search_text"] for chunk in batch])
+            vectors, usage = call_embeddings(profile, api_key, [chunk["search_text"] for chunk in batch], progress=progress)
             usage_seen = merge_usage_totals(usage_totals, usage) or usage_seen
             with conn:
                 for chunk, vector in zip(batch, vectors):
@@ -3212,11 +3593,23 @@ def call_embeddings(
     profile: dict[str, Any],
     api_key: str,
     texts: list[str],
+    progress: Any = None,
 ) -> tuple[list[list[float]], dict[str, Any]]:
-    base_url = str(profile.get("base_url") or "").rstrip("/")
+    check_job_cancelled()
+    base_url = str(profile.get("base_url") or "").strip().rstrip("/")
     model = str(profile.get("model") or "").strip()
     if not base_url or not model:
         raise RuntimeError("Embedding 模型配置不完整")
+    try:
+        endpoint = urllib.parse.urlsplit(base_url)
+        if endpoint.scheme not in ("https", "http") or not endpoint.hostname or any(char.isspace() for char in base_url):
+            raise ValueError()
+        if endpoint.username is not None or endpoint.password is not None:
+            raise ValueError()
+        endpoint.port
+    except ValueError as exc:
+        raise RuntimeError("Embedding Base URL 无效，请检查大模型配置中的服务地址") from exc
+    host = endpoint.hostname
     body: dict[str, Any] = {"model": model, "input": texts}
     dimensions = configured_embedding_dimensions(profile)
     if dimensions:
@@ -3230,14 +3623,32 @@ def call_embeddings(
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=180) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "ignore")[:500]
-        raise RuntimeError(f"Embedding 请求失败：HTTP {exc.code} {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Embedding 请求失败：{exc.reason}") from exc
+    for attempt in range(3):
+        check_job_cancelled()
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "ignore")[:500]
+            raise RuntimeError(f"Embedding 请求失败：HTTP {exc.code} {detail}") from exc
+        except urllib.error.URLError as exc:
+            if isinstance(exc.reason, socket.gaierror):
+                # DNS fails before sending input; retry only this unambiguous pre-send failure.
+                if attempt < 2:
+                    delay = 2 ** (attempt + 1) + random.uniform(0, 0.5)
+                    if progress:
+                        progress("progress", message=f"Embedding 服务域名解析失败，{delay:.1f} 秒后重试（{attempt + 1}/2）")
+                    wait_for_job_retry(delay)
+                    continue
+                raise RuntimeError(f"Embedding 服务域名解析失败（{host}），已重试 2 次；请检查网络、DNS 或代理连接") from exc
+            if isinstance(exc.reason, ssl.SSLCertVerificationError):
+                raise RuntimeError(f"Embedding 服务证书验证失败（{host}），请检查证书或代理配置") from exc
+            if isinstance(exc.reason, (TimeoutError, socket.timeout)):
+                raise RuntimeError(f"Embedding 请求超时（{host}）；无法确认服务是否已处理，未自动重试") from exc
+            raise RuntimeError(f"Embedding 服务连接失败（{host}），请检查网络或代理连接") from exc
+        except (TimeoutError, socket.timeout) as exc:
+            raise RuntimeError(f"Embedding 请求超时（{host}）；无法确认服务是否已处理，未自动重试") from exc
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, list):
         raise RuntimeError("Embedding 模型没有返回向量")
@@ -3507,6 +3918,18 @@ def select_qa_context_from_index(state: AppState, qa_index: dict[str, Any], ques
     return context
 
 
+def with_current_group_titles(state: AppState, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result = []
+    for item in items:
+        chat_id = str(item.get("chat_id") or "")
+        title = state.contacts.get(chat_id)
+        if chat_id.endswith("@chatroom") and title and title != chat_id:
+            result.append({**item, "chat_title": title})
+        else:
+            result.append(item)
+    return result
+
+
 def select_qa_context_with_diagnostics(
     state: AppState,
     qa_index: dict[str, Any],
@@ -3528,7 +3951,7 @@ def select_qa_context_with_diagnostics(
                 mode_parts.append("Embedding")
         if search_diagnostics.get("rerank_used"):
             mode_parts.append("Rerank")
-        return search_context, {
+        return with_current_group_titles(state, search_context), {
             "mode": " + ".join(mode_parts),
             "scope": scope,
             "matched_people": [],
@@ -3545,7 +3968,7 @@ def select_qa_context_with_diagnostics(
     if corpus:
         candidate_ids = candidate_rows_for_question(corpus, question, qa_index)
         context = select_qa_context(corpus, question, limit, qa_index)
-        return context, {
+        return with_current_group_titles(state, context), {
             "mode": "全文索引",
             "query_plan": plan,
             "candidate_count": len(candidate_ids),
@@ -3570,7 +3993,7 @@ def select_qa_context_with_diagnostics(
     full_corpus = build_qa_corpus(state)
     full_index = build_qa_index(state, full_corpus)
     context = select_qa_context(full_corpus, question, limit, full_index)
-    return context, {
+    return with_current_group_titles(state, context), {
         "mode": "全文后备",
         "query_plan": plan,
         "candidate_count": len(full_corpus),
@@ -3952,6 +4375,16 @@ def call_chat_completion(
     messages: list[dict[str, str]],
     timeout: int = 90,
 ) -> str:
+    payload = call_chat_payload(profile, api_key, messages, timeout)
+    choice = (payload.get("choices") or [{}])[0]
+    content = ((choice.get("message") or {}).get("content") or "").strip()
+    if not content:
+        raise RuntimeError("模型没有返回文字")
+    return content
+
+
+def call_chat_payload(profile, api_key, messages, timeout=90, tools=None, tool_choice="auto", response_format=None):
+    check_job_cancelled()
     base_url = str(profile.get("base_url") or "").rstrip("/")
     model = str(profile.get("model") or "").strip()
     if not base_url or not model:
@@ -3960,8 +4393,12 @@ def call_chat_completion(
         "model": model,
         "messages": messages,
     }
-    if not uses_default_temperature_only(model):
+    if tools is not None:
+        body.update(tools=tools, tool_choice=tool_choice, parallel_tool_calls=False)
+    elif not uses_default_temperature_only(model):
         body["temperature"] = float(profile.get("temperature") or 1.0)
+    if response_format is not None:
+        body["response_format"] = response_format
     request = urllib.request.Request(
         f"{base_url}/chat/completions",
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
@@ -3975,15 +4412,18 @@ def call_chat_completion(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
+        if tools is not None:
+            support = "工具调用与 Structured Outputs（JSON Schema）支持" if response_format is not None else "工具调用支持"
+            raise RuntimeError(f"任务模型请求失败：HTTP {exc.code}；请检查模型{support}、额度或网络配置") from exc
         detail = exc.read().decode("utf-8", "ignore")[:500]
         raise RuntimeError(f"模型请求失败：HTTP {exc.code} {detail}") from exc
     except urllib.error.URLError as exc:
+        if isinstance(exc.reason, (TimeoutError, socket.timeout)):
+            raise TimeoutError(f"模型响应读取超时（等待上限 {timeout} 秒）") from exc
         raise RuntimeError(f"模型请求失败：{exc.reason}") from exc
-    choice = (payload.get("choices") or [{}])[0]
-    content = ((choice.get("message") or {}).get("content") or "").strip()
-    if not content:
-        raise RuntimeError("模型没有返回文字")
-    return content
+    except (TimeoutError, socket.timeout) as exc:
+        raise TimeoutError(f"模型响应读取超时（等待上限 {timeout} 秒）") from exc
+    return payload
 
 
 def uses_default_temperature_only(model: str) -> bool:
@@ -3999,6 +4439,7 @@ def transcribe_voice_data_with_config(
     force: bool = False,
     openai_only: bool = False,
 ) -> dict[str, Any]:
+    check_job_cancelled()
     config = load_llm_config(state.llm_config)
     profile = config["voice"]
     api_key = resolve_llm_api_key(profile)
@@ -4035,6 +4476,7 @@ def transcribe_voice_data_with_config(
 
 
 def call_audio_transcription(profile: dict[str, Any], api_key: str, wav_data: bytes) -> dict[str, Any]:
+    check_job_cancelled()
     base_url = str(profile.get("base_url") or "").rstrip("/")
     model = str(profile.get("model") or "").strip()
     if not base_url or not model:
@@ -4071,6 +4513,7 @@ def call_audio_transcription(profile: dict[str, Any], api_key: str, wav_data: by
 
 
 def call_audio_transcription_with_curl(base_url: str, model: str, api_key: str, wav_data: bytes) -> dict[str, Any]:
+    check_job_cancelled()
     with tempfile.TemporaryDirectory(prefix="wechat-agent-audio-") as tmpdir:
         tmp_path = Path(tmpdir)
         wav_path = tmp_path / "voice.wav"
@@ -4255,13 +4698,17 @@ def asset_url(rel: str) -> str:
 
 def display_content(content: str, msg_type: str) -> str:
     text = content or ""
+    if msg_type == "text":
+        return text
     voip = summarize_voip_message(text)
     if voip:
         return voip
-    if msg_type == "text":
-        return text
     if msg_type == "system":
-        return text or "[系统消息]"
+        return summarize_system_message(text)
+    if msg_type in {"type_35", "type_42", "type_48", "type_66"}:
+        return summarize_structured_message(text, msg_type)
+    if msg_type == "voip":
+        return "[音视频通话]"
     if msg_type == "image":
         return "[图片]"
     if msg_type == "voice":
@@ -4272,7 +4719,110 @@ def display_content(content: str, msg_type: str) -> str:
         return summarize_app_message(text)
     if msg_type == "sticker":
         return "[表情包]"
+    if parse_message_xml(text) is not None or text.lstrip().startswith("<"):
+        return f"[暂不支持的消息 · {msg_type}]"
     return text or f"[{msg_type}]"
+
+
+class MessageRichTextParser(HTMLParser):
+    tags = {"a", "span", "div", "p", "section", "br", "img", "b", "strong", "em", "i", "font", "_wc_custom_link_", "script", "style"}
+    blocks = {"div", "p", "section", "br"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style"}:
+            self.hidden += 1
+        if self.hidden:
+            return
+        if tag not in self.tags:
+            self.parts.append(self.get_starttag_text())
+        elif tag in self.blocks:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"}:
+            self.hidden = max(0, self.hidden - 1)
+            return
+        if not self.hidden:
+            if tag not in self.tags:
+                self.parts.append(f"</{tag}>")
+            elif tag in self.blocks:
+                self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self.hidden:
+            self.parts.append(data)
+
+
+def readable_message_text(text: str) -> str:
+    if not re.search(r"</?(?:a|span|div|p|section|br|img|b|strong|em|i|font|_wc_custom_link_|script|style)(?:\s|/?>)", text, re.I):
+        return text.strip()
+    parser = MessageRichTextParser()
+    # HTMLParser requires tag names to start with a letter.
+    parser.feed(re.sub(r"(</?)_wc_custom_link_(?=[\s/>])", r"\1a", text))
+    parser.close()
+    return re.sub(r"\n[ \t\n]+", "\n", "".join(parser.parts)).strip()
+
+
+def summarize_structured_message(text: str, msg_type: str) -> str:
+    labels = {"type_35": "邮件通知", "type_42": "联系人名片", "type_48": "位置", "type_66": "企业微信名片"}
+    label = labels[msg_type]
+    root = parse_message_xml(text)
+    if root is None:
+        return f"[{label} · 内容暂无法解析]"
+    details = []
+    if msg_type == "type_35":
+        details = [first_text(root, "pushmail/content/subject"), first_text(root, "pushmail/content/sender"), first_text(root, "pushmail/content/digest")]
+    elif msg_type in {"type_42", "type_66"}:
+        details = [root.get("nickname") or root.get("username") or "", root.get("alias") or "", root.get("openimdesc") or ""]
+    elif msg_type == "type_48":
+        location = root.find("location")
+        if location is not None:
+            details = [location.get("poiname") or "", location.get("label") or ""]
+            if not any(details) and location.get("x") and location.get("y"):
+                details = [f"{location.get('x')}, {location.get('y')}"]
+    parts = list(dict.fromkeys(readable_message_text(part) for part in details if part))
+    return f"[{label}]" + ("\n" + "\n".join(parts) if parts else "")
+
+
+def summarize_system_message(text: str) -> str:
+    body = re.sub(r"^\s*[^\s:]+@chatroom:\s*", "", text).strip()
+    root = parse_message_xml(body)
+    if root is None:
+        return "[系统消息]" if body.startswith("<sysmsg") else readable_message_text(body) or "[系统消息]"
+    if root.tag != "sysmsg":
+        return readable_message_text(body) if root.tag.lower() in MessageRichTextParser.tags else "[系统消息]"
+    content = root.find("./sysmsgtemplate/content_template")
+    if content is not None:
+        plain = find_text(content, "plain")
+        if plain:
+            return readable_message_text(plain)
+        template = find_text(content, "template")
+        values: dict[str, str] = {}
+        for link in content.findall("./link_list/link"):
+            name = link.get("name") or ""
+            members = [
+                first_text(member, "nickname", "username")
+                for member in link.findall("./memberlist/member")
+            ]
+            separator = link.findtext("separator")
+            values[name] = (separator if separator is not None else "、").join(filter(None, members)) or first_text(link, "plain", "title")
+        if template == "$username$ invited $names$ to the group chat":
+            template = "$username$ 邀请 $names$ 加入了群聊"
+        if template:
+            # Replace once so placeholder-like text in a nickname stays literal.
+            return re.sub(r"\$([^$]+)\$", lambda match: values.get(match[1]) or "某位成员", template)
+    notice = first_text(root, "./revokemsg/replacemsg", "./revokemsg/content", "./delchatroommember/plain", "./delchatroommember/text", "./content", "./plain")
+    if notice:
+        return readable_message_text(notice)
+    if root.get("type") == "mmchatroomtopmsg":
+        name = find_text(root, "./mmchatroomtopmsg/nickname")
+        return f"{name} 更新了群置顶消息" if name else "群置顶消息已更新"
+    return "[系统消息]"
 
 
 VOIP_STATUS_LABELS = {
@@ -4340,7 +4890,7 @@ def strip_group_sender_prefix(content: str, sender_username: str) -> str:
 def summarize_app_message(text: str) -> str:
     app = parse_app_message(text)
     if not app:
-        return compact_long_text(text, "[链接]")
+        return "[应用消息 · 内容暂无法解析]" if "<" in text else compact_long_text(text, "[应用消息]")
     title = app.get("title") or ""
     desc = app.get("description") or ""
     url = app.get("url") or ""
@@ -4374,12 +4924,12 @@ def parse_app_message(text: str) -> dict[str, Any] | None:
     root = parse_message_xml(text)
     if root is None:
         return None
-    appmsg = root.find("appmsg")
+    appmsg = root if root.tag == "appmsg" else root.find("appmsg")
     if appmsg is None:
         return None
     app_type = find_text(appmsg, "type")
-    title = find_text(appmsg, "title")
-    desc = find_text(appmsg, "des")
+    title = readable_message_text(find_text(appmsg, "title"))
+    desc = readable_message_text(find_text(appmsg, "des"))
     url = find_text(appmsg, "url")
     app_name = first_text(root, "appinfo/appname", "appinfo/appname_en") or appmsg.get("appid") or ""
     label = APP_TYPE_LABELS.get(app_type, "应用消息" if app_type else "链接")
@@ -4718,19 +5268,24 @@ def format_forwarded_record_summary(record: dict[str, Any]) -> str:
 
 
 def parse_message_xml(text: str) -> ET.Element | None:
-    xml_start = text.find("<?xml")
-    if xml_start < 0:
-        xml_start = text.find("<voipmsg")
-    if xml_start < 0:
-        xml_start = text.find("<msg")
-    if xml_start < 0:
-        xml_start = text.find("<recordinfo")
-    xml_text = text[xml_start:].strip() if xml_start >= 0 else text.strip()
+    start = re.search(r"<(?:\?xml\b|(?:sysmsg|voipmsg|msg|recordinfo|appmsg)\b)", text)
+    xml_text = (text[start.start():] if start else text).strip("\x00\ufeff \t\r\n")
     if not xml_text:
         return None
     try:
         return ET.fromstring(xml_text)
     except ET.ParseError:
+        # Some WeChat payloads put an XML declaration inside <msg> or append
+        # sibling VoIP metadata. Preserve CDATA; only repair that framing.
+        repaired = re.sub(r"^(<msg\b[^>]*>\s*)<\?xml\b[^?]*\?>", r"\1", xml_text)
+        repaired = re.sub(r"^<\?xml\b[^?]*\?>\s*", "", repaired)
+        try:
+            wrapper = ET.fromstring(f"<wechat_message>{repaired}</wechat_message>")
+        except ET.ParseError:
+            return None
+        for child in wrapper:
+            if child.tag in {"msg", "sysmsg", "voipmsg", "recordinfo", "appmsg"}:
+                return child
         return None
 
 
@@ -4764,19 +5319,48 @@ def compact_long_text(text: str, fallback: str) -> str:
 
 
 def make_handler(state: AppState):
+    activity_lock = threading.RLock()
+    maintenance_lock = threading.Lock()
+    maintenance_state = {"running": False, "operation": ""}
+    active_requests = 0
+    jobs = JobRegistry()
+    interrupt_pending_qa(state.qa_store)
+    goal_store = GoalStore(state.qa_store.parent / "goals.sqlite3")
+
+    def execute_goal(goal, report, cancelled):
+        # Keep the next observation window behind the last confirmed sync,
+        # so messages imported after this run are not skipped by wall-clock time.
+        try:
+            goal["data_until"] = min(goal["started_at"], datetime.fromisoformat(state.last_synced_at).timestamp())
+        except ValueError:
+            goal["data_until"] = None
+        profile = load_llm_config(state.llm_config)["task"]
+        api_key = resolve_llm_api_key(profile)
+        if not api_key:
+            raise RuntimeError("请先配置任务助手模型 API Key")
+        chat_tools = GoalChatTools(state, collect_qa_items_for_chat, qa_search_terms, cancelled, load_voice_cache(state.voice_cache))
+
+        def invoke(name, arguments, since, now):
+            nonlocal active_requests
+            with activity_lock:
+                active_requests += 1
+            try:
+                return chat_tools(name, arguments, since, now)
+            finally:
+                with activity_lock:
+                    active_requests -= 1
+
+        return run_goal_agent(goal,
+            lambda messages, tools, choice, response_format: call_chat_payload(profile, api_key, messages, timeout=GOAL_MODEL_TIMEOUT_SECONDS, tools=tools, tool_choice=choice, response_format=response_format),
+            invoke, report, cancelled, str(profile.get("model") or ""))
+
+    goal_scheduler = GoalScheduler(goal_store, execute_goal)
     qa_index_lock = threading.Lock()
     qa_index_state: dict[str, Any] = {"ready": False, "building": False, "error": "", "stats": {}}
     qa_search_lock = threading.Lock()
     qa_search_state: dict[str, Any] = {"building": False, "error": "", "stats": {}}
     qa_embedding_lock = threading.Lock()
     qa_embedding_state: dict[str, Any] = {"building": False, "error": "", "stats": {}}
-
-    @functools.lru_cache(maxsize=24)
-    def cached_messages(chat_id: str) -> tuple[dict[str, Any] | None, tuple[dict[str, Any], ...]]:
-        rec = state.chat_by_id(chat_id)
-        if not rec:
-            return None, tuple()
-        return rec, tuple(collect_messages_for_chat(state, rec))
 
     @functools.lru_cache(maxsize=1)
     def cached_qa_corpus() -> tuple[dict[str, Any], ...]:
@@ -4815,12 +5399,54 @@ def make_handler(state: AppState):
             state.qa_item_cache.clear()
         qa_index_state.update({"ready": False, "building": False, "error": "", "stats": {}})
 
+    def sync_snapshot(trigger: str) -> None:
+        state.last_sync_trigger = trigger
+        state.sync_error = ""
+        try:
+            state.decrypt_summary = ensure_decrypted(state)
+            if state.decrypt_summary.get("updated"):
+                state.avatar_versions = load_avatar_versions(state)
+                state.chats = build_chat_index(state)
+                state.sync_revision += 1
+                reset_qa_index_cache()
+                lookup_sticker_caption.cache_clear()
+                find_media_candidates.cache_clear()
+            if not state.decrypt_summary.get("source_dbs"):
+                raise RuntimeError(state.decrypt_summary["warning"])
+            if state.decrypt_summary.get("failed"):
+                raise RuntimeError("部分数据库同步失败，请稍后重试")
+            state.last_synced_at = datetime.now().isoformat(timespec="seconds")
+        except Exception as exc:
+            state.sync_error = str(exc)
+            raise
+
+    def auto_sync() -> None:
+        delay = state.sync_interval
+        while not state.sync_stop.wait(delay):
+            # Wait for readers and model/index tasks before replacing their snapshot.
+            if not activity_lock.acquire(blocking=False):
+                delay = min(5, state.sync_interval)
+                continue
+            try:
+                if active_requests:
+                    delay = min(5, state.sync_interval)
+                    continue
+                delay = state.sync_interval
+                try:
+                    sync_snapshot("auto")
+                except Exception as exc:
+                    print(f"Auto sync failed: {exc}")
+            finally:
+                activity_lock.release()
+
     def rag_status_payload() -> dict[str, Any]:
         search_status = qa_search_db_status(state)
         semantic_status = qa_embedding_index_status(state)
         config = load_llm_config(state.llm_config)
         return {
             "ok": True,
+            "maintenance": dict(maintenance_state),
+            "preparation_schedule": rag_scheduler.snapshot(),
             "person_index": qa_index_state,
             "search_index": {
                 **search_status,
@@ -4845,27 +5471,95 @@ def make_handler(state: AppState):
         }
 
     def prewarm_qa_index() -> None:
+        nonlocal active_requests
+        # Reserve the snapshot without blocking HTML, scripts or status readers.
+        with activity_lock:
+            active_requests += 1
         try:
             get_qa_index()
         except Exception as exc:
             print(f"QA index prewarm failed: {exc}")
+        finally:
+            with activity_lock:
+                active_requests -= 1
+
+    def submit_job(kind, payload, operation, run, request_id=None):
+        conversation_id = str(payload.get("conversation_id") or "")
+        resource = "maintenance" if operation else "qa:" + conversation_id if kind in ("/api/qa", "/api/qa_stream") else kind
+
+        def work(job):
+            nonlocal active_requests
+            with activity_lock:
+                active_requests += 1
+            acquired = False
+            try:
+                if operation:
+                    acquired = maintenance_lock.acquire(blocking=False)
+                    if not acquired:
+                        raise RuntimeError("其他索引或转写操作尚未完成")
+                    maintenance_state.update(running=True, operation=operation)
+                job.check()
+                run(payload, job.emit)
+            finally:
+                if acquired:
+                    if operation in ("语音转文字", "检索准备"):
+                        reset_qa_index_cache()
+                    maintenance_state.update(running=False, operation="")
+                    maintenance_lock.release()
+                with activity_lock:
+                    active_requests -= 1
+
+        return jobs.start(kind, payload, resource, work, request_id,
+                          on_finished=rag_scheduler.record_result if kind == "/api/rag/prepare" else None)
 
     threading.Thread(target=prewarm_qa_index, daemon=True).start()
+    if state.sync_interval > 0:
+        state.sync_thread = threading.Thread(target=auto_sync, daemon=True, name="wechat-sync")
+        state.sync_thread.start()
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "WeChatAgentWeb/0.1"
+
+        def handle_one_request(self) -> None:
+            nonlocal active_requests
+            with activity_lock:
+                active_requests += 1
+            try:
+                super().handle_one_request()
+            finally:
+                with activity_lock:
+                    active_requests -= 1
 
         def log_message(self, fmt: str, *args: Any) -> None:
             print(f"{self.address_string()} - {fmt % args}")
 
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
+            if parsed.path == "/api/jobs":
+                return self.json_response({"ok": True, "jobs": jobs.list()})
+            if parsed.path == "/api/jobs/status":
+                params = urllib.parse.parse_qs(parsed.query)
+                try:
+                    job = jobs.get(params.get("id", [""])[0])
+                    after = int(params.get("after", ["0"])[0])
+                    return self.json_response({"ok": True, "job": job.snapshot(after)})
+                except (KeyError, ValueError):
+                    return self.json_response({"ok": False, "error": "执行记录已释放或服务已重启；已保存结果不受影响"}, status=404)
             if parsed.path == "/":
                 return self.serve_static("index.html")
             if parsed.path.startswith("/static/"):
                 return self.serve_static(parsed.path.removeprefix("/static/"))
             if parsed.path == "/api/status":
                 return self.json_response(status_payload(state))
+            if parsed.path == "/api/goals":
+                return self.json_response({"ok": True, "goals": goal_store.list(), "scheduler_error": goal_scheduler.error,
+                    "server_time": time.time(), "synced_at": state.last_synced_at, "range_units": ["days", "weeks", "months"],
+                    "interval_units": ["hours", "days"],
+                    "manual_run_supported": True,
+                    "scheduler_running": bool(goal_scheduler.thread and goal_scheduler.thread.is_alive())})
+            if parsed.path == "/api/goals/history":
+                goal_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0]
+                return self.json_response({"ok": True, "runs": goal_store.history(goal_id)})
             if parsed.path == "/api/voice/status":
                 return self.json_response({"ok": True, **voice_status_payload(state)})
             if parsed.path == "/api/qa/conversations":
@@ -4874,12 +5568,16 @@ def make_handler(state: AppState):
                 return self.json_response({"ok": True, **qa_index_state})
             if parsed.path == "/api/rag/status":
                 return self.json_response(rag_status_payload())
+            if parsed.path == "/api/rag/schedule":
+                return self.json_response({"ok": True, "schedule": rag_scheduler.snapshot()})
             if parsed.path == "/api/qa/conversation":
                 return self.handle_get_qa_conversation(urllib.parse.parse_qs(parsed.query))
             if parsed.path == "/api/chats":
                 return self.handle_chats(urllib.parse.parse_qs(parsed.query))
             if parsed.path == "/api/messages":
                 return self.handle_messages(urllib.parse.parse_qs(parsed.query))
+            if parsed.path == "/avatar":
+                return self.handle_avatar(urllib.parse.parse_qs(parsed.query))
             if parsed.path == "/api/llm/config":
                 return self.json_response({"ok": True, "config": safe_llm_config(load_llm_config(state.llm_config))})
             if parsed.path == "/media":
@@ -4892,18 +5590,27 @@ def make_handler(state: AppState):
 
         def do_POST(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
-            if parsed.path == "/api/transcribe_voice":
-                return self.handle_transcribe_voice()
-            if parsed.path == "/api/transcribe_all_voices_stream":
-                return self.handle_transcribe_all_voices_stream()
-            if parsed.path == "/api/transcribe_chat_voices_stream":
-                return self.handle_transcribe_chat_voices_stream()
+            if parsed.path == "/api/rag/schedule":
+                try:
+                    schedule = rag_scheduler.save(self.read_json_body(4096))
+                    return self.json_response({"ok": True, "schedule": schedule})
+                except (TypeError, ValueError) as exc:
+                    return self.json_response({"ok": False, "error": str(exc)}, status=400)
+            if parsed.path == "/api/jobs/stop":
+                try:
+                    payload = self.read_json_body(1024)
+                    job = jobs.stop(str(payload.get("id") or ""))
+                    return self.json_response({"ok": True, "job": job.snapshot(include_events=False)})
+                except (KeyError, ValueError):
+                    return self.json_response({"ok": False, "error": "没有找到该执行"}, status=404)
+            if parsed.path == "/api/jobs/start" or parsed.path in self.job_routes():
+                return self.handle_job_request(parsed.path)
+            if parsed.path in {"/api/goals/save", "/api/goals/toggle", "/api/goals/delete", "/api/goals/run", "/api/goals/stop"}:
+                return self.handle_goal_action(parsed.path)
+            if parsed.path == "/api/sync":
+                return self.handle_sync()
             if parsed.path == "/api/llm/config":
                 return self.handle_save_llm_config()
-            if parsed.path == "/api/qa":
-                return self.handle_qa()
-            if parsed.path == "/api/qa_stream":
-                return self.handle_qa_stream()
             if parsed.path == "/api/qa/conversation":
                 return self.handle_save_qa_conversation()
             if parsed.path == "/api/qa/conversation/new":
@@ -4912,13 +5619,93 @@ def make_handler(state: AppState):
                 return self.handle_rename_qa_conversation()
             if parsed.path == "/api/qa/conversation/delete":
                 return self.handle_delete_qa_conversation()
-            if parsed.path == "/api/rag/search":
-                return self.handle_rag_search()
-            if parsed.path == "/api/rag/rebuild_stream":
-                return self.handle_rag_rebuild_stream()
-            if parsed.path == "/api/rag/embedding_rebuild_stream":
-                return self.handle_rag_embedding_rebuild_stream()
             self.send_error(404)
+
+        def job_routes(self):
+            return {
+                "/api/transcribe_voice": ("语音转文字", self.run_transcribe_voice),
+                "/api/transcribe_all_voices_stream": ("语音转文字", self.run_transcribe_all_voices_stream),
+                "/api/transcribe_chat_voices_stream": ("语音转文字", self.run_transcribe_chat_voices_stream),
+                "/api/rag/rebuild_stream": ("全文索引", self.run_rag_rebuild_stream),
+                "/api/rag/embedding_rebuild_stream": ("语义索引", self.run_rag_embedding_rebuild_stream),
+                "/api/rag/prepare": ("检索准备", self.run_rag_preparation),
+                "/api/qa_stream": ("", self.run_qa_stream),
+                "/api/qa": ("", self.run_qa_stream),
+                "/api/rag/search": ("", self.run_rag_search),
+            }
+
+        def handle_job_request(self, path):
+            try:
+                data = self.read_json_body(1024 * 1024)
+                kind = str(data.get("kind") or "") if path == "/api/jobs/start" else path
+                payload = data.get("payload") if path == "/api/jobs/start" else data
+                if kind not in self.job_routes() or not isinstance(payload, dict):
+                    raise ValueError("不支持的后台操作")
+                operation, run = self.job_routes()[kind]
+                if kind in ("/api/qa", "/api/qa_stream") and not str(payload.get("question") or "").strip():
+                    raise ValueError("请输入问题")
+                job = submit_job(kind, payload, operation, run, data.get("request_id"))
+            except (TypeError, ValueError) as exc:
+                return self.json_response({"ok": False, "error": str(exc)}, status=409 if isinstance(exc, JobConflict) else 400)
+            if path == "/api/jobs/start":
+                return self.json_response({"ok": True, "job": job.snapshot(include_events=False)}, status=202)
+            # Legacy clients can still observe NDJSON. A broken socket only detaches this observer.
+            try:
+                streaming = path.endswith("_stream")
+                if streaming:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                cursor = 0
+                while True:
+                    snapshot = job.snapshot(cursor)
+                    if streaming:
+                        for event in snapshot["events"]:
+                            self.wfile.write(json.dumps(event, ensure_ascii=False).encode() + b"\n")
+                        self.wfile.flush()
+                    cursor = snapshot["cursor"]
+                    if snapshot["status"] != "running":
+                        if not streaming:
+                            self.json_response(snapshot["result"] or {"ok": False, "error": "已停止"})
+                        return
+                    time.sleep(0.2)
+            except (BrokenPipeError, ConnectionResetError):
+                return
+
+        @staticmethod
+        def run_rag_preparation(payload, emit):
+            run_preparation([
+                ("语音转文字", lambda forward: Handler.run_transcribe_all_voices_stream({"force": False}, forward)),
+                ("全文索引", lambda forward: Handler.run_rag_rebuild_stream({"full": False}, forward)),
+                ("语义索引", lambda forward: Handler.run_rag_embedding_rebuild_stream({"full": False}, forward)),
+            ], emit)
+
+        def handle_goal_action(self, path):
+            try:
+                data = self.read_json_body(16 * 1024)
+                if not isinstance(data, dict):
+                    raise ValueError("请求格式无效")
+                if path == "/api/goals/save":
+                    goal_id = goal_store.save(data)
+                elif path == "/api/goals/run":
+                    goal = goal_scheduler.run_now(str(data.get("id") or ""))
+                    return self.json_response({"ok": True, "id": goal["id"], "run_id": goal["run_id"],
+                        "started_at": goal["started_at"], "next_run_at": goal["next_run_at"]}, status=202)
+                elif path == "/api/goals/stop":
+                    goal_id = str(data.get("id") or "")
+                    goal_store.cancel_run(goal_id, str(data.get("run_id") or ""))
+                elif path == "/api/goals/toggle":
+                    goal_id = str(data.get("id") or "")
+                    goal_store.toggle(goal_id, data.get("enabled"))
+                else:
+                    goal_id = str(data.get("id") or "")
+                    goal_store.delete(goal_id)
+                return self.json_response({"ok": True, "id": goal_id})
+            except GoalConflict as exc:
+                return self.json_response({"ok": False, "error": str(exc)}, status=409)
+            except (ValueError, TypeError) as exc:
+                return self.json_response({"ok": False, "error": str(exc)}, status=400)
 
         def serve_static(self, name: str) -> None:
             path = (STATIC_DIR / name).resolve()
@@ -4930,8 +5717,44 @@ def make_handler(state: AppState):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache")
             self.end_headers()
             self.wfile.write(data)
+
+        def handle_avatar(self, params: dict[str, list[str]]) -> None:
+            username = params.get("username", [""])[0]
+            avatar = read_avatar(state, username)
+            if avatar is None:
+                self.send_error(404, "No local avatar")
+                return
+            data, content_type = avatar
+            etag = '"' + hashlib.sha256(data).hexdigest() + '"'
+            if self.headers.get("If-None-Match") == etag:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "private, max-age=3600")
+            self.send_header("ETag", etag)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(data)
+
+        def handle_sync(self) -> None:
+            with activity_lock:
+                if active_requests > 1:
+                    self.json_response({"ok": False, "code": "sync_busy", "error": "正在处理其他请求，请稍后同步"}, status=409)
+                    return
+                try:
+                    sync_snapshot("manual")
+                    self.json_response({"ok": True, "status": status_payload(state)})
+                except RuntimeError as exc:
+                    self.json_response({"ok": False, "error": str(exc), "status": status_payload(state)}, status=409)
+                except Exception as exc:
+                    self.json_response({"ok": False, "error": str(exc)}, status=500)
 
         def handle_chats(self, params: dict[str, list[str]]) -> None:
             q = (params.get("q", [""])[0] or "").strip().casefold()
@@ -4955,30 +5778,21 @@ def make_handler(state: AppState):
             if not chat_id:
                 self.json_response({"error": "missing chat"}, status=400)
                 return
-            limit = clamp_int(params.get("limit", ["120"])[0], 20, 500)
-            rec, messages_tuple = cached_messages(chat_id)
+            limit = clamp_int(params.get("limit", ["100"])[0], 1, 200)
+            rec = state.chat_by_id(chat_id)
             if not rec:
                 self.json_response({"error": "chat not found"}, status=404)
                 return
-            messages = list(messages_tuple)
-            total = len(messages)
-            raw_offset = params.get("offset", [None])[0]
-            if raw_offset is None or raw_offset == "":
-                offset = max(total - limit, 0)
-            else:
-                offset = clamp_int(raw_offset, 0, max(total, 0))
-            end = min(offset + limit, total)
-            self.json_response(
-                {
-                    "chat": rec,
-                    "total": total,
-                    "offset": offset,
-                    "limit": limit,
-                    "messages": messages[offset:end],
-                    "has_more_before": offset > 0,
-                    "has_more_after": end < total,
-                }
-            )
+            try:
+                if params.get("offset", [""])[0] != "":
+                    raise ValueError("分页接口已更新，请刷新网页后重试")
+                page = collect_message_page(state, rec, limit,
+                                            before=params.get("before", [""])[0],
+                                            after=params.get("after", [""])[0])
+            except ValueError as exc:
+                self.json_response({"error": str(exc)}, status=400)
+                return
+            self.json_response(page)
 
         def handle_media(self, params: dict[str, list[str]]) -> None:
             rel = params.get("file", [""])[0]
@@ -5047,55 +5861,37 @@ def make_handler(state: AppState):
             self.end_headers()
             self.wfile.write(wav_data)
 
-        def handle_transcribe_voice(self) -> None:
+        def run_transcribe_voice(self, payload, emit) -> None:
             try:
-                payload = self.read_json_body(65536)
                 rel_db = str(payload.get("db") or "")
                 local_id = int(payload.get("local_id"))
                 create_time = int(payload.get("create_time"))
             except (TypeError, ValueError, json.JSONDecodeError):
-                self.json_response({"ok": False, "error": "bad request"}, status=400)
+                emit("error", error="bad request")
                 return
             data = fetch_voice_data(state, rel_db, local_id, create_time)
             if not data:
-                self.json_response({"ok": False, "error": "voice not found"}, status=404)
+                emit("error", error="voice not found")
                 return
             try:
                 result = transcribe_voice_data_with_config(state, data, rel_db, local_id, create_time)
             except RuntimeError as exc:
-                self.json_response({"ok": False, "error": str(exc), "note": voice_dependency_note()})
+                emit("error", error=str(exc), note=voice_dependency_note())
                 return
-            cached_messages.cache_clear()
             reset_qa_index_cache()
-            self.json_response(result)
+            emit("done", **result)
 
-        def handle_transcribe_all_voices_stream(self) -> None:
-            try:
-                payload = self.read_json_body(1024)
-            except (ValueError, json.JSONDecodeError):
-                self.json_response({"ok": False, "error": "bad request"}, status=400)
-                return
+        @staticmethod
+        def run_transcribe_all_voices_stream(payload, emit) -> None:
             force = bool(payload.get("force"))
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
-
-            def emit(event: str, **fields: Any) -> None:
-                payload = {"event": event, **fields}
-                data = json.dumps(payload, ensure_ascii=False).encode("utf-8") + b"\n"
-                self.wfile.write(data)
-                self.wfile.flush()
-
             try:
                 emit("progress", message="扫描本地语音")
                 all_items = iter_voice_items(state)
+                cache = load_voice_cache(state.voice_cache)
                 pending = all_items if force else [
                     item
                     for item in all_items
-                    if not cached_voice_transcription(item["db"], item["local_id"], item["create_time"], state.voice_cache)
+                    if not voice_transcription_from_cache(cache, item["db"], item["local_id"], item["create_time"])
                 ]
                 skipped = len(all_items) - len(pending)
                 usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
@@ -5151,7 +5947,6 @@ def make_handler(state: AppState):
                         transcribed=transcribed,
                         failed=failed,
                     )
-                cached_messages.cache_clear()
                 reset_qa_index_cache()
                 if not stop_after_error:
                     emit(
@@ -5166,31 +5961,14 @@ def make_handler(state: AppState):
             except (BrokenPipeError, ConnectionResetError):
                 return
 
-        def handle_transcribe_chat_voices_stream(self) -> None:
-            try:
-                payload = self.read_json_body(16 * 1024)
-            except (ValueError, json.JSONDecodeError):
-                self.json_response({"ok": False, "error": "bad request"}, status=400)
-                return
+        def run_transcribe_chat_voices_stream(self, payload, emit) -> None:
             chat_id = str(payload.get("chat_id") or "").strip()
             query = str(payload.get("query") or "").strip()
             force = bool(payload.get("force"))
             rec = state.chat_by_id(chat_id) if chat_id else find_chat_by_query(state, query)
             if not rec:
-                self.json_response({"ok": False, "error": "没有找到唯一匹配的会话"}, status=404)
+                emit("error", error="没有找到唯一匹配的会话")
                 return
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
-
-            def emit(event: str, **fields: Any) -> None:
-                payload = {"event": event, **fields}
-                data = json.dumps(payload, ensure_ascii=False).encode("utf-8") + b"\n"
-                self.wfile.write(data)
-                self.wfile.flush()
 
             try:
                 emit("progress", message=f"扫描会话：{rec.get('title') or rec.get('chat')}")
@@ -5250,7 +6028,6 @@ def make_handler(state: AppState):
                         transcribed=transcribed,
                         failed=failed,
                     )
-                cached_messages.cache_clear()
                 reset_qa_index_cache()
                 emit(
                     "done",
@@ -5296,6 +6073,8 @@ def make_handler(state: AppState):
                 self.json_response({"ok": False, "error": "bad request"}, status=400)
                 return
             conversation_id = str(payload.get("id") or "").strip() or uuid.uuid4().hex
+            if any(j["status"] == "running" and j["conversation_id"] == conversation_id for j in jobs.list()):
+                return self.json_response({"ok": False, "error": "对话正在后台回答，不能覆盖执行记录"}, status=409)
             messages = payload.get("messages") if isinstance(payload.get("messages"), list) else []
             title = str(payload.get("title") or "")
             conv = save_qa_conversation(state.qa_store, conversation_id, messages, title)
@@ -5325,6 +6104,8 @@ def make_handler(state: AppState):
                 self.json_response({"ok": False, "error": "bad request"}, status=400)
                 return
             conversation_id = str(payload.get("id") or "").strip()
+            if any(j["status"] == "running" and j["conversation_id"] == conversation_id for j in jobs.list()):
+                return self.json_response({"ok": False, "error": "请先停止这段对话的后台回答"}, status=409)
             if not conversation_id:
                 self.json_response({"ok": False, "error": "missing id"}, status=400)
                 return
@@ -5333,70 +6114,40 @@ def make_handler(state: AppState):
                 return
             self.json_response({"ok": True, "conversations": list_qa_conversations(state.qa_store)})
 
-        def handle_qa(self) -> None:
-            try:
-                payload = self.read_json_body(256 * 1024)
-            except (ValueError, json.JSONDecodeError):
-                self.json_response({"ok": False, "error": "bad request"}, status=400)
-                return
-            question = str(payload.get("question") or "").strip()
-            if not question:
-                self.json_response({"ok": False, "error": "请输入问题"}, status=400)
-                return
-            conversation_id = str(payload.get("conversation_id") or "").strip()
-            try:
-                qa_index = get_qa_index()
-                result = answer_chat_question(
-                    state,
-                    qa_index["corpus"],
-                    question,
-                    qa_history_from_payload(payload),
-                    qa_index,
-                )
-            except RuntimeError as exc:
-                self.json_response({"ok": False, "error": str(exc)}, status=502)
-                return
-            self.json_response(result, status=200 if result.get("ok") else 400)
-
-        def handle_qa_stream(self) -> None:
+        def run_qa_stream(self, payload, emit) -> None:
             started_at = time.perf_counter()
-            try:
-                payload = self.read_json_body(256 * 1024)
-            except (ValueError, json.JSONDecodeError):
-                self.json_response({"ok": False, "error": "bad request"}, status=400)
-                return
             question = str(payload.get("question") or "").strip()
             if not question:
-                self.json_response({"ok": False, "error": "请输入问题"}, status=400)
+                emit("error", error="请输入问题")
                 return
-            conversation_id = str(payload.get("conversation_id") or "").strip()
+            conversation_id = str(payload.get("conversation_id") or "").strip() or uuid.uuid4().hex
+            history = qa_history_from_payload(payload)
+            base_messages = [*history, {"role": "user", "content": question}]
 
-            self.send_response(200)
-            self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
+            def save_answer(content, **fields):
+                return save_qa_conversation(state.qa_store, conversation_id, [
+                    *base_messages, {"role": "assistant", "content": content, **fields},
+                ])
 
-            def emit(event: str, **fields: Any) -> None:
-                payload = {"event": event, **fields}
-                data = json.dumps(payload, ensure_ascii=False).encode("utf-8") + b"\n"
-                self.wfile.write(data)
-                self.wfile.flush()
+            def fail(message):
+                save_answer(message, error=message, processing_ms=int((time.perf_counter() - started_at) * 1000))
+                emit("error", error=message)
 
             try:
+                save_answer("正在后台回答", pending=True)
                 emit("progress", message="检查模型配置")
                 config = load_llm_config(state.llm_config)
                 profile = config["qa"]
                 api_key = resolve_llm_api_key(profile)
                 if not api_key:
-                    emit("error", error="请先在「大模型配置」里填写问答模型的 API Key，或设置对应环境变量")
+                    fail("请先在「大模型配置」里填写问答模型的 API Key，或设置对应环境变量")
                     return
 
                 emit("progress", message="建立联系人索引")
                 qa_index = get_qa_index()
                 corpus_count = int(qa_index.get("message_count") or len(qa_index.get("corpus") or []))
                 if not corpus_count:
-                    emit("error", error="没有可用于问答的聊天内容")
+                    fail("没有可用于问答的聊天内容")
                     return
 
                 limit = int(profile.get("max_context_messages") or 40)
@@ -5404,7 +6155,7 @@ def make_handler(state: AppState):
                 context, retrieval = select_qa_context_with_diagnostics(state, qa_index, question, limit)
                 person_summary = build_person_summary(qa_index, question)
                 if not context and not person_summary:
-                    emit("error", error="没有匹配到可用于回答的聊天片段")
+                    fail("没有匹配到可用于回答的聊天片段")
                     return
 
                 emit("progress", message=f"选出 {len(context)} 条相关片段，正在调用模型")
@@ -5413,23 +6164,10 @@ def make_handler(state: AppState):
                     api_key,
                     build_qa_messages(question, context, qa_history_from_payload(payload), person_summary),
                 )
+                check_job_cancelled()
                 processing_ms = int((time.perf_counter() - started_at) * 1000)
-                stored = save_qa_conversation(
-                    state.qa_store,
-                    conversation_id or uuid.uuid4().hex,
-                    [
-                        *qa_history_from_payload(payload),
-                        {"role": "user", "content": question},
-                        {
-                            "role": "assistant",
-                            "content": answer,
-                            "sources": context[:12],
-                            "context_count": len(context),
-                            "retrieval": retrieval,
-                            "processing_ms": processing_ms,
-                        },
-                    ],
-                )
+                stored = save_answer(answer, sources=context[:12], context_count=len(context),
+                                     retrieval=retrieval, processing_ms=processing_ms)
                 emit(
                     "done",
                     ok=True,
@@ -5441,20 +6179,16 @@ def make_handler(state: AppState):
                     conversation=stored,
                     conversations=list_qa_conversations(state.qa_store),
                 )
-            except (BrokenPipeError, ConnectionResetError):
-                return
-            except RuntimeError as exc:
-                emit("error", error=str(exc))
+            except JobCancelled:
+                save_answer("已停止回答", stopped=True, processing_ms=int((time.perf_counter() - started_at) * 1000))
+                raise
+            except Exception as exc:
+                fail(str(exc) if isinstance(exc, RuntimeError) else "问答执行异常，请检查服务日志")
 
-        def handle_rag_search(self) -> None:
-            try:
-                payload = self.read_json_body(64 * 1024)
-            except (ValueError, json.JSONDecodeError):
-                self.json_response({"ok": False, "error": "bad request"}, status=400)
-                return
+        def run_rag_search(self, payload, emit) -> None:
             question = str(payload.get("question") or "").strip()
             if not question:
-                self.json_response({"ok": False, "error": "请输入检索问题"}, status=400)
+                emit("error", error="请输入检索问题")
                 return
             limit = clamp_int(payload.get("limit", 60), 8, 160)
             try:
@@ -5486,10 +6220,10 @@ def make_handler(state: AppState):
                     "terms": plan.get("terms") or (retrieval.get("search") or {}).get("terms") or qa_search_terms(question)[:32],
                 }
             except Exception as exc:
-                self.json_response({"ok": False, "error": str(exc)}, status=500)
+                emit("error", error=str(exc))
                 return
-            self.json_response(
-                {
+            emit("done", **{
+
                     "ok": True,
                     "question": question,
                     "route": route,
@@ -5500,23 +6234,8 @@ def make_handler(state: AppState):
                 }
             )
 
-        def handle_rag_rebuild_stream(self) -> None:
-            try:
-                payload = self.read_json_body(16 * 1024)
-            except (ValueError, json.JSONDecodeError):
-                payload = {}
-            self.send_response(200)
-            self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
-
-            def emit(event: str, **fields: Any) -> None:
-                payload = {"event": event, **fields}
-                data = json.dumps(payload, ensure_ascii=False).encode("utf-8") + b"\n"
-                self.wfile.write(data)
-                self.wfile.flush()
-
+        @staticmethod
+        def run_rag_rebuild_stream(payload, emit) -> None:
             if not qa_search_lock.acquire(blocking=False):
                 emit("error", error="全文候选库正在重建")
                 return
@@ -5538,6 +6257,9 @@ def make_handler(state: AppState):
                         "error": "",
                         "stats": {
                             "inserted": status.get("inserted", status.get("message_count") or 0),
+                            "updated_voices": status.get("updated_voices", 0),
+                            "removed_messages": status.get("removed_messages", 0),
+                            "invalidated_chunks": status.get("invalidated_chunks", 0),
                             "update_mode": status.get("update_mode") or ("full" if full else "incremental"),
                         },
                     }
@@ -5553,23 +6275,8 @@ def make_handler(state: AppState):
                 qa_search_state["building"] = False
                 qa_search_lock.release()
 
-        def handle_rag_embedding_rebuild_stream(self) -> None:
-            try:
-                payload = self.read_json_body(16 * 1024)
-            except (ValueError, json.JSONDecodeError):
-                payload = {}
-            self.send_response(200)
-            self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
-
-            def emit(event: str, **fields: Any) -> None:
-                payload = {"event": event, **fields}
-                data = json.dumps(payload, ensure_ascii=False).encode("utf-8") + b"\n"
-                self.wfile.write(data)
-                self.wfile.flush()
-
+        @staticmethod
+        def run_rag_embedding_rebuild_stream(payload, emit) -> None:
             if not qa_embedding_lock.acquire(blocking=False):
                 emit("error", error="语义索引正在更新")
                 return
@@ -5626,6 +6333,12 @@ def make_handler(state: AppState):
             self.end_headers()
             self.wfile.write(data)
 
+    rag_scheduler = RagScheduler(state.qa_store.parent / "rag_schedule.sqlite3",
+        lambda request_id: submit_job("/api/rag/prepare", {}, "检索准备", Handler.run_rag_preparation, request_id),
+        jobs.get)
+    Handler.rag_scheduler = rag_scheduler
+    Handler.goal_scheduler = goal_scheduler
+    Handler.background_jobs = jobs
     return Handler
 
 
@@ -5697,6 +6410,7 @@ def clamp_int(value: Any, low: int, high: int) -> int:
 
 def status_payload(state: AppState) -> dict[str, Any]:
     return {
+        "demo_mode": state.demo_mode,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "db_storage": str(state.db_storage),
         "decrypted": str(state.decrypted),
@@ -5710,16 +6424,23 @@ def status_payload(state: AppState) -> dict[str, Any]:
         "llm_config": str(state.llm_config),
         "total_chats": len(state.chats),
         "total_messages": sum(int(c.get("total_messages") or 0) for c in state.chats),
+        "last_message_time": fmt_ts(max((c.get("last_ts") or 0 for c in state.chats), default=0)),
+        "last_synced_at": state.last_synced_at,
+        "sync_interval": state.sync_interval,
+        "sync_revision": state.sync_revision,
+        "sync_error": state.sync_error,
+        "last_sync_trigger": state.last_sync_trigger,
         "decrypt": state.decrypt_summary,
     }
 
 
 def voice_status_payload(state: AppState) -> dict[str, Any]:
     items = iter_voice_items(state)
+    cache = load_voice_cache(state.voice_cache)
     transcribed = sum(
         1
         for item in items
-        if cached_voice_transcription(item["db"], item["local_id"], item["create_time"], state.voice_cache)
+        if voice_transcription_from_cache(cache, item["db"], item["local_id"], item["create_time"])
     )
     total = len(items)
     return {
@@ -5783,6 +6504,31 @@ def get_qa_conversation(path: Path, conversation_id: str) -> dict[str, Any] | No
     return None
 
 
+_qa_write_lock = threading.RLock()
+
+
+def serialized_qa_write(function):
+    @functools.wraps(function)
+    def locked(*args, **kwargs):
+        with _qa_write_lock:
+            return function(*args, **kwargs)
+    return locked
+
+
+@serialized_qa_write
+def interrupt_pending_qa(path: Path) -> None:
+    store = load_qa_store(path)
+    changed = False
+    for conv in store["conversations"]:
+        for message in conv.get("messages", []):
+            if message.pop("pending", False):
+                message.update(content="服务已重启，上次回答中断，未自动重试", error="服务已重启")
+                changed = True
+    if changed:
+        save_qa_store(path, store)
+
+
+@serialized_qa_write
 def create_qa_conversation(path: Path, title: str = "") -> dict[str, Any]:
     now = datetime.now().isoformat(timespec="seconds")
     conv = {
@@ -5798,6 +6544,7 @@ def create_qa_conversation(path: Path, title: str = "") -> dict[str, Any]:
     return conv
 
 
+@serialized_qa_write
 def save_qa_conversation(path: Path, conversation_id: str, messages: list[dict[str, Any]], title: str = "") -> dict[str, Any]:
     store = load_qa_store(path)
     now = datetime.now().isoformat(timespec="seconds")
@@ -5814,13 +6561,14 @@ def save_qa_conversation(path: Path, conversation_id: str, messages: list[dict[s
             "created_at": now,
         }
         store["conversations"].append(found)
-    found["title"] = resolved_title
+    found["title"] = title.strip() or (found.get("title") if found.get("title") != "新对话" else "") or resolved_title
     found["updated_at"] = now
     found["messages"] = clean_messages[-200:]
     save_qa_store(path, store)
     return found
 
 
+@serialized_qa_write
 def rename_qa_conversation(path: Path, conversation_id: str, title: str) -> dict[str, Any] | None:
     store = load_qa_store(path)
     now = datetime.now().isoformat(timespec="seconds")
@@ -5833,6 +6581,7 @@ def rename_qa_conversation(path: Path, conversation_id: str, title: str) -> dict
     return None
 
 
+@serialized_qa_write
 def delete_qa_conversation(path: Path, conversation_id: str) -> bool:
     store = load_qa_store(path)
     before = len(store["conversations"])
@@ -5860,6 +6609,10 @@ def sanitize_qa_messages_for_store(messages: list[dict[str, Any]]) -> list[dict[
             continue
         row: dict[str, Any] = {"role": role, "content": content}
         if role == "assistant":
+            if item.get("error"):
+                row["error"] = str(item["error"])
+            if item.get("pending"):
+                row["pending"] = True
             sources = item.get("sources") if isinstance(item.get("sources"), list) else []
             row["sources"] = sources[:12]
             row["context_count"] = int(item.get("context_count") or 0)
@@ -5888,14 +6641,26 @@ def title_from_qa_messages(messages: list[dict[str, Any]]) -> str:
     return ""
 
 
+def source_settings() -> dict[str, Any]:
+    path = Path("web_cache/source.json")
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid source configuration: {path}")
+    return data
+
+
 def build_parser() -> argparse.ArgumentParser:
+    source = source_settings()
     parser = argparse.ArgumentParser(prog="python -m wechat_agent.web")
-    parser.add_argument("--db-storage", type=Path, default=DEFAULT_DB_STORAGE)
+    parser.add_argument("--db-storage", type=Path, default=Path(os.environ.get("WECHAT_AGENT_DB_STORAGE") or source.get("db_storage") or DEFAULT_DB_STORAGE))
     parser.add_argument("--decrypted", type=Path, default=Path("decrypted"))
     parser.add_argument("--keys", type=Path, default=Path("all_keys.json"))
-    parser.add_argument("--media-root", type=Path, default=None)
+    parser.add_argument("--media-root", type=Path, default=Path(source["media_root"]) if source.get("media_root") else None)
     parser.add_argument("--account", default="")
     parser.add_argument("--since", default="", help="Only show messages at or after this date, e.g. 2023-01-01")
+    parser.add_argument("--sync-interval", type=int, default=60, help="Automatic sync interval in seconds; 0 disables it")
     parser.add_argument("--image-aes-key", default="", help="Optional WeChat V2 image AES key")
     parser.add_argument("--image-xor-key", default=None, help="Optional WeChat V2 image XOR key, e.g. 0x80")
     parser.add_argument("--voice-cache", type=Path, default=voice_cache_path(), help="Voice transcription cache JSON")
@@ -5913,6 +6678,8 @@ def main(argv: list[str] | None = None) -> int:
     state = load_state(args)
     handler = make_handler(state)
     server = ThreadingHTTPServer((args.host, args.port), handler)
+    handler.goal_scheduler.start()
+    handler.rag_scheduler.start()
     print(f"WeChat Agent web running at http://{args.host}:{args.port}")
     print(f"source db_storage: {state.db_storage}")
     print(f"media root: {state.media_root}")
@@ -5923,6 +6690,11 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nstopping")
     finally:
+        handler.goal_scheduler.stop()
+        handler.rag_scheduler.stop()
+        state.sync_stop.set()
+        if state.sync_thread is not None:
+            state.sync_thread.join(timeout=30)
         server.server_close()
     return 0
 

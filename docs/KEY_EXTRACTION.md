@@ -34,14 +34,14 @@ This project includes a helper wrapper around the C scanner from
 workspace:
 
 ```bash
-cd "/Users/changfengkai/Desktop/WeChat Agent"
+cd /path/to/wechat-agent
 bash scripts/key_scan_macos.sh
 ```
 
 Then follow the printed command:
 
 ```bash
-cd "/Users/changfengkai/Desktop/WeChat Agent"
+cd /path/to/wechat-agent
 sudo tools/find_all_keys_macos
 ```
 
@@ -113,14 +113,14 @@ keys, and you are on WeChat 4.1.7 with SIP disabled, try the Python LLDB memory
 scanner compatible with `wechat-claudecode-mcp`:
 
 ```bash
-cd "/Users/changfengkai/Desktop/WeChat Agent"
+cd /path/to/wechat-agent
 bash scripts/key_scan_python_lldb.sh
 ```
 
 If that also returns zero keys, try the runtime-object LLDB workflow:
 
 ```bash
-cd "/Users/changfengkai/Desktop/WeChat Agent"
+cd /path/to/wechat-agent
 bash scripts/key_extract_runtime.sh
 ```
 
@@ -131,7 +131,7 @@ whose page-1 HMAC verifies with that key.
 If the runtime object path fails, switch to the LLDB breakpoint workflow:
 
 ```bash
-cd "/Users/changfengkai/Desktop/WeChat Agent"
+cd /path/to/wechat-agent
 bash scripts/key_capture_lldb.sh
 ```
 

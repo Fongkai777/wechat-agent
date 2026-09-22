@@ -51,7 +51,11 @@ def save_voice_cache(cache: dict[str, Any], cache_path: Path | None = None) -> N
 
 
 def cached_voice_transcription(rel_db: str, local_id: int, create_time: int, cache_path: Path | None = None) -> str:
-    entry = load_voice_cache(cache_path).get(voice_cache_key(rel_db, local_id, create_time))
+    return voice_transcription_from_cache(load_voice_cache(cache_path), rel_db, local_id, create_time)
+
+
+def voice_transcription_from_cache(cache: dict[str, Any], rel_db: str, local_id: int, create_time: int) -> str:
+    entry = cache.get(voice_cache_key(rel_db, local_id, create_time))
     if isinstance(entry, dict):
         return str(entry.get("text") or "").strip()
     if isinstance(entry, str):

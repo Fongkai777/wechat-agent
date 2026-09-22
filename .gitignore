@@ -13,6 +13,20 @@ runtime_probe.txt
 *.sqlite
 *.sqlite3
 *.dat
+.demo/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pkl
+*.mp4
+*.mov
+*.webm
+*.zip
+*.tar
+*.gz
+artifacts/
 
 # Logs and generated output
 logs/

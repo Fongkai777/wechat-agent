@@ -1,0 +1,18 @@
+[
+  {"id":"E01","category":"exact entity","question":"星桥搜索算法实习的地点和要求是什么？","evidence":[1],"facts":["新加坡","Python","RAG"]},
+  {"id":"E02","category":"neighbor evidence","question":"星桥搜索算法实习什么时候截止，怎么申请？","evidence":[2],"facts":["9 月 25 日","careers.example.com/starbridge"]},
+  {"id":"E03","category":"cross-chat","question":"林晓建议我怎么准备星桥面试？","evidence":[8,9,28],"facts":["召回和重排","失败案例","Demo","融合"]},
+  {"id":"E04","category":"negative constraint","question":"新加坡有哪些搜索或 RAG 算法实习，不要产品设计和全职？","evidence":[1,31,32],"facts":["星桥","远帆","新加坡"]},
+  {"id":"E05","category":"incremental import","question":"远帆 RAG 实习的截止时间和实习时长是什么？","evidence":[32],"facts":["9 月 30 日","四个月"]},
+  {"id":"E06","category":"deduplication","question":"远帆 RAG 实习转发了几次，是两个不同岗位吗？","evidence":[31,35],"facts":["同一个岗位"]},
+  {"id":"E07","category":"food retrieval","question":"青叶食堂推荐什么菜，人均多少，在哪里？","evidence":[10],"facts":["菌菇拉面","18","示例广场二楼"]},
+  {"id":"E08","category":"cross-chat","question":"青叶食堂可以吃纯素吗？周一开门吗？","evidence":[12,14],"facts":["不要加蛋","周一休息"]},
+  {"id":"E09","category":"updated fact","question":"青叶食堂新的午餐套餐多少钱，什么时候供应？","evidence":[36],"facts":["16","周二到周五"]},
+  {"id":"E10","category":"correction","question":"项目演示最后改到什么时候？","evidence":[19,20],"facts":["周六上午十点","取消"]},
+  {"id":"E11","category":"responsibility","question":"检索项目谁负责数据导入、评测和前端？","evidence":[16],"facts":["余舟","林晓","陈安"]},
+  {"id":"E12","category":"actionable reply","question":"余舟还在等我回复什么？","evidence":[22,38],"facts":["评测结果","意见"]},
+  {"id":"E13","category":"answered conversation","question":"陈安约我讨论页面，我回复了吗？","evidence":[23,24],"facts":["已经回复","下午三点"]},
+  {"id":"E14","category":"unknown value","question":"星桥实习月薪是多少？","evidence":[26],"facts":["没有公布","不能确定"]},
+  {"id":"E15","category":"multi-turn reference","question":"那它什么时候截止？","history":[{"role":"user","content":"远帆 RAG 实习怎么样？"},{"role":"assistant","content":"这是新加坡的 RAG 工程实习，要求 Python 和向量检索。"}],"evidence":[32],"facts":["9 月 30 日"]},
+  {"id":"E16","category":"no evidence","question":"谁推荐了极光寿司，人均价格是多少？","evidence":[],"facts":["没有找到证据"],"unanswerable":true}
+]

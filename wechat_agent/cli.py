@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import sqlite3
 import struct
@@ -335,6 +336,10 @@ def cleanup_sqlite_sidecars(path: Path) -> None:
                 pass
 
 
+def open_snapshot(path: Path) -> sqlite3.Connection:
+    return sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
+
+
 def sqlite_rows(path: Path, query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
@@ -352,6 +357,11 @@ def table_names(conn: sqlite3.Connection, like: str | None = None) -> list[str]:
     return [r[0] for r in rows.fetchall()]
 
 
+def is_message_db(path: Path, include_biz: bool = False) -> bool:
+    prefix = r"(?:biz_)?message" if include_biz else "message"
+    return re.fullmatch(rf"{prefix}_[0-9]+\.db", path.name) is not None
+
+
 def find_message_dbs(decrypted: Path, include_biz: bool = False) -> list[Path]:
     msg_dir = decrypted / "message"
     patterns = ["message_*.db"]
@@ -360,7 +370,8 @@ def find_message_dbs(decrypted: Path, include_biz: bool = False) -> list[Path]:
     result: list[Path] = []
     for pattern in patterns:
         for path in sorted(msg_dir.glob(pattern)):
-            if "-wal" not in path.name and "-shm" not in path.name:
+            # Finder copies and auxiliary databases are not message shards.
+            if path.is_file() and is_message_db(path, include_biz):
                 result.append(path)
     return result
 
@@ -369,7 +380,7 @@ def load_contacts(decrypted: Path) -> dict[str, str]:
     contact_db = decrypted / "contact" / "contact.db"
     if not contact_db.exists():
         return {}
-    conn = sqlite3.connect(contact_db)
+    conn = open_snapshot(contact_db)
     conn.row_factory = sqlite3.Row
     contacts: dict[str, str] = {}
     try:
@@ -381,8 +392,8 @@ def load_contacts(decrypted: Path) -> dict[str, str]:
         for row in conn.execute(f"SELECT {select} FROM contact"):
             name = ""
             for col in display_cols:
-                if row[col]:
-                    name = str(row[col])
+                if row[col] and str(row[col]).strip():
+                    name = str(row[col]).strip()
                     break
             contacts[row["username"]] = name or row["username"]
     except sqlite3.Error:
@@ -396,7 +407,7 @@ def load_sessions(decrypted: Path, contacts: dict[str, str]) -> dict[str, dict[s
     session_db = decrypted / "session" / "session.db"
     if not session_db.exists():
         return {}
-    conn = sqlite3.connect(session_db)
+    conn = open_snapshot(session_db)
     conn.row_factory = sqlite3.Row
     sessions: dict[str, dict[str, Any]] = {}
     try:

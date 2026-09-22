@@ -1,98 +1,137 @@
 # WeChat Agent
 
-[English](README.md) | [中文说明](README.zh-CN.md)
+[English](README.md) | [中文](README.zh-CN.md) | [评测](eval/README.md) | [Demo](docs/DEMO.md)
 
-**让分散的聊天记录，成为可检索、可追踪的个人知识库。**
+**从分散的聊天记录里找回有用信息，再把它变成可跟进的事项。**
 
-WeChat Agent 是面向个人 macOS 微信聊天记录的 AI 助手。你可以跨私聊和群聊查找信息，结合上下文回顾交流，也可以设置定时任务，持续关注重要事项。
+一个实习链接在群里，朋友的面试建议在私聊里，截止时间又在后续消息里更新。
+WeChat Agent 把这些信息整理为本地、可核查的知识库：搜索历史、连续追问、
+查看依据，也可以设置周期任务，持续追踪重要信息。它只提供建议，不代替你发送微信消息。
 
-## 核心功能
+![合成数据中的聊天浏览](docs/images/chats.png)
 
-### 查找与回顾聊天
+## 一分钟了解
 
-用熟悉的聊天界面浏览私聊和群聊，查看联系人、消息预览及支持的媒体内容。同步新消息、翻阅历史记录，并将本地语音转成可保存、可检索的文字。
+| 需求 | 已实现的能力 |
+|---|---|
+| 导入、回顾聊天 | 读取有权访问的本地快照，合并消息分片、解析联系人、分页浏览及展示支持的媒体 |
+| 新消息不重复全量处理 | 增量追加文本；语音转写变化时更新对应记录及受影响的向量块 |
+| 跨私聊、群聊查信息 | 语义与关键词多路召回、联系人软信号、RRF 融合、可选 LLM 重排 |
+| 连续追问、核查依据 | 保存多轮问答及检索证据，后台执行不因切换页面而中断 |
+| 主动追踪信息 | 配置任务、执行周期和回看范围；模型通过只读工具检索，保存结构化结果与建议 |
+| 看得懂、能控制 | 展示查询计划、召回分路与索引日志；五类模型分别配置 |
 
-### 跨会话问答
+## 系统架构
 
-直接提问，例如「最近朋友推荐过哪些餐厅？」「群里分享了哪些实习机会？」支持多轮追问，并可查看回答所依据的聊天片段。对话历史会保存，方便之后回顾。
-
-### 自定义定时任务
-
-写下任务，设置执行周期和检索时间范围，就能在任务旁查看结果。例如：
-
-- 检查可能需要回复的私聊，并提供回复草稿。
-- 追踪新分享的实习机会。
-- 汇总近期的美食与餐厅推荐。
-
-支持定时执行和手动执行，保留消息引用及执行历史。助手只读取聊天记录，不会自动发送回复。
-
-### 管理模型与检索
-
-统一配置问答、语音转写、Embedding 和重排模型。一键完成语音转写与索引准备，设置定时增量更新，也可以在 RAG 配置页查看检索计划和召回依据。
-
-## 技术概览
-
-应用采用 Python、SQLite 与 HTML/CSS/JavaScript 构建。聊天问答和定时任务分别使用两条互补的处理链路。
-
-### 聊天问答：RAG 混合检索
-
-```text
-问题与对话历史
-  → 查询规划
-  → 语义召回 + 关键词召回 + 联系人信号
-  → RRF 融合 + 可选的 LLM 重排
-  → 结合上下文生成回答，并附消息引用
+```mermaid
+flowchart LR
+    A[授权的微信快照 / 合成示例] --> B[解析、去重、联系人关联]
+    B --> D[(本地聊天数据)]
+    V[语音转写] --> I[增量全文索引]
+    D --> I
+    I --> F[SQLite FTS5 + LIKE]
+    I --> E[Embedding 文本块与向量]
+    Q[问题] --> P[查询规划 / 联系人软信号]
+    P --> F
+    P --> E
+    F --> R[RRF 融合 + 可选 LLM 重排]
+    E --> R
+    R --> G[问答模型 + 对话历史]
+    G --> U[回答与检索证据]
+    D --> T[搜索消息 / 私聊检查 / 上下文工具]
+    V --> T
+    C[任务 + 周期 + 时间范围] --> H[任务模型]
+    H <--> T
+    H --> J[引用校验 + 结构化报告 + 历史记录]
 ```
 
-- **查询理解**：提取人物、时间和主题等信息，指导检索。
-- **软路由**：联系人匹配辅助召回与排序，不会把主检索硬限制在这些联系人中。
-- **混合检索**：结合 Embedding 语义匹配与 SQLite 关键词匹配，通过 RRF 融合结果，再按配置使用大模型重排。
-- **过程可查看**：展示检索计划、候选结果和入模片段，便于核查回答依据。
+**真实技术栈：** Python 3.9+、SQLite/FTS5、HTML/CSS/JavaScript、OpenAI 兼容 API、
+PyCryptodome、Zstandard。检索与调度逻辑在本仓库实现，**没有使用 LlamaIndex 或 Streamlit**。
+向量存于 SQLite，在进程内计算相似度；当前重排是用聊天模型做相关性判断，不是专用 Cross-Encoder。
 
-### 任务执行：模型调用只读工具
+代码入口与链路边界见[架构说明](docs/ARCHITECTURE.md)。
 
-```text
-任务与时间范围 → 模型选择只读工具
-  → 搜索消息 / 检查私聊 / 阅读上下文
-  → 结构化结果 + 引用校验 → 保存执行历史
-```
+## 用示例数据运行
 
-任务目前直接检索已同步的聊天快照和语音转写，不复用问答的向量索引。模型根据任务选择工具，而不是为每种需求分别编写固定工作流。
-
-### 数据准备：增量更新
-
-语音转文字、全文索引和语义索引依次执行。已有转写会复用，新消息和转写变化只更新受影响的索引内容。本地服务运行期间，切换或关闭浏览器不会中断后台执行。
-
-## 快速开始
-
-需要 Python 3.9+、你自己的 macOS WeChat 4.x `db_storage/` 目录，以及匹配的 `all_keys.json`。密钥准备和版本限制见[密钥提取指南](docs/KEY_EXTRACTION.md)。
-
-将本地数据与密钥放在仓库根目录后执行：
+不需要安装微信，也不需要真实聊天、数据库密钥或 API key，就能浏览并检索 **6 个会话、40 条虚构消息**。
 
 ```bash
+git clone https://github.com/Fongkai777/wechat-agent.git
+cd wechat-agent
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m wechat_agent decrypt --keys all_keys.json
-bash scripts/start_web.sh
+
+python -m wechat_agent.demo init       # 导入 30 条虚构消息
+python -m wechat_agent.demo index      # 首次建索引
+python -m wechat_agent.demo append     # 追加 10 条
+python -m wechat_agent.demo index      # 增量更新，只新增 10 条
+python -m wechat_agent.demo serve
 ```
 
-打开 [localhost:8787](http://127.0.0.1:8787)，配置模型，再到 RAG 页准备检索。持续同步新消息需要使用可访问的实时数据库目录，而不是静态副本。
+访问 [localhost:8787](http://127.0.0.1:8787)。示例数据和配置都放在被 Git 忽略的 `.demo/`，
+不会回退读取私人数据源或已有模型配置。端口被占用会退出，不会自动换端口。
 
-数据源配置、媒体支持、定时执行规则、导出与常见问题见[使用指南](docs/USAGE.zh-CN.md)。
+RAG 页的本地检索调试不需要 key。生成回答、执行任务、Embedding 和语音转写需要配置对应模型，
+可能产生费用；示例初始配置关闭了 Embedding 和重排。
+真实数据接入见[使用指南](docs/USAGE.zh-CN.md)与[密钥提取及版本限制](docs/KEY_EXTRACTION.md)。
 
-## 隐私与限制
+## 界面预览
 
-仅处理你有权访问的数据。数据保存在本地，但云端 AI 功能会将相关文本或音频发送给配置的服务商，并可能产生费用。请勿提交密钥、解密数据库或私人缓存。
+截图来自**运行中的真实应用和合成数据**，不含真实聊天，也没有用预写答案冒充模型运行结果。
 
-可用历史和媒体取决于本地同步数据及兼容的密钥。回答与任务结果可能遗漏信息，请结合引用核查。定时执行需要本地服务保持运行，电脑保持唤醒。
+<details><summary>增量索引与检索过程</summary>
 
-## 开源参考
+![索引准备和调试](docs/images/rag.png)
+![查询计划与检索证据](docs/images/retrieval.png)
 
-本项目参考了已有的微信数据提取与解析方案：
+</details>
 
-- [wechat-db-decrypt-macos](https://github.com/Thearas/wechat-db-decrypt-macos)：macOS 密钥提取与解密参考。
-- [wechat-chat-history-mac](https://github.com/BIBOYANG425/wechat-chat-history-mac)：版本兼容、数据库结构与多分片导出参考。
-- [wechat-suite](https://github.com/raclen/wechat-suite)：密钥提取辅助脚本使用的 C 扫描器来源，以及解密／导出参考。
+<details><summary>周期任务与独立模型配置</summary>
 
-辅助工具说明见[密钥提取指南](docs/KEY_EXTRACTION.md)。再分发上游代码前请检查对应许可证。本项目不是腾讯／微信官方产品，也未获得其背书。
+![任务的周期与检索范围](docs/images/tasks.png)
+![不含凭据的模型配置](docs/images/models.png)
+
+</details>
+
+[75 秒 Demo 分镜及复现步骤](docs/DEMO.md)已准备好。在线端到端录屏尚未发布，不放占位视频链接。
+
+## 简单但可核查的评测
+
+[16 个问题](eval/cases.json)覆盖实体定位、跨会话信息、增量数据、重复转发、
+时间更正、模糊追问和无证据场景。[报告](eval/results/local/REPORT.md)保留了每条检索结果和失败案例。
+
+**本地检索基线，Top-8：** 15 个有答案问题中，正确会话命中 **15/15**，
+标注证据全部找齐 **14/15**。另有 1 个无答案问题，不计入上述分母。
+
+这只是小规模人工构造数据上的检索测量，不能代表真实语料准确率。
+本轮没有测云端 Embedding/重排，也没有把答案完整性、引用语义正确性冒充为已评测指标。
+仓库提供可选在线运行方式及独立审核表。
+
+```bash
+python scripts/evaluate_retrieval.py
+python -m unittest discover -s tests -p 'test_*.py'
+node --test tests/test_*.cjs
+python scripts/privacy_check.py
+```
+
+## 已知限制与下一步
+
+- 微信解析依赖客户端版本、密钥及本地已同步的历史和媒体。
+- 当前检索规划主要基于本轮问题；对话历史传给回答模型，但模糊追问仍需检索侧查询改写。
+- 关键词排序可能把否定句排得过高；本轮也发现一例跨会话证据缺失，后续需评估上下文扩展与重排。
+- 向量采用进程内相似度计算，尚不能宣称具备大规模 ANN 检索性能。
+- 任务直接搜索已同步快照，不复用问答向量索引。宽时间窗会增加扫描量与上下文成本；定时执行需要服务在线且电脑唤醒。
+- 下一步：独立测试集、多路召回消融、引用支持度审核、多轮查询改写、分阶段延迟与 token 统计。
+
+## 隐私与致谢
+
+公开示例全部虚构。私人数据库、密钥、语音转写、缓存和配置不提交到 Git。
+云端功能会将相关文本或音频发送给所配置的服务商；“本地存储”不等于“离线推理”。
+仅处理你有权访问的数据。见[公开发布检查记录](docs/PRIVACY.md)。
+
+提取与解析参考了
+[wechat-db-decrypt-macos](https://github.com/Thearas/wechat-db-decrypt-macos)、
+[wechat-chat-history-mac](https://github.com/BIBOYANG425/wechat-chat-history-mac)、
+[wechat-suite](https://github.com/raclen/wechat-suite)。
+再分发上游代码前请确认许可证。本项目不是腾讯或微信官方产品。
