@@ -10,6 +10,7 @@ browser, indexer, query planner, background jobs and model configuration.
 | Synthetic import | `wechat_agent/demo.py` | Isolated, idempotent import of authored JSON fixtures |
 | Chat browser | `wechat_agent/message_pages.py`, `web/sidebar.js` | Cursor pagination, shard merge and sidebar layout |
 | Web and retrieval | `wechat_agent/web.py` | HTTP routes, normalization, contact signals, FTS/LIKE, semantic chunks, RRF and answer generation |
+| Q&A citation contract | `wechat_agent/qa_answers.py` | Strict answer schema, reference validation and plain-text compatibility |
 | Background work | `wechat_agent/jobs.py`, `web/jobs.js` | Job state, progress, cancellation and browser reconnect |
 | Recurring assistant | `wechat_agent/goals.py`, `wechat_agent/goal_tools.py` | Schedule, bounded read-only tools, structured output and source validation |
 | Index scheduling | `wechat_agent/rag_schedule.py` | Recurring transcription → text → semantic preparation |
@@ -27,6 +28,25 @@ selected messages and saved conversational history.
 
 Query planning uses rules, token expansion, contact hints and time signals. It
 is **not an LLM query planner**. History does not yet rewrite the retrieval query.
+
+## Answer Provenance
+
+The Q&A model returns paragraphs containing `kind`, `text` and `source_refs`.
+Each answer paragraph must cite one or more IDs from this request's ordered
+source list; missing-evidence paragraphs may omit references. The server checks
+the shape and reference bounds, allows one format-repair attempt, and rejects
+refused, truncated or repeatedly invalid responses instead of displaying them
+as successful answers. The configured provider must support strict JSON Schema.
+
+The UI resolves each ID against saved retrieval metadata. Chat type/name,
+sender, time and original text are not model-generated labels. A contact-index
+summary, when supplied, becomes a separate labeled source, not a chat message.
+The complete source snapshot and structured answer survive reload and follow-up
+turns. Older plain-text conversations remain readable without being rewritten.
+
+Valid IDs do not establish that the cited text supports a claim. A model can
+still select the wrong valid source or misinterpret it; semantic review remains
+necessary. See the [targeted regression](../eval/results/citation-regression/REPORT.md).
 
 ## Incremental Work
 

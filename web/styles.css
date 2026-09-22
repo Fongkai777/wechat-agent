@@ -1438,6 +1438,33 @@ input, textarea, select { accent-color: var(--accent); }
   overflow-wrap: anywhere;
 }
 
+.qa-answer-paragraph + .qa-answer-paragraph {
+  margin-top: 20px;
+}
+
+.qa-citation {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 2px solid #d0d7de;
+}
+
+.qa-citation summary {
+  color: #596069;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.qa-citation summary:hover {
+  color: #0969da;
+}
+
+.qa-citation .qa-source-text {
+  margin-top: 6px;
+  max-height: 240px;
+}
+
 .qa-loading,
 .qa-error {
   color: var(--muted);

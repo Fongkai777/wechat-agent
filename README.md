@@ -19,7 +19,7 @@ information-tracking tasks. It never sends WeChat messages on your behalf.
 | Import and revisit history | Read authorized local WeChat snapshots; merge shards, resolve contacts, paginate chats and display supported media |
 | Avoid rebuilding everything | Append new messages; update changed voice transcripts and invalidate affected semantic chunks |
 | Ask across conversations | Combine semantic and keyword retrieval, use contacts as soft signals, fuse with RRF and optionally rerank with an LLM |
-| Continue the conversation | Save multi-turn Q&A and show retrieved evidence; background jobs survive browser navigation |
+| Continue the conversation | Save multi-turn Q&A with per-paragraph citations; source labels come from retrieved metadata, and background jobs survive browser navigation |
 | Track something over time | Set a goal, interval and lookback window; a tool-calling assistant searches messages and saves structured findings and suggestions |
 | Inspect and control the system | View query plans, recall branches and index logs; configure five model roles separately |
 
@@ -40,7 +40,8 @@ flowchart LR
     F --> R[RRF fusion + optional LLM rerank]
     E --> R
     R --> G[Answer model + conversation history]
-    G --> U[Answer + inspectable evidence]
+    G --> K[Structured conclusions + validated source IDs]
+    K --> U[Answer + server-owned source labels]
     D --> T[Read-only search / private-chat / context tools]
     V --> T
     C[Task + schedule + time window] --> H[Tool-calling task model]
@@ -93,7 +94,7 @@ private conversations or invented online model results.
 <details><summary>Index preparation and real model answers</summary>
 
 ![Index preparation](docs/images/rag.png)
-![Real model answer from synthetic evidence](docs/images/qa-live.png)
+![Structured answer with expandable private-chat and group-chat citations](docs/images/qa-citations.png)
 
 </details>
 
@@ -129,6 +130,15 @@ This tiny authored set is not production accuracy. See the
 [answer review and concrete attribution failure](eval/results/live/REVIEW.md).
 The review is by Codex, not an independent human evaluator; retrieval coverage,
 answer completeness and citation correctness are kept separate.
+
+The [source-attribution regression](eval/results/citation-regression/REPORT.md)
+now passes in one real API run: internship postings cite group messages, while
+resume advice cites the private chat. Q&A returns structured conclusions and
+source IDs; code validates IDs and renders chat type/name, sender and time.
+All supplied sources are saved, including references beyond the former 12-item
+storage cap. The original failure remains available for comparison. This is a
+targeted regression, not a rerun of the 16-question benchmark or proof of zero
+hallucinations. Compatible Q&A models must support strict JSON-schema output.
 
 ```bash
 python scripts/evaluate_retrieval.py

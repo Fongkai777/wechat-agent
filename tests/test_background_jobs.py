@@ -159,12 +159,12 @@ class BackgroundHTTPTests(unittest.TestCase):
                 def answer(*args, **kwargs):
                     ready.set()
                     release.wait(2)
-                    return "fixture answer"
+                    return {"paragraphs": [{"kind": "answer", "text": "fixture answer", "source_refs": [1]}]}
                 conversation = "cancelled" if cancel else "completed"
                 self.handler.path = "/api/jobs/start"
                 self.handler.read_json_body = Mock(return_value={"kind": "/api/qa_stream", "payload": {
                     "question": "fixture question", "conversation_id": conversation}})
-                with patch.object(web, "call_chat_completion", side_effect=answer):
+                with patch.object(web, "call_qa_answer", side_effect=answer):
                     self.handler.do_POST()
                     job = self.cls.background_jobs.get(self.handler.json_response.call_args.args[0]["job"]["id"])
                     self.assertTrue(ready.wait(2))
@@ -177,11 +177,11 @@ class BackgroundHTTPTests(unittest.TestCase):
                 stored = web.get_qa_conversation(self.state.qa_store, conversation)
                 self.assertEqual(len(stored["messages"]), 2)
                 self.assertNotIn("pending", stored["messages"][-1])
-                self.assertEqual(stored["messages"][-1]["content"], "已停止回答" if cancel else "fixture answer")
+                self.assertEqual(stored["messages"][-1]["content"], "已停止回答" if cancel else "fixture answer [1]")
 
     def test_qa_failure_and_service_restart_remain_in_history(self):
         self.qa_patches()
-        with patch.object(web, "call_chat_completion", side_effect=RuntimeError("fixture model failure")):
+        with patch.object(web, "call_qa_answer", side_effect=RuntimeError("fixture model failure")):
             self.handler.run_qa_stream({"question": "test", "conversation_id": "failed"}, Mock())
         stored = web.get_qa_conversation(self.state.qa_store, "failed")
         self.assertEqual(stored["messages"][-1]["error"], "fixture model failure")

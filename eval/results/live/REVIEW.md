@@ -53,8 +53,11 @@ pages, send messages, or establish exhaustive semantic coverage.
 
 ## Follow-Up Experiments
 
-1. Require structured evidence IDs in Q&A and render chat/time/sender directly
-   from retrieved metadata, reducing free-form source-name generation.
+1. Implemented after this run: structured evidence IDs in Q&A, with chat type,
+   name, time and sender rendered from retrieved metadata. The
+   [targeted regression](../citation-regression/REPORT.md) correctly separates
+   private advice from group postings. The historical findings above are unchanged;
+   broader semantic-support evaluation remains necessary.
 2. Compare 8/16/32-item contexts under a fixed input-token budget; do not silently
    alter the production configuration for a benchmark.
 3. Add independently authored questions and paraphrases, especially repost

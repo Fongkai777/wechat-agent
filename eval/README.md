@@ -36,6 +36,14 @@ provider-reported tokens, including index/query embeddings and reranking. All
 separate end-to-end source-attribution failure. The review is by Codex; independent
 human review remains open.
 
+Those 16-question artifacts predate structured Q&A. The separate
+[post-fix regression](results/citation-regression/REPORT.md) exercises the current
+UI handler and saved-history format on the same 40-message fixture. It records
+the complete JSON answer, all 39 sources, a screenshot and usage; it does not
+replace or inflate the earlier benchmark scores. The benchmark script's optional
+live generation still uses the legacy plain-text prompt; use `run_demo_task.py`
+for the current application answer/citation path.
+
 `api_usage.json` records every completed call's model, stage, duration and usage
 without request bodies or keys. `checkpoint.json` preserves completed questions
 if a later request fails. The script does not automatically resume or retry a

@@ -7,16 +7,17 @@ This is a recording plan, not a claim that a video exists.
 
 ## Verified Online Run
 
-- [Q&A events and evidence](../eval/results/demo-qa/events.json): the real application's
-  handler generated and saved the answer; no authored response was substituted.
+- [Current Q&A events and evidence](../eval/results/citation-regression/events.json):
+  the real application's handler generated structured conclusions and source IDs;
+  code rendered the private/group labels. No authored response was substituted.
 - [30-day task result](../eval/results/task/run.json): scanned 40 messages, retrieved
   14 sources, consolidated two internship postings and preparation suggestions.
-- [Known attribution issue](../eval/results/live/REVIEW.md): the Q&A demo incorrectly
-  names a group as the source of some private-chat advice. Do not hide this failure
-  or describe the demo as perfectly grounded.
+- [Original attribution failure](../eval/results/live/REVIEW.md): the earlier Q&A
+  demo mislabeled private advice as a group source. Its output is retained.
+  [Post-fix regression](../eval/results/citation-regression/REPORT.md) correctly
+  cites the private chat, but does not establish general semantic correctness.
 
-![Real Q&A](images/qa-live.png)
-![Expanded retrieved sources](images/sources-live.png)
+![Current Q&A with expanded private-chat evidence](images/qa-citations.png)
 ![Task result](images/task-live.png)
 
 Reproduce online steps against only synthetic data (billable):
@@ -28,6 +29,11 @@ python -m wechat_agent.demo serve --root .demo/showcase
 ```
 
 Tasks created by this helper remain paused; it runs once, not on a paid schedule.
+For a citation-only regression take, use `--mode qa --root .demo/citation-check`
+and `--output artifacts/citation-regression`. Results include `answer_data`, the
+complete ordered source list and per-call usage. The checked-in screenshot was
+taken after reloading the saved answer and expanding private-chat reference 7;
+reference 22 also survived reload. No credentials are copied into the demo root.
 
 ## Setup
 

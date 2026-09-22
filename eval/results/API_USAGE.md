@@ -11,16 +11,17 @@ These numbers cover this evaluation/demo session, not total account usage.
 | First task take, using the helper's initial same-day default | 2 | 6,429 |
 | Corrected explicit 30-day task take | 2 | 8,800 |
 | Actual UI-handler Q&A demonstration | 4 | 17,285 |
-| **Total** | **60** | **185,231** |
+| Structured-citation regression (index, retrieval and Q&A) | 4 | 19,821 |
+| **Total** | **64** | **205,052** |
 
 The first task take is retained in `task-today/`; it is not presented as a
 30-day run. The helper now sets `range_type=recent_days` explicitly.
 
 | Model | Total tokens |
 |---|---:|
-| text-embedding-3-small | 15,848 |
-| gpt-5-nano (reranking) | 123,172 |
-| gpt-5-mini (answers/tasks) | 46,211 |
+| text-embedding-3-small | 20,710 |
+| gpt-5-nano (reranking) | 131,802 |
+| gpt-5-mini (answers/tasks) | 52,540 |
 
 Raw per-call ledgers live alongside each run as `api_usage.json`; the interrupted
 preflight is `live/api_usage.preflight.json`. Usage comes from the provider's

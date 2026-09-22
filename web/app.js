@@ -1880,6 +1880,7 @@ function handleQaStreamEvent(event, assistantMessage) {
     assistantMessage.processing_ms = Number(event.processing_ms || 0) || elapsedForMessage(assistantMessage);
     assistantMessage.elapsed_ms = assistantMessage.processing_ms;
     assistantMessage.content = event.answer || "没有返回结果";
+    assistantMessage.answer_data = event.answer_data || null;
     assistantMessage.sources = event.sources || [];
     assistantMessage.context_count = event.context_count || 0;
     assistantMessage.retrieval = event.retrieval || null;
@@ -1915,12 +1916,34 @@ function renderQaMessage(message) {
     <article class="qa-message${roleClass}${errorClass}">
       <div class="qa-avatar">${message.role === "user" ? "我" : "AI"}</div>
       <div class="qa-bubble">
-        <div class="qa-answer-text">${escapeHtml(message.content || "")}</div>
+        ${renderQaAnswer(message)}
         ${meta}
         ${sources}
       </div>
     </article>
   `;
+}
+
+function qaSourceMeta(source, ref) {
+  const kind = { private: "私聊", group: "群聊", index_summary: "索引汇总" }[source.chat_type] || "会话类型未知";
+  return [`[${ref}]`, kind, source.chat_title, source.time, source.sender].filter(Boolean).join(" · ");
+}
+
+function renderQaAnswer(message) {
+  const paragraphs = message.answer_data?.paragraphs;
+  const sources = message.sources || [];
+  const valid = message.role === "assistant" && !message.error && Array.isArray(paragraphs) && paragraphs.length
+    && paragraphs.every(p => p && ["answer", "limitation"].includes(p.kind) && typeof p.text === "string"
+      && Array.isArray(p.source_refs) && (p.kind === "limitation" || p.source_refs.length)
+      && p.source_refs.every(ref => Number.isInteger(ref) && ref > 0 && Boolean(sources[ref - 1])));
+  if (!valid) return `<div class="qa-answer-text">${escapeHtml(message.content || "")}</div>`;
+  return paragraphs.map(p => {
+    const citations = [...new Set(p.source_refs)].map(ref => {
+      const source = sources[ref - 1];
+      return `<details class="qa-citation"><summary>${escapeHtml(qaSourceMeta(source, ref))}</summary><div class="qa-source-text">${escapeHtml(source.text || "")}</div></details>`;
+    }).join("");
+    return `<div class="qa-answer-paragraph"><div class="qa-answer-text">${escapeHtml(p.text)}</div>${citations}</div>`;
+  }).join("");
 }
 
 function renderQaResponseMeta(message) {
@@ -1958,11 +1981,11 @@ function renderQaSources(message) {
   if (Number.isFinite(Number(retrieval.scored_count))) retrievalBits.push(`打分 ${Number(retrieval.scored_count)} 条`);
   if (Number.isFinite(Number(message.context_count))) retrievalBits.push(`入模 ${Number(message.context_count)} 条`);
   const summary = retrievalBits.length
-    ? `引用片段 · ${retrievalBits.join(" · ")}`
-    : `引用片段 · ${escapeHtml(message.context_count || 0)} 条`;
+    ? `检索片段 · ${retrievalBits.join(" · ")}`
+    : `检索片段 · ${message.context_count || 0} 条`;
   const sources = (message.sources || [])
-    .map((source) => {
-      const meta = [source.chat_title, source.time, source.sender].filter(Boolean).join(" · ");
+    .map((source, index) => {
+      const meta = qaSourceMeta(source, index + 1);
       return `
         <div class="qa-source">
           <div class="qa-source-meta">${escapeHtml(meta)}</div>
