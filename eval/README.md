@@ -29,6 +29,19 @@ database. Enabled embedding and reranking stages are exercised as configured.
 The answer model is called once per case. Review `usage` before running larger sets.
 Do not commit raw provider error dumps or a configuration containing credentials.
 
+The [completed live run](results/live/REPORT.md) used 49 API calls and 140,292
+provider-reported tokens, including index/query embeddings and reranking. All
+15 answerable cases retrieved their annotated evidence. See the
+[qualitative answer review](results/live/REVIEW.md) for counting ambiguity and a
+separate end-to-end source-attribution failure. The review is by Codex; independent
+human review remains open.
+
+`api_usage.json` records every completed call's model, stage, duration and usage
+without request bodies or keys. `checkpoint.json` preserves completed questions
+if a later request fails. The script does not automatically resume or retry a
+failed run. For the total including setup and demo calls, see
+[the usage ledger](results/API_USAGE.md).
+
 ## What the Checks Mean
 
 | Check | Method | Limitation |
@@ -43,6 +56,10 @@ Do not commit raw provider error dumps or a configuration containing credentials
 The no-evidence question is excluded from positive retrieval-hit denominators.
 It tests abstention only after live generation and review. Do not treat a low
 retrieval score as a measured abstention result.
+
+For semantic results, source message IDs are resolved through the chunk-to-message
+mapping. Top-k counts items, so an 8-chunk context can contain more messages than
+8 individual local hits. Use a fixed token budget for a controlled comparison.
 
 ## Review Rubric
 

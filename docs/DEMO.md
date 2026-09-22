@@ -1,8 +1,33 @@
 # A 75-Second End-to-End Demo
 
-**Status:** synthetic import, incremental indexing, retrieval and five screenshots
-have been verified. An online Q&A/task recording has not yet been produced or
-uploaded. This is a recording plan, not a claim that a video exists.
+**Status:** synthetic import, incremental indexing, hybrid retrieval, real online
+Q&A and a tool-calling task have been verified. Their screenshots and API records
+are available. A continuous screen recording has not been produced or uploaded.
+This is a recording plan, not a claim that a video exists.
+
+## Verified Online Run
+
+- [Q&A events and evidence](../eval/results/demo-qa/events.json): the real application's
+  handler generated and saved the answer; no authored response was substituted.
+- [30-day task result](../eval/results/task/run.json): scanned 40 messages, retrieved
+  14 sources, consolidated two internship postings and preparation suggestions.
+- [Known attribution issue](../eval/results/live/REVIEW.md): the Q&A demo incorrectly
+  names a group as the source of some private-chat advice. Do not hide this failure
+  or describe the demo as perfectly grounded.
+
+![Real Q&A](images/qa-live.png)
+![Expanded retrieved sources](images/sources-live.png)
+![Task result](images/task-live.png)
+
+Reproduce online steps against only synthetic data (billable):
+
+```bash
+python scripts/run_demo_task.py --root .demo/showcase --mode qa --live-config .demo/models.json --output artifacts/demo-qa
+python scripts/run_demo_task.py --root .demo/showcase --mode task --live-config .demo/models.json --output artifacts/demo-task
+python -m wechat_agent.demo serve --root .demo/showcase
+```
+
+Tasks created by this helper remain paused; it runs once, not on a paid schedule.
 
 ## Setup
 

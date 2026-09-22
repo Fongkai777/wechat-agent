@@ -27,6 +27,7 @@ runtime_probe.txt
 *.tar
 *.gz
 artifacts/
+eval/results/**/checkpoint.json
 
 # Logs and generated output
 logs/

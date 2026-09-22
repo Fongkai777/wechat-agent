@@ -80,16 +80,16 @@ RAG 页的本地检索调试不需要 key。生成回答、执行任务、Embedd
 
 截图来自**运行中的真实应用和合成数据**，不含真实聊天，也没有用预写答案冒充模型运行结果。
 
-<details><summary>增量索引与检索过程</summary>
+<details><summary>增量索引与真实模型回答</summary>
 
 ![索引准备和调试](docs/images/rag.png)
-![查询计划与检索证据](docs/images/retrieval.png)
+![基于虚构聊天的真实模型回答](docs/images/qa-live.png)
 
 </details>
 
 <details><summary>周期任务与独立模型配置</summary>
 
-![任务的周期与检索范围](docs/images/tasks.png)
+![已完成的任务及带引用的建议](docs/images/task-live.png)
 ![不含凭据的模型配置](docs/images/models.png)
 
 </details>
@@ -104,9 +104,14 @@ RAG 页的本地检索调试不需要 key。生成回答、执行任务、Embedd
 **本地检索基线，Top-8：** 15 个有答案问题中，正确会话命中 **15/15**，
 标注证据全部找齐 **14/15**。另有 1 个无答案问题，不计入上述分母。
 
-这只是小规模人工构造数据上的检索测量，不能代表真实语料准确率。
-本轮没有测云端 Embedding/重排，也没有把答案完整性、引用语义正确性冒充为已评测指标。
-仓库提供可选在线运行方式及独立审核表。
+[在线混合检索评测](eval/results/live/REPORT.md)也已完成全部 16 题：
+15 个有答案问题的标注证据找齐 **15/15**，使用 `text-embedding-3-small`、
+`gpt-5-nano` 重排和 `gpt-5-mini` 回答，共 **49 次 API 调用、140,292 tokens**。
+语义片段可能包含多条消息，因此不能把两个 Top-8 结果直接当作受控对比实验。
+
+这只是小规模人工构造数据上的测量，不能代表真实语料准确率。
+另有[答案核对及真实引用归属失败案例](eval/results/live/REVIEW.md)。核对由 Codex 完成，
+不是独立人工评审；检索覆盖、回答完整性和引用正确性分别记录。
 
 ```bash
 python scripts/evaluate_retrieval.py

@@ -1,0 +1,893 @@
+[
+  {
+    "stage": "index",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 4748,
+      "total_tokens": 4748
+    },
+    "status": "completed",
+    "elapsed_s": 1.007
+  },
+  {
+    "stage": "E01",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 102,
+      "total_tokens": 102
+    },
+    "status": "completed",
+    "elapsed_s": 0.622
+  },
+  {
+    "stage": "E01",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3498,
+      "completion_tokens": 7330,
+      "total_tokens": 10828,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 6272,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 45.16
+  },
+  {
+    "stage": "E01",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 908,
+      "completion_tokens": 411,
+      "total_tokens": 1319,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 320,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 5.783
+  },
+  {
+    "stage": "E02",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 110,
+      "total_tokens": 110
+    },
+    "status": "completed",
+    "elapsed_s": 0.538
+  },
+  {
+    "stage": "E02",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3523,
+      "completion_tokens": 1031,
+      "total_tokens": 4554,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 960,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 7.131
+  },
+  {
+    "stage": "E02",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 740,
+      "completion_tokens": 742,
+      "total_tokens": 1482,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 512,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 9.558
+  },
+  {
+    "stage": "E03",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 63,
+      "total_tokens": 63
+    },
+    "status": "completed",
+    "elapsed_s": 0.45
+  },
+  {
+    "stage": "E03",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3775,
+      "completion_tokens": 7544,
+      "total_tokens": 11319,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 6592,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 44.238
+  },
+  {
+    "stage": "E03",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 788,
+      "completion_tokens": 1175,
+      "total_tokens": 1963,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 768,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 13.463
+  },
+  {
+    "stage": "E04",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 106,
+      "total_tokens": 106
+    },
+    "status": "completed",
+    "elapsed_s": 0.732
+  },
+  {
+    "stage": "E04",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3523,
+      "completion_tokens": 3726,
+      "total_tokens": 7249,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 2880,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 23.304
+  },
+  {
+    "stage": "E04",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 979,
+      "completion_tokens": 1154,
+      "total_tokens": 2133,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 576,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 11.336
+  },
+  {
+    "stage": "E05",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 102,
+      "total_tokens": 102
+    },
+    "status": "completed",
+    "elapsed_s": 0.58
+  },
+  {
+    "stage": "E05",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3536,
+      "completion_tokens": 3810,
+      "total_tokens": 7346,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 3136,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 22.125
+  },
+  {
+    "stage": "E05",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 934,
+      "completion_tokens": 760,
+      "total_tokens": 1694,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 640,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 7.835
+  },
+  {
+    "stage": "E06",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 102,
+      "total_tokens": 102
+    },
+    "status": "completed",
+    "elapsed_s": 0.836
+  },
+  {
+    "stage": "E06",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3618,
+      "completion_tokens": 2516,
+      "total_tokens": 6134,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 2304,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 14.813
+  },
+  {
+    "stage": "E06",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 935,
+      "completion_tokens": 929,
+      "total_tokens": 1864,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 704,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 11.822
+  },
+  {
+    "stage": "E07",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 123,
+      "total_tokens": 123
+    },
+    "status": "completed",
+    "elapsed_s": 0.848
+  },
+  {
+    "stage": "E07",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3557,
+      "completion_tokens": 1915,
+      "total_tokens": 5472,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 1664,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 11.57
+  },
+  {
+    "stage": "E07",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 910,
+      "completion_tokens": 1115,
+      "total_tokens": 2025,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 768,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 16.834
+  },
+  {
+    "stage": "E08",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 121,
+      "total_tokens": 121
+    },
+    "status": "completed",
+    "elapsed_s": 0.7
+  },
+  {
+    "stage": "E08",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3613,
+      "completion_tokens": 3622,
+      "total_tokens": 7235,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 2816,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 26.736
+  },
+  {
+    "stage": "E08",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 906,
+      "completion_tokens": 984,
+      "total_tokens": 1890,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 832,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 11.943
+  },
+  {
+    "stage": "E09",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 87,
+      "total_tokens": 87
+    },
+    "status": "completed",
+    "elapsed_s": 0.503
+  },
+  {
+    "stage": "E09",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3872,
+      "completion_tokens": 3848,
+      "total_tokens": 7720,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 3200,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 23.64
+  },
+  {
+    "stage": "E09",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 906,
+      "completion_tokens": 520,
+      "total_tokens": 1426,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 448,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 7.104
+  },
+  {
+    "stage": "E10",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 49,
+      "total_tokens": 49
+    },
+    "status": "completed",
+    "elapsed_s": 0.854
+  },
+  {
+    "stage": "E10",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3690,
+      "completion_tokens": 2521,
+      "total_tokens": 6211,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 1856,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 14.747
+  },
+  {
+    "stage": "E10",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 708,
+      "completion_tokens": 947,
+      "total_tokens": 1655,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 832,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 12.6
+  },
+  {
+    "stage": "E11",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 84,
+      "total_tokens": 84
+    },
+    "status": "completed",
+    "elapsed_s": 0.484
+  },
+  {
+    "stage": "E11",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3606,
+      "completion_tokens": 1491,
+      "total_tokens": 5097,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 1344,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 10.016
+  },
+  {
+    "stage": "E11",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 928,
+      "completion_tokens": 370,
+      "total_tokens": 1298,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 256,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 5.694
+  },
+  {
+    "stage": "E12",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 48,
+      "total_tokens": 48
+    },
+    "status": "completed",
+    "elapsed_s": 0.413
+  },
+  {
+    "stage": "E12",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3654,
+      "completion_tokens": 1016,
+      "total_tokens": 4670,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 960,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 6.64
+  },
+  {
+    "stage": "E12",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 641,
+      "completion_tokens": 750,
+      "total_tokens": 1391,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 576,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 9.49
+  },
+  {
+    "stage": "E13",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 54,
+      "total_tokens": 54
+    },
+    "status": "completed",
+    "elapsed_s": 0.856
+  },
+  {
+    "stage": "E13",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3549,
+      "completion_tokens": 1151,
+      "total_tokens": 4700,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 1088,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 7.579
+  },
+  {
+    "stage": "E13",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 619,
+      "completion_tokens": 386,
+      "total_tokens": 1005,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 256,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 6.128
+  },
+  {
+    "stage": "E14",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 91,
+      "total_tokens": 91
+    },
+    "status": "completed",
+    "elapsed_s": 1.131
+  },
+  {
+    "stage": "E14",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3672,
+      "completion_tokens": 3112,
+      "total_tokens": 6784,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 2496,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 20.397
+  },
+  {
+    "stage": "E14",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 662,
+      "completion_tokens": 540,
+      "total_tokens": 1202,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 448,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 6.332
+  },
+  {
+    "stage": "E15",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 55,
+      "total_tokens": 55
+    },
+    "status": "completed",
+    "elapsed_s": 0.791
+  },
+  {
+    "stage": "E15",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3655,
+      "completion_tokens": 3507,
+      "total_tokens": 7162,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 2944,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 20.572
+  },
+  {
+    "stage": "E15",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 1095,
+      "completion_tokens": 521,
+      "total_tokens": 1616,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 448,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 6.763
+  },
+  {
+    "stage": "E16",
+    "operation": "call_embeddings",
+    "model": "text-embedding-3-small",
+    "usage": {
+      "prompt_tokens": 91,
+      "total_tokens": 91
+    },
+    "status": "completed",
+    "elapsed_s": 0.418
+  },
+  {
+    "stage": "E16",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-nano",
+    "usage": {
+      "prompt_tokens": 3799,
+      "completion_tokens": 2412,
+      "total_tokens": 6211,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 1344,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 13.141
+  },
+  {
+    "stage": "E16",
+    "operation": "call_chat_payload",
+    "model": "gpt-5-mini",
+    "usage": {
+      "prompt_tokens": 910,
+      "completion_tokens": 591,
+      "total_tokens": 1501,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 384,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "status": "completed",
+    "elapsed_s": 8.014
+  }
+]

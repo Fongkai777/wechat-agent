@@ -2,23 +2,73 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+import sqlite3
 import sys
 import tempfile
 import time
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from wechat_agent import demo, web
+
+
+def evidence_ids(state, item):
+    if item.get("semantic_chunk_id"):
+        with sqlite3.connect(state.qa_search_db) as conn:
+            rows = conn.execute(
+                "SELECT m.local_id FROM messages m JOIN semantic_message_map sm ON sm.message_id=m.id WHERE sm.chunk_id=? ORDER BY m.id",
+                (item["semantic_chunk_id"],),
+            ).fetchall()
+        return [int(row[0]) for row in rows]
+    return [int(item["local_id"])]
+
+
+class UsageRecorder:
+    """Record only model/usage metadata, never credentials or request bodies."""
+
+    def __init__(self, output):
+        self.path = Path(output) / "api_usage.json"
+        self.calls = []
+        self.stage = "index"
+        self.stack = ExitStack()
+
+    def __enter__(self):
+        for name in ("call_embeddings", "call_chat_payload"):
+            original = getattr(web, name)
+
+            def wrapped(profile, *args, _original=original, _name=name, **kwargs):
+                started = time.perf_counter()
+                entry = {"stage": self.stage, "operation": _name, "model": profile.get("model")}
+                try:
+                    result = _original(profile, *args, **kwargs)
+                    entry["usage"] = result[1] if _name == "call_embeddings" else result.get("usage", {})
+                    entry["status"] = "completed"
+                    return result
+                except Exception as exc:
+                    entry.update(status="failed", error_type=type(exc).__name__)
+                    raise
+                finally:
+                    entry["elapsed_s"] = round(time.perf_counter() - started, 3)
+                    self.calls.append(entry)
+                    self.path.write_text(json.dumps(self.calls, indent=2) + "\n", encoding="utf-8")
+
+            self.stack.enter_context(patch.object(web, name, wrapped))
+        return self
+
+    def __exit__(self, *args):
+        return self.stack.__exit__(*args)
 
 
 def evaluate(output, live_config=None, top_k=8):
     cases = json.loads(Path("eval/cases.json").read_text(encoding="utf-8"))
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="wechat-eval-") as directory:
+    with tempfile.TemporaryDirectory(prefix="wechat-eval-") as directory, UsageRecorder(output) as recorder:
         root = Path(directory)
         demo.initialize(root)
         state = demo.demo_state(root)
@@ -34,19 +84,22 @@ def evaluate(output, live_config=None, top_k=8):
         index = web.load_or_build_qa_index(state)
         results = []
         for case in cases:
+            recorder.stage = case["id"]
             started = time.perf_counter()
             context, diagnostics = web.select_qa_context_with_diagnostics(state, index, case["question"], top_k)
-            retrieved = [int(item["local_id"]) for item in context]
+            evidence_by_item = [evidence_ids(state, item) for item in context]
+            retrieved = list(dict.fromkeys(mid for ids in evidence_by_item for mid in ids))
             expected = set(case["evidence"])
             expected_chats = {row[1] for row in demo.fixture()["messages"] + demo.fixture()["increment"] if row[0] in expected}
             item = {
                 **case, "retrieved_message_ids": retrieved,
-                "retrieved": [{key: row.get(key) for key in ("chat_id", "chat_title", "local_id", "sender", "text")} for row in context],
+                "retrieved": [{**{key: row.get(key) for key in ("chat_id", "chat_title", "local_id", "semantic_chunk_id", "sender", "text")}, "message_ids": ids} for row, ids in zip(context, evidence_by_item)],
                 "conversation_hit": bool(expected_chats & {row["chat_id"] for row in context}) if expected else None,
                 "evidence_recall": len(expected & set(retrieved)) / len(expected) if expected else None,
                 "all_evidence_found": expected.issubset(retrieved) if expected else None,
                 "retrieval_ms": round((time.perf_counter() - started) * 1000, 2),
                 "retrieval_mode": diagnostics.get("mode"),
+                "retrieval_diagnostics": diagnostics,
                 "answer": None, "citation_validity": "not_run", "answer_completeness": "not_reviewed",
                 "manual_review": {"correct_context_cited": None, "answer_complete": None, "notes": ""},
             }
@@ -61,7 +114,9 @@ def evaluate(output, live_config=None, top_k=8):
                 item["usage"] = response.get("usage", {})
                 refs = [int(number) for number in re.findall(r"\[(\d+)\]", answer)]
                 item["citation_validity"] = "no_numeric_citations" if not refs else "in_range" if all(1 <= number <= len(context) for number in refs) else "out_of_range"
+            item["end_to_end_ms"] = round((time.perf_counter() - started) * 1000, 2)
             results.append(item)
+            (output / "checkpoint.json").write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             print(f"{case['id']}: evidence_recall={item['evidence_recall']} mode={item['retrieval_mode']}", flush=True)
     positive = [item for item in results if not item.get("unanswerable")]
     report = {
@@ -72,27 +127,39 @@ def evaluate(output, live_config=None, top_k=8):
         "conversation_hits": sum(item["conversation_hit"] for item in positive),
         "all_evidence_hits": sum(item["all_evidence_found"] for item in positive),
         "answerable_cases": len(positive), "results": results,
+        "models": {name: config[name].get("model") for name in ("qa", "embedding", "rerank")} if live_config else {},
+        "api_calls": len(recorder.calls),
+        "api_total_tokens": sum(call.get("usage", {}).get("total_tokens", 0) for call in recorder.calls),
         "limits": ["Small authored synthetic dataset; not representative of private history.",
+                   "Top-k counts retrieved items: a semantic chunk may contain several messages, unlike a local message hit. Compare with a fixed token budget before claiming a quality gain.",
                    "Conversation hit is lenient; all-evidence hit requires every annotated message in top-k.",
                    "Citation range checks do not establish semantic support. Human review is required.",
                    "Multi-turn history is passed to generation, but current retrieval sees the latest question only."],
     }
     (output / "results.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_report(report, output)
+    return report
+
+
+def write_report(report, output):
+    output = Path(output)
+    results, top_k = report["results"], report["top_k"]
+    positive = [item for item in results if not item.get("unanswerable")]
     lines = ["# Retrieval Evaluation", "", f"Mode: **{report['mode']}**. Top-k: **{top_k}**.", "", report["dataset"], "",
              f"Correct-chat hit: **{report['conversation_hits']}/{len(positive)}**. All annotated evidence present: **{report['all_evidence_hits']}/{len(positive)}**.",
              f"Incremental import: **{report['incremental_inserted']}** new messages indexed; initial corpus 30 messages.", "",
+             f"API calls recorded: **{report['api_calls']}**. Provider-reported tokens: **{report['api_total_tokens']}** (not a billing estimate).", "",
              "| Case | Scenario | Correct chat | All evidence | Recall | Answer completeness |", "|---|---|---|---|---|---|"]
     for item in results:
         value = lambda v: "n/a" if v is None else "yes" if v else "no"
         recall = "n/a" if item["evidence_recall"] is None else f"{item['evidence_recall']:.0%}"
         lines.append(f"| {item['id']} | {item['category']} | {value(item['conversation_hit'])} | {value(item['all_evidence_found'])} | {recall} | not reviewed |")
-    lines += ["", "## Interpretation", "", "These are retrieval measurements, not LLM answer-quality scores. Offline mode makes no model requests. Answers, citation support and completeness remain unevaluated until a live run and human review.", "", "## Failed Retrieval Cases", ""]
+    lines += ["", "## Interpretation", "", "These are retrieval measurements, not LLM answer-quality scores. Offline mode makes no model requests. Live answers and API usage are recorded when enabled; semantic citation support and completeness require a separate review. The table does not claim independent human review.", "", "## Failed Retrieval Cases", ""]
     for item in positive:
         if not item["all_evidence_found"]:
             lines.append(f"- **{item['id']}** ({item['question']}): missing annotated messages {sorted(set(item['evidence']) - set(item['retrieved_message_ids']))}.")
     lines += ["", "## Limits", ""] + [f"- {limit}" for limit in report["limits"]]
     (output / "REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return report
 
 
 if __name__ == "__main__":

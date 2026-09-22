@@ -90,16 +90,16 @@ For your own data, see [private-data setup](docs/USAGE.md) and the
 These are screenshots of the **running application with synthetic data**, not
 private conversations or invented online model results.
 
-<details><summary>Index preparation and retrieval debugging</summary>
+<details><summary>Index preparation and real model answers</summary>
 
 ![Index preparation](docs/images/rag.png)
-![Query planning and retrieved evidence](docs/images/retrieval.png)
+![Real model answer from synthetic evidence](docs/images/qa-live.png)
 
 </details>
 
 <details><summary>Recurring tasks and independent model settings</summary>
 
-![Task editor with schedule and lookback controls](docs/images/tasks.png)
+![Completed tool-calling task with cited suggestions](docs/images/task-live.png)
 ![Model configuration with empty credentials](docs/images/models.png)
 
 </details>
@@ -119,9 +119,16 @@ questions; all annotated evidence retrieved **14/15**. One additional question
 has no answer in the corpus and is excluded from those denominators. The failed
 case and every retrieved message are retained in the report.
 
-This tiny authored set is not production accuracy. Cloud embedding/reranking,
-answer completeness and semantic citation support have **not** been scored by
-this offline run. The optional live runner and review rubric keep those separate.
+The [live hybrid run](eval/results/live/REPORT.md) also completed all 16 questions:
+**15/15** answerable questions had all annotated evidence present. Models:
+`text-embedding-3-small`, `gpt-5-nano` reranking, `gpt-5-mini` answers.
+It used **140,292 tokens across 49 API calls**. Top-8 semantic chunks can contain
+more messages than top-8 local hits, so this is not a controlled improvement claim.
+
+This tiny authored set is not production accuracy. See the
+[answer review and concrete attribution failure](eval/results/live/REVIEW.md).
+The review is by Codex, not an independent human evaluator; retrieval coverage,
+answer completeness and citation correctness are kept separate.
 
 ```bash
 python scripts/evaluate_retrieval.py

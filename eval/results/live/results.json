@@ -1,0 +1,6735 @@
+{
+  "dataset": "40 wholly fictional messages / 6 chats / 16 authored questions; not a production benchmark",
+  "generated_at": "2026-09-22T09:14:01+00:00",
+  "mode": "live-config",
+  "top_k": 8,
+  "incremental_inserted": 10,
+  "conversation_hits": 15,
+  "all_evidence_hits": 15,
+  "answerable_cases": 15,
+  "results": [
+    {
+      "id": "E01",
+      "category": "exact entity",
+      "question": "星桥搜索算法实习的地点和要求是什么？",
+      "evidence": [
+        1
+      ],
+      "facts": [
+        "新加坡",
+        "Python",
+        "RAG"
+      ],
+      "retrieved_message_ids": [
+        1,
+        2,
+        7,
+        8,
+        9,
+        33,
+        34
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 1,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-10 10:00:00 · 林晓 · 示例 · text\n星桥实验室招聘搜索算法实习生，地点新加坡，要求 Python、信息检索和 RAG 项目经验。\n\n2026-09-10 10:01:00 · 林晓 · 示例 · text\n星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "1",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥实验室招聘搜索算法实习生，地点新加坡，要求 Python、信息检索和 RAG 项目经验。",
+          "message_ids": [
+            1
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "2",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 13,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-14 14:00:00 · 我 · text\n星桥搜索算法实习需要准备什么？\n\n2026-09-14 14:01:00 · 林晓 · 示例 · text\n星桥的面试会问 RAG 的召回和重排，准备一个失败案例以及你怎么评测。\n\n2026-09-14 14:02:00 · 林晓 · 示例 · text\n星桥简历发我之前，先补一个能复现的 Demo。",
+          "message_ids": [
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "8",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥的面试会问 RAG 的召回和重排，准备一个失败案例以及你怎么评测。",
+          "message_ids": [
+            8
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "9",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥简历发我之前，先补一个能复现的 Demo。",
+          "message_ids": [
+            9
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "7",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "星桥搜索算法实习需要准备什么？",
+          "message_ids": [
+            7
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 15,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-22 09:10:00 · 林晓 · 示例 · text\n远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。\n\n2026-09-22 09:11:00 · 我 · text\n收到，我今天整理好项目再发给你。",
+          "message_ids": [
+            33,
+            34
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 45827.84,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "internship_search",
+          "intent_label": "实习/岗位检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "星桥搜索算法实习的地点和要求是什么？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "星桥搜索算法实习的地点和要求是什么 星桥 桥搜 搜索 索算 算法 法实 实习",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "reason": "实习岗位扩展",
+              "weight": 0.9
+            },
+            {
+              "text": "公司 职位 apply application career job opening",
+              "reason": "英文岗位词扩展",
+              "weight": 0.72
+            }
+          ],
+          "terms": [
+            "星桥搜索算法实习的地点和要求是什么",
+            "星桥",
+            "桥搜",
+            "搜索",
+            "索算",
+            "算法",
+            "法实",
+            "实习",
+            "习的",
+            "的地",
+            "地点",
+            "点和",
+            "和要",
+            "要求",
+            "求是",
+            "是什",
+            "什么",
+            "星桥搜",
+            "桥搜索",
+            "搜索算",
+            "索算法",
+            "算法实",
+            "法实习",
+            "实习的",
+            "习的地",
+            "的地点",
+            "地点和",
+            "点和要",
+            "和要求",
+            "要求是",
+            "求是什",
+            "是什么",
+            "星桥搜索",
+            "桥搜索算",
+            "搜索算法",
+            "索算法实",
+            "算法实习",
+            "法实习的",
+            "实习的地",
+            "习的地点",
+            "的地点和",
+            "地点和要",
+            "点和要求",
+            "和要求是",
+            "要求是什",
+            "求是什么",
+            "新加坡",
+            "本地"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 41,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "internship_search",
+            "intent_label": "实习/岗位检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "星桥搜索算法实习的地点和要求是什么？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "星桥搜索算法实习的地点和要求是什么 星桥 桥搜 搜索 索算 算法 法实 实习",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "reason": "实习岗位扩展",
+                "weight": 0.9
+              },
+              {
+                "text": "公司 职位 apply application career job opening",
+                "reason": "英文岗位词扩展",
+                "weight": 0.72
+              }
+            ],
+            "terms": [
+              "星桥搜索算法实习的地点和要求是什么",
+              "星桥",
+              "桥搜",
+              "搜索",
+              "索算",
+              "算法",
+              "法实",
+              "实习",
+              "习的",
+              "的地",
+              "地点",
+              "点和",
+              "和要",
+              "要求",
+              "求是",
+              "是什",
+              "什么",
+              "星桥搜",
+              "桥搜索",
+              "搜索算",
+              "索算法",
+              "算法实",
+              "法实习",
+              "实习的",
+              "习的地",
+              "的地点",
+              "地点和",
+              "点和要",
+              "和要求",
+              "要求是",
+              "求是什",
+              "是什么",
+              "星桥搜索",
+              "桥搜索算",
+              "搜索算法",
+              "索算法实",
+              "算法实习",
+              "法实习的",
+              "实习的地",
+              "习的地点",
+              "的地点和",
+              "地点和要",
+              "点和要求",
+              "和要求是",
+              "要求是什",
+              "求是什么",
+              "新加坡",
+              "本地"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "星桥搜索算法实习的地点和要求是什么",
+            "星桥",
+            "桥搜",
+            "搜索",
+            "索算",
+            "算法",
+            "法实",
+            "实习",
+            "习的",
+            "的地",
+            "地点",
+            "点和",
+            "和要",
+            "要求",
+            "求是",
+            "是什",
+            "什么",
+            "星桥搜",
+            "桥搜索",
+            "搜索算",
+            "索算法",
+            "算法实",
+            "法实习",
+            "实习的",
+            "习的地",
+            "的地点",
+            "地点和",
+            "点和要",
+            "和要求",
+            "要求是",
+            "求是什",
+            "是什么"
+          ],
+          "fts_count": 48,
+          "like_count": 51,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 41,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "星桥搜索算法实习的地点和要求是什么？",
+                "星桥搜索算法实习的地点和要求是什么 星桥 桥搜 搜索 索算 算法 法实 实习"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 48,
+              "best_rank": 1,
+              "queries": [
+                "星桥搜索算法实习的地点和要求是什么？",
+                "星桥搜索算法实习的地点和要求是什么 星桥 桥搜 搜索 索算 算法 法实 实习",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 51,
+              "best_rank": 1,
+              "queries": [
+                "星桥搜索算法实习的地点和要求是什么？",
+                "星桥搜索算法实习的地点和要求是什么 星桥 桥搜 搜索 索算 算法 法实 实习",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 4,
+            "queries": [
+              "星桥搜索算法实习的地点和要求是什么？",
+              "星桥搜索算法实习的地点和要求是什么 星桥 桥搜 搜索 索算 算法 法实 实习",
+              "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "公司 职位 apply application career job opening"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 102,
+              "total_tokens": 102
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "地点：新加坡。\n\n要求：Python、信息检索（IR）和有 RAG 项目经验。\n\n依据：AI 实习交流 聊天，2026-09-10 10:00:00，发送者 林晓（消息内容：星桥实验室招聘搜索算法实习生，地点新加坡，要求 Python、信息检索和 RAG 项目经验）。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 908,
+        "completion_tokens": 411,
+        "total_tokens": 1319,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 320,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 51613.52
+    },
+    {
+      "id": "E02",
+      "category": "neighbor evidence",
+      "question": "星桥搜索算法实习什么时候截止，怎么申请？",
+      "evidence": [
+        2
+      ],
+      "facts": [
+        "9 月 25 日",
+        "careers.example.com/starbridge"
+      ],
+      "retrieved_message_ids": [
+        2,
+        1,
+        40,
+        32,
+        5,
+        7,
+        6
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "2",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 1,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-10 10:00:00 · 林晓 · 示例 · text\n星桥实验室招聘搜索算法实习生，地点新加坡，要求 Python、信息检索和 RAG 项目经验。\n\n2026-09-10 10:01:00 · 林晓 · 示例 · text\n星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "40",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            40
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "32",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。",
+          "message_ids": [
+            32
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "5",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "蓝湾产品设计岗位申请截止 10 月 2 日，申请地址 careers.example.com/bluebay。",
+          "message_ids": [
+            5
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "7",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "星桥搜索算法实习需要准备什么？",
+          "message_ids": [
+            7
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "1",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥实验室招聘搜索算法实习生，地点新加坡，要求 Python、信息检索和 RAG 项目经验。",
+          "message_ids": [
+            1
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "6",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "我优先考虑搜索算法方向，产品设计暂时不投。",
+          "message_ids": [
+            6
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 7721.21,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "internship_search",
+          "intent_label": "实习/岗位检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "星桥搜索算法实习什么时候截止，怎么申请？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "星桥搜索算法实习什么时候截止 怎么申请 星桥 桥搜 搜索 索算 算法 法实",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "reason": "实习岗位扩展",
+              "weight": 0.9
+            },
+            {
+              "text": "公司 职位 apply application career job opening",
+              "reason": "英文岗位词扩展",
+              "weight": 0.72
+            }
+          ],
+          "terms": [
+            "星桥搜索算法实习什么时候截止",
+            "怎么申请",
+            "星桥",
+            "桥搜",
+            "搜索",
+            "索算",
+            "算法",
+            "法实",
+            "实习",
+            "习什",
+            "什么",
+            "么时",
+            "时候",
+            "候截",
+            "截止",
+            "怎么",
+            "么申",
+            "申请",
+            "星桥搜",
+            "桥搜索",
+            "搜索算",
+            "索算法",
+            "算法实",
+            "法实习",
+            "实习什",
+            "习什么",
+            "什么时",
+            "么时候",
+            "时候截",
+            "候截止",
+            "星桥搜索",
+            "桥搜索算",
+            "搜索算法",
+            "索算法实",
+            "算法实习",
+            "法实习什",
+            "实习什么",
+            "习什么时",
+            "什么时候",
+            "么时候截",
+            "时候截止",
+            "怎么申",
+            "么申请",
+            "新加坡",
+            "本地",
+            "intern",
+            "internship",
+            "岗位"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 40,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "internship_search",
+            "intent_label": "实习/岗位检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "星桥搜索算法实习什么时候截止，怎么申请？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "星桥搜索算法实习什么时候截止 怎么申请 星桥 桥搜 搜索 索算 算法 法实",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "reason": "实习岗位扩展",
+                "weight": 0.9
+              },
+              {
+                "text": "公司 职位 apply application career job opening",
+                "reason": "英文岗位词扩展",
+                "weight": 0.72
+              }
+            ],
+            "terms": [
+              "星桥搜索算法实习什么时候截止",
+              "怎么申请",
+              "星桥",
+              "桥搜",
+              "搜索",
+              "索算",
+              "算法",
+              "法实",
+              "实习",
+              "习什",
+              "什么",
+              "么时",
+              "时候",
+              "候截",
+              "截止",
+              "怎么",
+              "么申",
+              "申请",
+              "星桥搜",
+              "桥搜索",
+              "搜索算",
+              "索算法",
+              "算法实",
+              "法实习",
+              "实习什",
+              "习什么",
+              "什么时",
+              "么时候",
+              "时候截",
+              "候截止",
+              "星桥搜索",
+              "桥搜索算",
+              "搜索算法",
+              "索算法实",
+              "算法实习",
+              "法实习什",
+              "实习什么",
+              "习什么时",
+              "什么时候",
+              "么时候截",
+              "时候截止",
+              "怎么申",
+              "么申请",
+              "新加坡",
+              "本地",
+              "intern",
+              "internship",
+              "岗位"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "星桥搜索算法实习什么时候截止",
+            "怎么申请",
+            "星桥",
+            "桥搜",
+            "搜索",
+            "索算",
+            "算法",
+            "法实",
+            "实习",
+            "习什",
+            "什么",
+            "么时",
+            "时候",
+            "候截",
+            "截止",
+            "怎么",
+            "么申",
+            "申请",
+            "星桥搜",
+            "桥搜索",
+            "搜索算",
+            "索算法",
+            "算法实",
+            "法实习",
+            "实习什",
+            "习什么",
+            "什么时",
+            "么时候",
+            "时候截",
+            "候截止",
+            "星桥搜索",
+            "桥搜索算"
+          ],
+          "fts_count": 46,
+          "like_count": 49,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 40,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "星桥搜索算法实习什么时候截止，怎么申请？",
+                "星桥搜索算法实习什么时候截止 怎么申请 星桥 桥搜 搜索 索算 算法 法实",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 46,
+              "best_rank": 1,
+              "queries": [
+                "星桥搜索算法实习什么时候截止，怎么申请？",
+                "星桥搜索算法实习什么时候截止 怎么申请 星桥 桥搜 搜索 索算 算法 法实",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 49,
+              "best_rank": 1,
+              "queries": [
+                "星桥搜索算法实习什么时候截止，怎么申请？",
+                "星桥搜索算法实习什么时候截止 怎么申请 星桥 桥搜 搜索 索算 算法 法实",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 4,
+            "queries": [
+              "星桥搜索算法实习什么时候截止，怎么申请？",
+              "星桥搜索算法实习什么时候截止 怎么申请 星桥 桥搜 搜索 索算 算法 法实",
+              "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "公司 职位 apply application career job opening"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 110,
+              "total_tokens": 110
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "根据你提供的聊天记录：\n\n- 截止时间：9月25日。  \n  依据：AI 实习交流 · 示例，林晓，2026-09-10 10:01:00（“星桥搜索算法实习申请截止 9 月 25 日……”）。\n\n- 如何申请：通过 careers.example.com/starbridge 提交简历。  \n  依据：AI 实习交流 · 示例，林晓，2026-09-10 10:01:00（“通过 careers.example.com/starbridge 提交简历。”）。\n\n- 其他相关信息（可作为准备依据）：岗位在新加坡，要求 Python、信息检索和 RAG 项目经验，至少实习三个月。  \n  依据：AI 实习交流 · 示例，林晓，2026-09-10 10:00:00–10:01:00（相关描述）。\n\n如果你需要，我可以帮你把简历要点按岗位要求整理或拟一份投递时的简短自我介绍。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 740,
+        "completion_tokens": 742,
+        "total_tokens": 1482,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 512,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 17279.99
+    },
+    {
+      "id": "E03",
+      "category": "cross-chat",
+      "question": "林晓建议我怎么准备星桥面试？",
+      "evidence": [
+        8,
+        9,
+        28
+      ],
+      "facts": [
+        "召回和重排",
+        "失败案例",
+        "Demo",
+        "融合"
+      ],
+      "retrieved_message_ids": [
+        7,
+        8,
+        9,
+        17,
+        33,
+        28,
+        38
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 13,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-14 14:00:00 · 我 · text\n星桥搜索算法实习需要准备什么？\n\n2026-09-14 14:01:00 · 林晓 · 示例 · text\n星桥的面试会问 RAG 的召回和重排，准备一个失败案例以及你怎么评测。\n\n2026-09-14 14:02:00 · 林晓 · 示例 · text\n星桥简历发我之前，先补一个能复现的 Demo。",
+          "message_ids": [
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "8",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥的面试会问 RAG 的召回和重排，准备一个失败案例以及你怎么评测。",
+          "message_ids": [
+            8
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "17",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "评测先做 15 个问题，检查正确会话、证据引用和回答完整性，保留失败案例。",
+          "message_ids": [
+            17
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "33",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。",
+          "message_ids": [
+            33
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "28",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥面试还会追问为什么关键词召回和向量召回要融合。",
+          "message_ids": [
+            28
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 14,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-20 16:00:00 · 林晓 · 示例 · text\n星桥面试还会追问为什么关键词召回和向量召回要融合。",
+          "message_ids": [
+            28
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "9",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥简历发我之前，先补一个能复现的 Demo。",
+          "message_ids": [
+            9
+          ]
+        },
+        {
+          "chat_id": "demo_yu",
+          "chat_title": "余舟 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 23,
+          "sender": "余舟 · 示例",
+          "text": "2026-09-22 13:15:00 · 余舟 · 示例 · text\n今天能帮忙确认一下评测结果吗？我还在等你的意见。",
+          "message_ids": [
+            38
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 44730.21,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + 联系人软召回 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + 联系人软召回 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [
+          "林晓 · 示例"
+        ],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "general_search",
+          "intent_label": "普通聊天检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [
+            {
+              "id": "demo_lin",
+              "name": "林晓 · 示例",
+              "message_count": 13
+            }
+          ],
+          "queries": [
+            {
+              "text": "林晓建议我怎么准备星桥面试？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "林晓建议我怎么准备星桥面试 林晓 晓建 建议 议我 我怎 怎么 么准",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            }
+          ],
+          "terms": [
+            "林晓建议我怎么准备星桥面试",
+            "林晓",
+            "晓建",
+            "建议",
+            "议我",
+            "我怎",
+            "怎么",
+            "么准",
+            "准备",
+            "备星",
+            "星桥",
+            "桥面",
+            "面试",
+            "林晓建",
+            "晓建议",
+            "建议我",
+            "议我怎",
+            "我怎么",
+            "怎么准",
+            "么准备",
+            "准备星",
+            "备星桥",
+            "星桥面",
+            "桥面试",
+            "林晓建议",
+            "晓建议我",
+            "建议我怎",
+            "议我怎么",
+            "我怎么准",
+            "怎么准备",
+            "么准备星",
+            "准备星桥",
+            "备星桥面",
+            "星桥面试"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "发现 1 个相关联系人，只作为补充召回，不缩小主检索范围",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 38,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "general_search",
+            "intent_label": "普通聊天检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [
+              {
+                "id": "demo_lin",
+                "name": "林晓 · 示例",
+                "message_count": 13
+              }
+            ],
+            "queries": [
+              {
+                "text": "林晓建议我怎么准备星桥面试？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "林晓建议我怎么准备星桥面试 林晓 晓建 建议 议我 我怎 怎么 么准",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              }
+            ],
+            "terms": [
+              "林晓建议我怎么准备星桥面试",
+              "林晓",
+              "晓建",
+              "建议",
+              "议我",
+              "我怎",
+              "怎么",
+              "么准",
+              "准备",
+              "备星",
+              "星桥",
+              "桥面",
+              "面试",
+              "林晓建",
+              "晓建议",
+              "建议我",
+              "议我怎",
+              "我怎么",
+              "怎么准",
+              "么准备",
+              "准备星",
+              "备星桥",
+              "星桥面",
+              "桥面试",
+              "林晓建议",
+              "晓建议我",
+              "建议我怎",
+              "议我怎么",
+              "我怎么准",
+              "怎么准备",
+              "么准备星",
+              "准备星桥",
+              "备星桥面",
+              "星桥面试"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "发现 1 个相关联系人，只作为补充召回，不缩小主检索范围",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "林晓建议我怎么准备星桥面试",
+            "林晓",
+            "晓建",
+            "建议",
+            "议我",
+            "我怎",
+            "怎么",
+            "么准",
+            "准备",
+            "备星",
+            "星桥",
+            "桥面",
+            "面试",
+            "林晓建",
+            "晓建议",
+            "建议我",
+            "议我怎",
+            "我怎么",
+            "怎么准",
+            "么准备",
+            "准备星",
+            "备星桥",
+            "星桥面",
+            "桥面试",
+            "林晓建议",
+            "晓建议我",
+            "建议我怎",
+            "议我怎么",
+            "我怎么准",
+            "怎么准备",
+            "么准备星",
+            "准备星桥"
+          ],
+          "fts_count": 30,
+          "like_count": 30,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 38,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "林晓建议我怎么准备星桥面试？",
+                "林晓建议我怎么准备星桥面试 林晓 晓建 建议 议我 我怎 怎么 么准"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 30,
+              "best_rank": 1,
+              "queries": [
+                "林晓建议我怎么准备星桥面试？",
+                "林晓建议我怎么准备星桥面试 林晓 晓建 建议 议我 我怎 怎么 么准"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 30,
+              "best_rank": 1,
+              "queries": [
+                "林晓建议我怎么准备星桥面试？",
+                "林晓建议我怎么准备星桥面试 林晓 晓建 建议 议我 我怎 怎么 么准"
+              ]
+            },
+            {
+              "source": "contact",
+              "label": "联系人软召回",
+              "count": 26,
+              "best_rank": 1,
+              "queries": [
+                "林晓建议我怎么准备星桥面试？",
+                "林晓建议我怎么准备星桥面试 林晓 晓建 建议 议我 我怎 怎么 么准"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 2,
+            "queries": [
+              "林晓建议我怎么准备星桥面试？",
+              "林晓建议我怎么准备星桥面试 林晓 晓建 建议 议我 我怎 怎么 么准"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 63,
+              "total_tokens": 63
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "根据聊天记录，林晓给了几条明确建议（含聊天名、时间与发送者作为依据）：\n\n- 2026-09-14 14:01，林晓：  \n  “星桥的面试会问 RAG 的召回和重排，准备一个失败案例以及你怎么评测。”  \n  建议内容：准备 RAG（召回与重排）相关知识、一个失败案例以及对应的评测方案。\n\n- 2026-09-14 14:02，林晓：  \n  “星桥简历发我之前，先补一个能复现的 Demo。”  \n  建议内容：在把简历发给他/她前，先准备一个可复现的 Demo。\n\n- 2026-09-20 16:00，林晓：  \n  “星桥面试还会追问为什么关键词召回和向量召回要融合。”  \n  建议内容：准备好能解释关键词召回与向量召回融合原因的答案。\n\n- 2026-09-17 10:01，林晓（检索项目组聊天）：  \n  “评测先做 15 个问题，检查正确会话、证据引用和回答完整性，保留失败案例。”  \n  建议内容：做一次小规模评测（约15题），检查会话正确性、证据引用与回答完整性，并保留失败案例作为展示/分析材料。\n\n- 2026-09-22 09:10，林晓：  \n  “把 Demo 和评测链接加进简历。”  \n  建议内容：在简历里附上 Demo 与评测结果的链接。\n\n如果你想，我可以把这些要点整理成面试准备清单或帮你列出可复现 Demo 与评测的具体步骤。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 788,
+        "completion_tokens": 1175,
+        "total_tokens": 1963,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 768,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 58195.66
+    },
+    {
+      "id": "E04",
+      "category": "negative constraint",
+      "question": "新加坡有哪些搜索或 RAG 算法实习，不要产品设计和全职？",
+      "evidence": [
+        1,
+        31,
+        32
+      ],
+      "facts": [
+        "星桥",
+        "远帆",
+        "新加坡"
+      ],
+      "retrieved_message_ids": [
+        1,
+        31,
+        35,
+        2,
+        33,
+        32,
+        40
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "1",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥实验室招聘搜索算法实习生，地点新加坡，要求 Python、信息检索和 RAG 项目经验。",
+          "message_ids": [
+            1
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "31",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "新增实习：远帆智能招聘 RAG 工程实习生，地点新加坡，要求 Python、向量检索和工具调用。",
+          "message_ids": [
+            31
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "35",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。",
+          "message_ids": [
+            35
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "2",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 1,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-10 10:00:00 · 林晓 · 示例 · text\n星桥实验室招聘搜索算法实习生，地点新加坡，要求 Python、信息检索和 RAG 项目经验。\n\n2026-09-10 10:01:00 · 林晓 · 示例 · text\n星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "33",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。",
+          "message_ids": [
+            33
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "32",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。",
+          "message_ids": [
+            32
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 5,
+          "sender": "陈安 · 示例、林晓 · 示例、余舟 · 示例",
+          "text": "2026-09-22 09:00:00 · 林晓 · 示例 · text\n新增实习：远帆智能招聘 RAG 工程实习生，地点新加坡，要求 Python、向量检索和工具调用。\n\n2026-09-22 09:01:00 · 林晓 · 示例 · text\n远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。\n\n2026-09-22 09:15:00 · 余舟 · 示例 · text\n再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。\n\n2026-09-22 14:30:00 · 陈安 · 示例 · text\n澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            31,
+            32,
+            35,
+            40
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 24093.77,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "internship_search",
+          "intent_label": "实习/岗位检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "新加坡有哪些搜索或 RAG 算法实习，不要产品设计和全职？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "新加坡有哪些搜索或 rag 算法实习 不要产品设计和全职 新加 加坡 坡有 有哪",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "reason": "实习岗位扩展",
+              "weight": 0.9
+            },
+            {
+              "text": "公司 职位 apply application career job opening",
+              "reason": "英文岗位词扩展",
+              "weight": 0.72
+            }
+          ],
+          "terms": [
+            "新加坡有哪些搜索或",
+            "rag",
+            "算法实习",
+            "不要产品设计和全职",
+            "新加",
+            "加坡",
+            "坡有",
+            "有哪",
+            "哪些",
+            "些搜",
+            "搜索",
+            "索或",
+            "算法",
+            "法实",
+            "实习",
+            "不要",
+            "要产",
+            "产品",
+            "品设",
+            "设计",
+            "计和",
+            "和全",
+            "全职",
+            "新加坡",
+            "加坡有",
+            "坡有哪",
+            "有哪些",
+            "哪些搜",
+            "些搜索",
+            "搜索或",
+            "新加坡有",
+            "加坡有哪",
+            "坡有哪些",
+            "有哪些搜",
+            "哪些搜索",
+            "些搜索或",
+            "算法实",
+            "法实习",
+            "不要产",
+            "要产品",
+            "产品设",
+            "品设计",
+            "设计和",
+            "计和全",
+            "和全职",
+            "不要产品",
+            "要产品设",
+            "产品设计"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 41,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "internship_search",
+            "intent_label": "实习/岗位检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "新加坡有哪些搜索或 RAG 算法实习，不要产品设计和全职？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "新加坡有哪些搜索或 rag 算法实习 不要产品设计和全职 新加 加坡 坡有 有哪",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "reason": "实习岗位扩展",
+                "weight": 0.9
+              },
+              {
+                "text": "公司 职位 apply application career job opening",
+                "reason": "英文岗位词扩展",
+                "weight": 0.72
+              }
+            ],
+            "terms": [
+              "新加坡有哪些搜索或",
+              "rag",
+              "算法实习",
+              "不要产品设计和全职",
+              "新加",
+              "加坡",
+              "坡有",
+              "有哪",
+              "哪些",
+              "些搜",
+              "搜索",
+              "索或",
+              "算法",
+              "法实",
+              "实习",
+              "不要",
+              "要产",
+              "产品",
+              "品设",
+              "设计",
+              "计和",
+              "和全",
+              "全职",
+              "新加坡",
+              "加坡有",
+              "坡有哪",
+              "有哪些",
+              "哪些搜",
+              "些搜索",
+              "搜索或",
+              "新加坡有",
+              "加坡有哪",
+              "坡有哪些",
+              "有哪些搜",
+              "哪些搜索",
+              "些搜索或",
+              "算法实",
+              "法实习",
+              "不要产",
+              "要产品",
+              "产品设",
+              "品设计",
+              "设计和",
+              "计和全",
+              "和全职",
+              "不要产品",
+              "要产品设",
+              "产品设计"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "新加坡有哪些搜索或",
+            "rag",
+            "算法实习",
+            "不要产品设计和全职",
+            "新加",
+            "加坡",
+            "坡有",
+            "有哪",
+            "哪些",
+            "些搜",
+            "搜索",
+            "索或",
+            "算法",
+            "法实",
+            "实习",
+            "不要",
+            "要产",
+            "产品",
+            "品设",
+            "设计",
+            "计和",
+            "和全",
+            "全职",
+            "新加坡",
+            "加坡有",
+            "坡有哪",
+            "有哪些",
+            "哪些搜",
+            "些搜索",
+            "搜索或",
+            "新加坡有",
+            "加坡有哪"
+          ],
+          "fts_count": 48,
+          "like_count": 53,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 41,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "新加坡有哪些搜索或 RAG 算法实习，不要产品设计和全职？",
+                "新加坡有哪些搜索或 rag 算法实习 不要产品设计和全职 新加 加坡 坡有 有哪"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 48,
+              "best_rank": 1,
+              "queries": [
+                "新加坡有哪些搜索或 RAG 算法实习，不要产品设计和全职？",
+                "新加坡有哪些搜索或 rag 算法实习 不要产品设计和全职 新加 加坡 坡有 有哪",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 53,
+              "best_rank": 1,
+              "queries": [
+                "新加坡有哪些搜索或 RAG 算法实习，不要产品设计和全职？",
+                "新加坡有哪些搜索或 rag 算法实习 不要产品设计和全职 新加 加坡 坡有 有哪",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 4,
+            "queries": [
+              "新加坡有哪些搜索或 RAG 算法实习，不要产品设计和全职？",
+              "新加坡有哪些搜索或 rag 算法实习 不要产品设计和全职 新加 加坡 坡有 有哪",
+              "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "公司 职位 apply application career job opening"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 106,
+              "total_tokens": 106
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "基于你提供的聊天片段，符合“新加坡”“搜索或 RAG 算法”“实习（非产品设计、非全职）”条件的岗位只有下面两条。每条后面附上聊天来源（聊天名、时间、发送者）作为依据。\n\n1) 星桥实验室 — 搜索算法实习生  \n- 岗位地点：新加坡  \n- 职位类型/方向：搜索算法（要求信息检索和 RAG 项目经验）  \n- 要求/技能：Python、信息检索、RAG 项目经验  \n- 截止 / 时长：申请截止 2026-09-25；至少实习三个月  \n- 投递链接：careers.example.com/starbridge  \n- 依据：AI 实习交流 · 示例，2026-09-10 10:00:00；发送者：林晓（内容）；以及 AI 实习交流 · 示例，2026-09-10 10:01:00；发送者：林晓（截止/投递信息）。\n\n2) 远帆智能（Farsail） — RAG 工程实习生  \n- 岗位地点：新加坡  \n- 职位类型/方向：RAG / 向量检索与工具调用相关实习  \n- 要求/技能：Python、向量检索、工具调用；建议在简历中加入 Demo/评测链接  \n- 截止 / 时长：申请截止 2026-09-30；至少实习四个月  \n- 投递链接：careers.example.com/farsail  \n- 依据：AI 实习交流 · 示例，2026-09-22 09:00:00；发送者：林晓（岗位信息）；AI 实习交流 · 示例，2026-09-22 09:01:00；发送者：林晓（截止/投递）；AI 实习交流 · 示例，2026-09-22 09:15:00；发送者：余舟（确认非重复新岗位）；林晓 · 示例，2026-09-22 09:10:00（建议加 Demo/评测）。\n\n补充说明：在当前聊天记录中未找到其他符合“新加坡 + 搜索或 RAG 算法 + 实习（非产品设计、非全职）”条件的岗位。聊天中有一条与此不相关的招聘（澄空公司北京后端全职），已被标注为非实习/非新加坡（AI 实习交流 · 示例，2026-09-22 14:30:00；发送者：陈安）。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 979,
+        "completion_tokens": 1154,
+        "total_tokens": 2133,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 576,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 35431.74
+    },
+    {
+      "id": "E05",
+      "category": "incremental import",
+      "question": "远帆 RAG 实习的截止时间和实习时长是什么？",
+      "evidence": [
+        32
+      ],
+      "facts": [
+        "9 月 30 日",
+        "四个月"
+      ],
+      "retrieved_message_ids": [
+        32,
+        31,
+        35,
+        40,
+        33,
+        34,
+        5
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "32",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。",
+          "message_ids": [
+            32
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 5,
+          "sender": "陈安 · 示例、林晓 · 示例、余舟 · 示例",
+          "text": "2026-09-22 09:00:00 · 林晓 · 示例 · text\n新增实习：远帆智能招聘 RAG 工程实习生，地点新加坡，要求 Python、向量检索和工具调用。\n\n2026-09-22 09:01:00 · 林晓 · 示例 · text\n远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。\n\n2026-09-22 09:15:00 · 余舟 · 示例 · text\n再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。\n\n2026-09-22 14:30:00 · 陈安 · 示例 · text\n澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            31,
+            32,
+            35,
+            40
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "31",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "新增实习：远帆智能招聘 RAG 工程实习生，地点新加坡，要求 Python、向量检索和工具调用。",
+          "message_ids": [
+            31
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "35",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。",
+          "message_ids": [
+            35
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 15,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-22 09:10:00 · 林晓 · 示例 · text\n远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。\n\n2026-09-22 09:11:00 · 我 · text\n收到，我今天整理好项目再发给你。",
+          "message_ids": [
+            33,
+            34
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "33",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。",
+          "message_ids": [
+            33
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "40",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            40
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "5",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "蓝湾产品设计岗位申请截止 10 月 2 日，申请地址 careers.example.com/bluebay。",
+          "message_ids": [
+            5
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 22749.69,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "internship_search",
+          "intent_label": "实习/岗位检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "远帆 RAG 实习的截止时间和实习时长是什么？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "远帆 rag 实习的截止时间和实习时长是什么 实习 习的 的截 截止 止时",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "reason": "实习岗位扩展",
+              "weight": 0.9
+            },
+            {
+              "text": "公司 职位 apply application career job opening",
+              "reason": "英文岗位词扩展",
+              "weight": 0.72
+            }
+          ],
+          "terms": [
+            "远帆",
+            "rag",
+            "实习的截止时间和实习时长是什么",
+            "实习",
+            "习的",
+            "的截",
+            "截止",
+            "止时",
+            "时间",
+            "间和",
+            "和实",
+            "习时",
+            "时长",
+            "长是",
+            "是什",
+            "什么",
+            "实习的",
+            "习的截",
+            "的截止",
+            "截止时",
+            "止时间",
+            "时间和",
+            "间和实",
+            "和实习",
+            "实习时",
+            "习时长",
+            "时长是",
+            "长是什",
+            "是什么",
+            "实习的截",
+            "习的截止",
+            "的截止时",
+            "截止时间",
+            "止时间和",
+            "时间和实",
+            "间和实习",
+            "和实习时",
+            "实习时长",
+            "习时长是",
+            "时长是什",
+            "长是什么",
+            "新加坡",
+            "本地",
+            "intern",
+            "internship",
+            "岗位",
+            "招聘",
+            "内推"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 41,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "internship_search",
+            "intent_label": "实习/岗位检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "远帆 RAG 实习的截止时间和实习时长是什么？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "远帆 rag 实习的截止时间和实习时长是什么 实习 习的 的截 截止 止时",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "reason": "实习岗位扩展",
+                "weight": 0.9
+              },
+              {
+                "text": "公司 职位 apply application career job opening",
+                "reason": "英文岗位词扩展",
+                "weight": 0.72
+              }
+            ],
+            "terms": [
+              "远帆",
+              "rag",
+              "实习的截止时间和实习时长是什么",
+              "实习",
+              "习的",
+              "的截",
+              "截止",
+              "止时",
+              "时间",
+              "间和",
+              "和实",
+              "习时",
+              "时长",
+              "长是",
+              "是什",
+              "什么",
+              "实习的",
+              "习的截",
+              "的截止",
+              "截止时",
+              "止时间",
+              "时间和",
+              "间和实",
+              "和实习",
+              "实习时",
+              "习时长",
+              "时长是",
+              "长是什",
+              "是什么",
+              "实习的截",
+              "习的截止",
+              "的截止时",
+              "截止时间",
+              "止时间和",
+              "时间和实",
+              "间和实习",
+              "和实习时",
+              "实习时长",
+              "习时长是",
+              "时长是什",
+              "长是什么",
+              "新加坡",
+              "本地",
+              "intern",
+              "internship",
+              "岗位",
+              "招聘",
+              "内推"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "远帆",
+            "rag",
+            "实习的截止时间和实习时长是什么",
+            "实习",
+            "习的",
+            "的截",
+            "截止",
+            "止时",
+            "时间",
+            "间和",
+            "和实",
+            "习时",
+            "时长",
+            "长是",
+            "是什",
+            "什么",
+            "实习的",
+            "习的截",
+            "的截止",
+            "截止时",
+            "止时间",
+            "时间和",
+            "间和实",
+            "和实习",
+            "实习时",
+            "习时长",
+            "时长是",
+            "长是什",
+            "是什么",
+            "实习的截",
+            "习的截止",
+            "的截止时"
+          ],
+          "fts_count": 46,
+          "like_count": 53,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 41,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "远帆 RAG 实习的截止时间和实习时长是什么？",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "远帆 rag 实习的截止时间和实习时长是什么 实习 习的 的截 截止 止时"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 46,
+              "best_rank": 1,
+              "queries": [
+                "远帆 RAG 实习的截止时间和实习时长是什么？",
+                "远帆 rag 实习的截止时间和实习时长是什么 实习 习的 的截 截止 止时",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 53,
+              "best_rank": 1,
+              "queries": [
+                "远帆 RAG 实习的截止时间和实习时长是什么？",
+                "远帆 rag 实习的截止时间和实习时长是什么 实习 习的 的截 截止 止时",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 4,
+            "queries": [
+              "远帆 RAG 实习的截止时间和实习时长是什么？",
+              "远帆 rag 实习的截止时间和实习时长是什么 实习 习的 的截 截止 止时",
+              "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "公司 职位 apply application career job opening"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 102,
+              "total_tokens": 102
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "截止时间：9 月 30 日（根据聊天时间推断为 2026-09-30）。\n实习时长：至少四个月。\n\n依据：\n- 聊天：AI 实习交流，时间：2026-09-22 09:01:00，发送者：林晓 · 示例，内容：“远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。”（见聊天片段[1] / [2]）",
+      "citation_validity": "in_range",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 934,
+        "completion_tokens": 760,
+        "total_tokens": 1694,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 640,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 30586.17
+    },
+    {
+      "id": "E06",
+      "category": "deduplication",
+      "question": "远帆 RAG 实习转发了几次，是两个不同岗位吗？",
+      "evidence": [
+        31,
+        35
+      ],
+      "facts": [
+        "同一个岗位"
+      ],
+      "retrieved_message_ids": [
+        31,
+        32,
+        35,
+        40,
+        33,
+        34,
+        5
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 5,
+          "sender": "陈安 · 示例、林晓 · 示例、余舟 · 示例",
+          "text": "2026-09-22 09:00:00 · 林晓 · 示例 · text\n新增实习：远帆智能招聘 RAG 工程实习生，地点新加坡，要求 Python、向量检索和工具调用。\n\n2026-09-22 09:01:00 · 林晓 · 示例 · text\n远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。\n\n2026-09-22 09:15:00 · 余舟 · 示例 · text\n再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。\n\n2026-09-22 14:30:00 · 陈安 · 示例 · text\n澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            31,
+            32,
+            35,
+            40
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "35",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。",
+          "message_ids": [
+            35
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "31",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "新增实习：远帆智能招聘 RAG 工程实习生，地点新加坡，要求 Python、向量检索和工具调用。",
+          "message_ids": [
+            31
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "32",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。",
+          "message_ids": [
+            32
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 15,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-22 09:10:00 · 林晓 · 示例 · text\n远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。\n\n2026-09-22 09:11:00 · 我 · text\n收到，我今天整理好项目再发给你。",
+          "message_ids": [
+            33,
+            34
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "33",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。",
+          "message_ids": [
+            33
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "40",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            40
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "5",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "蓝湾产品设计岗位申请截止 10 月 2 日，申请地址 careers.example.com/bluebay。",
+          "message_ids": [
+            5
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 15699.14,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "internship_search",
+          "intent_label": "实习/岗位检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "远帆 RAG 实习转发了几次，是两个不同岗位吗？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "远帆 rag 实习转发了几次 是两个不同岗位吗 实习 习转 转发 发了",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "reason": "实习岗位扩展",
+              "weight": 0.9
+            },
+            {
+              "text": "公司 职位 apply application career job opening",
+              "reason": "英文岗位词扩展",
+              "weight": 0.72
+            }
+          ],
+          "terms": [
+            "远帆",
+            "rag",
+            "实习转发了几次",
+            "是两个不同岗位吗",
+            "实习",
+            "习转",
+            "转发",
+            "发了",
+            "了几",
+            "几次",
+            "是两",
+            "两个",
+            "个不",
+            "不同",
+            "同岗",
+            "岗位",
+            "位吗",
+            "实习转",
+            "习转发",
+            "转发了",
+            "发了几",
+            "了几次",
+            "实习转发",
+            "习转发了",
+            "转发了几",
+            "发了几次",
+            "是两个",
+            "两个不",
+            "个不同",
+            "不同岗",
+            "同岗位",
+            "岗位吗",
+            "是两个不",
+            "两个不同",
+            "个不同岗",
+            "不同岗位",
+            "同岗位吗",
+            "新加坡",
+            "本地",
+            "intern",
+            "internship",
+            "招聘",
+            "内推",
+            "校招",
+            "公司",
+            "职位",
+            "apply",
+            "application"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 37,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "internship_search",
+            "intent_label": "实习/岗位检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "远帆 RAG 实习转发了几次，是两个不同岗位吗？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "远帆 rag 实习转发了几次 是两个不同岗位吗 实习 习转 转发 发了",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "reason": "实习岗位扩展",
+                "weight": 0.9
+              },
+              {
+                "text": "公司 职位 apply application career job opening",
+                "reason": "英文岗位词扩展",
+                "weight": 0.72
+              }
+            ],
+            "terms": [
+              "远帆",
+              "rag",
+              "实习转发了几次",
+              "是两个不同岗位吗",
+              "实习",
+              "习转",
+              "转发",
+              "发了",
+              "了几",
+              "几次",
+              "是两",
+              "两个",
+              "个不",
+              "不同",
+              "同岗",
+              "岗位",
+              "位吗",
+              "实习转",
+              "习转发",
+              "转发了",
+              "发了几",
+              "了几次",
+              "实习转发",
+              "习转发了",
+              "转发了几",
+              "发了几次",
+              "是两个",
+              "两个不",
+              "个不同",
+              "不同岗",
+              "同岗位",
+              "岗位吗",
+              "是两个不",
+              "两个不同",
+              "个不同岗",
+              "不同岗位",
+              "同岗位吗",
+              "新加坡",
+              "本地",
+              "intern",
+              "internship",
+              "招聘",
+              "内推",
+              "校招",
+              "公司",
+              "职位",
+              "apply",
+              "application"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "远帆",
+            "rag",
+            "实习转发了几次",
+            "是两个不同岗位吗",
+            "实习",
+            "习转",
+            "转发",
+            "发了",
+            "了几",
+            "几次",
+            "是两",
+            "两个",
+            "个不",
+            "不同",
+            "同岗",
+            "岗位",
+            "位吗",
+            "实习转",
+            "习转发",
+            "转发了",
+            "发了几",
+            "了几次",
+            "实习转发",
+            "习转发了",
+            "转发了几",
+            "发了几次",
+            "是两个",
+            "两个不",
+            "个不同",
+            "不同岗",
+            "同岗位",
+            "岗位吗"
+          ],
+          "fts_count": 42,
+          "like_count": 45,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 37,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "远帆 RAG 实习转发了几次，是两个不同岗位吗？",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "远帆 rag 实习转发了几次 是两个不同岗位吗 实习 习转 转发 发了"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 42,
+              "best_rank": 1,
+              "queries": [
+                "远帆 RAG 实习转发了几次，是两个不同岗位吗？",
+                "远帆 rag 实习转发了几次 是两个不同岗位吗 实习 习转 转发 发了",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 45,
+              "best_rank": 1,
+              "queries": [
+                "远帆 RAG 实习转发了几次，是两个不同岗位吗？",
+                "远帆 rag 实习转发了几次 是两个不同岗位吗 实习 习转 转发 发了",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 4,
+            "queries": [
+              "远帆 RAG 实习转发了几次，是两个不同岗位吗？",
+              "远帆 rag 实习转发了几次 是两个不同岗位吗 实习 习转 转发 发了",
+              "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "公司 职位 apply application career job opening"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 102,
+              "total_tokens": 102
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "结论：在你提供的聊天片段里，该岗位总共出现了两次（不是两个不同岗位）。\n\n依据（来自“AI 实习交流 · 示例”聊天）：\n- 2026-09-22 09:00 · 林晓：新增实习：远帆智能招聘 RAG 工程实习生，地点新加坡……（见片段[3]/[1]）。\n- 2026-09-22 09:15 · 余舟：再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。（见片段[2]/[1]，余舟明确说明不是新的第二个岗位）\n- 另外 2026-09-22 09:01 · 林晓 的补充（岗位截止 9 月 30 日）也指向同一岗位（见片段[4]/[1]）。\n\n在当前提供的聊天记录中没有找到更多转发记录或显示为不同岗位的证据。",
+      "citation_validity": "in_range",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 935,
+        "completion_tokens": 929,
+        "total_tokens": 1864,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 704,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 27522.92
+    },
+    {
+      "id": "E07",
+      "category": "food retrieval",
+      "question": "青叶食堂推荐什么菜，人均多少，在哪里？",
+      "evidence": [
+        10
+      ],
+      "facts": [
+        "菌菇拉面",
+        "18",
+        "示例广场二楼"
+      ],
+      "retrieved_message_ids": [
+        10,
+        11,
+        12,
+        36,
+        14,
+        13,
+        15,
+        25,
+        39
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "10",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "推荐青叶食堂的菌菇拉面，人均 18 新币，在示例广场二楼，有素食选项。",
+          "message_ids": [
+            10
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 9,
+          "sender": "陈安 · 示例、林晓 · 示例、余舟 · 示例",
+          "text": "2026-09-15 12:00:00 · 陈安 · 示例 · text\n推荐青叶食堂的菌菇拉面，人均 18 新币，在示例广场二楼，有素食选项。\n\n2026-09-15 12:02:00 · 林晓 · 示例 · text\n我推荐月台咖啡的冷萃和芝士蛋糕，人均 12 新币，在示例街 8 号。\n\n2026-09-15 12:03:00 · 余舟 · 示例 · text\n青叶食堂周一休息，周末最好提前预约。",
+          "message_ids": [
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 12,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-22 12:00:00 · 陈安 · 示例 · text\n青叶食堂的新午餐套餐 16 新币，菌菇拉面加无糖茶，周二到周五供应。",
+          "message_ids": [
+            36
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "36",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "青叶食堂的新午餐套餐 16 新币，菌菇拉面加无糖茶，周二到周五供应。",
+          "message_ids": [
+            36
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "14",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "去青叶食堂吧，菌菇拉面可以做纯素，记得不要加蛋。",
+          "message_ids": [
+            14
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 6,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-16 17:00:00 · 我 · text\n周末想吃素食，有推荐吗？\n\n2026-09-16 17:01:00 · 陈安 · 示例 · text\n去青叶食堂吧，菌菇拉面可以做纯素，记得不要加蛋。\n\n2026-09-16 17:02:00 · 我 · text\n好，周六一起去。",
+          "message_ids": [
+            13,
+            14,
+            15
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "25",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "有人知道海风餐厅的地址吗？我还没去过，不算推荐。",
+          "message_ids": [
+            25
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "39",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "周六的青叶食堂已经订好，谢谢推荐。",
+          "message_ids": [
+            39
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 12473.46,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "food_search",
+          "intent_label": "美食/推荐检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "青叶食堂推荐什么菜，人均多少，在哪里？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "青叶食堂推荐什么菜 人均多少 在哪里 青叶 叶食 食堂 堂推 推荐",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "推荐 好吃 餐厅 饭店 小红书 美食",
+              "reason": "美食同义词扩展",
+              "weight": 0.9
+            },
+            {
+              "text": "吃 饭 鸡饭 火锅 菜 店",
+              "reason": "场景词扩展",
+              "weight": 0.75
+            }
+          ],
+          "terms": [
+            "青叶食堂推荐什么菜",
+            "人均多少",
+            "在哪里",
+            "青叶",
+            "叶食",
+            "食堂",
+            "堂推",
+            "推荐",
+            "荐什",
+            "什么",
+            "么菜",
+            "人均",
+            "均多",
+            "多少",
+            "餐厅",
+            "饭店",
+            "好吃",
+            "鸡饭",
+            "火锅",
+            "烧烤",
+            "烤肉",
+            "日料",
+            "韩餐",
+            "泰餐",
+            "中餐",
+            "西餐",
+            "甜品",
+            "奶茶",
+            "咖啡",
+            "brunch",
+            "sg",
+            "新加坡",
+            "青叶食",
+            "叶食堂",
+            "食堂推",
+            "堂推荐",
+            "推荐什",
+            "荐什么",
+            "什么菜",
+            "青叶食堂",
+            "叶食堂推",
+            "食堂推荐",
+            "堂推荐什",
+            "推荐什么",
+            "荐什么菜",
+            "人均多",
+            "均多少",
+            "小红书"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 41,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "food_search",
+            "intent_label": "美食/推荐检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "青叶食堂推荐什么菜，人均多少，在哪里？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "青叶食堂推荐什么菜 人均多少 在哪里 青叶 叶食 食堂 堂推 推荐",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "推荐 好吃 餐厅 饭店 小红书 美食",
+                "reason": "美食同义词扩展",
+                "weight": 0.9
+              },
+              {
+                "text": "吃 饭 鸡饭 火锅 菜 店",
+                "reason": "场景词扩展",
+                "weight": 0.75
+              }
+            ],
+            "terms": [
+              "青叶食堂推荐什么菜",
+              "人均多少",
+              "在哪里",
+              "青叶",
+              "叶食",
+              "食堂",
+              "堂推",
+              "推荐",
+              "荐什",
+              "什么",
+              "么菜",
+              "人均",
+              "均多",
+              "多少",
+              "餐厅",
+              "饭店",
+              "好吃",
+              "鸡饭",
+              "火锅",
+              "烧烤",
+              "烤肉",
+              "日料",
+              "韩餐",
+              "泰餐",
+              "中餐",
+              "西餐",
+              "甜品",
+              "奶茶",
+              "咖啡",
+              "brunch",
+              "sg",
+              "新加坡",
+              "青叶食",
+              "叶食堂",
+              "食堂推",
+              "堂推荐",
+              "推荐什",
+              "荐什么",
+              "什么菜",
+              "青叶食堂",
+              "叶食堂推",
+              "食堂推荐",
+              "堂推荐什",
+              "推荐什么",
+              "荐什么菜",
+              "人均多",
+              "均多少",
+              "小红书"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "青叶食堂推荐什么菜",
+            "人均多少",
+            "在哪里",
+            "青叶",
+            "叶食",
+            "食堂",
+            "堂推",
+            "推荐",
+            "荐什",
+            "什么",
+            "么菜",
+            "人均",
+            "均多",
+            "多少",
+            "餐厅",
+            "饭店",
+            "好吃",
+            "鸡饭",
+            "火锅",
+            "烧烤",
+            "烤肉",
+            "日料",
+            "韩餐",
+            "泰餐",
+            "中餐",
+            "西餐",
+            "甜品",
+            "奶茶",
+            "咖啡",
+            "brunch",
+            "sg",
+            "新加坡"
+          ],
+          "fts_count": 28,
+          "like_count": 60,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 41,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂推荐什么菜，人均多少，在哪里？",
+                "推荐 好吃 餐厅 饭店 小红书 美食",
+                "青叶食堂推荐什么菜 人均多少 在哪里 青叶 叶食 食堂 堂推 推荐"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 28,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂推荐什么菜，人均多少，在哪里？",
+                "青叶食堂推荐什么菜 人均多少 在哪里 青叶 叶食 食堂 堂推 推荐",
+                "推荐 好吃 餐厅 饭店 小红书 美食",
+                "吃 饭 鸡饭 火锅 菜 店"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 60,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂推荐什么菜，人均多少，在哪里？",
+                "青叶食堂推荐什么菜 人均多少 在哪里 青叶 叶食 食堂 堂推 推荐",
+                "推荐 好吃 餐厅 饭店 小红书 美食",
+                "吃 饭 鸡饭 火锅 菜 店"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 4,
+            "queries": [
+              "青叶食堂推荐什么菜，人均多少，在哪里？",
+              "青叶食堂推荐什么菜 人均多少 在哪里 青叶 叶食 食堂 堂推 推荐",
+              "推荐 好吃 餐厅 饭店 小红书 美食",
+              "吃 饭 鸡饭 火锅 菜 店"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 123,
+              "total_tokens": 123
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "回答（仅基于你给的聊天片段）：\n\n- 推荐菜：菌菇拉面（可做纯素，记得不要加蛋）。  \n  依据：周末食光 · 2026-09-15 12:00:00，发送者：陈安；以及陈安 · 2026-09-16 17:01:00 的消息。\n\n- 人均价格：约 18 新币；另外有午餐套餐 16 新币（菌菇拉面＋无糖茶，周二–周五供应）。  \n  依据：周末食光 · 2026-09-15 12:00:00，发送者：陈安（“人均 18 新币”）；周末食光 · 2026-09-22 12:00:00，发送者：陈安（“新午餐套餐 16 新币，菌菇拉面加无糖茶，周二到周五供应”）。\n\n- 地点：示例广场二楼。  \n  依据：周末食光 · 2026-09-15 12:00:00，发送者：陈安（“在示例广场二楼”）。\n\n- 其它相关提示：周一休息，周末最好提前预约（余舟 · 周末食光 · 2026-09-15 12:03:00）。你也在 2026-09-22 14:00:00 表示“周六的青叶食堂已经订好”（消息来自你）。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 910,
+        "completion_tokens": 1115,
+        "total_tokens": 2025,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 768,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 29310.14
+    },
+    {
+      "id": "E08",
+      "category": "cross-chat",
+      "question": "青叶食堂可以吃纯素吗？周一开门吗？",
+      "evidence": [
+        12,
+        14
+      ],
+      "facts": [
+        "不要加蛋",
+        "周一休息"
+      ],
+      "retrieved_message_ids": [
+        10,
+        11,
+        12,
+        14,
+        13,
+        15,
+        36
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 9,
+          "sender": "陈安 · 示例、林晓 · 示例、余舟 · 示例",
+          "text": "2026-09-15 12:00:00 · 陈安 · 示例 · text\n推荐青叶食堂的菌菇拉面，人均 18 新币，在示例广场二楼，有素食选项。\n\n2026-09-15 12:02:00 · 林晓 · 示例 · text\n我推荐月台咖啡的冷萃和芝士蛋糕，人均 12 新币，在示例街 8 号。\n\n2026-09-15 12:03:00 · 余舟 · 示例 · text\n青叶食堂周一休息，周末最好提前预约。",
+          "message_ids": [
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "14",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "去青叶食堂吧，菌菇拉面可以做纯素，记得不要加蛋。",
+          "message_ids": [
+            14
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 6,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-16 17:00:00 · 我 · text\n周末想吃素食，有推荐吗？\n\n2026-09-16 17:01:00 · 陈安 · 示例 · text\n去青叶食堂吧，菌菇拉面可以做纯素，记得不要加蛋。\n\n2026-09-16 17:02:00 · 我 · text\n好，周六一起去。",
+          "message_ids": [
+            13,
+            14,
+            15
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "12",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "青叶食堂周一休息，周末最好提前预约。",
+          "message_ids": [
+            12
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "10",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "推荐青叶食堂的菌菇拉面，人均 18 新币，在示例广场二楼，有素食选项。",
+          "message_ids": [
+            10
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "13",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "周末想吃素食，有推荐吗？",
+          "message_ids": [
+            13
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 12,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-22 12:00:00 · 陈安 · 示例 · text\n青叶食堂的新午餐套餐 16 新币，菌菇拉面加无糖茶，周二到周五供应。",
+          "message_ids": [
+            36
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "36",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "青叶食堂的新午餐套餐 16 新币，菌菇拉面加无糖茶，周二到周五供应。",
+          "message_ids": [
+            36
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 27471.49,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "food_search",
+          "intent_label": "美食/推荐检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "青叶食堂可以吃纯素吗？周一开门吗？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "青叶食堂可以吃纯素吗 周一开门吗 青叶 叶食 食堂 堂可 可以 以吃",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "推荐 好吃 餐厅 饭店 小红书 美食",
+              "reason": "美食同义词扩展",
+              "weight": 0.9
+            },
+            {
+              "text": "吃 饭 鸡饭 火锅 菜 店",
+              "reason": "场景词扩展",
+              "weight": 0.75
+            }
+          ],
+          "terms": [
+            "青叶食堂可以吃纯素吗",
+            "周一开门吗",
+            "青叶",
+            "叶食",
+            "食堂",
+            "堂可",
+            "可以",
+            "以吃",
+            "吃纯",
+            "纯素",
+            "素吗",
+            "周一",
+            "一开",
+            "开门",
+            "门吗",
+            "餐厅",
+            "饭店",
+            "推荐",
+            "好吃",
+            "鸡饭",
+            "火锅",
+            "烧烤",
+            "烤肉",
+            "日料",
+            "韩餐",
+            "泰餐",
+            "中餐",
+            "西餐",
+            "甜品",
+            "奶茶",
+            "咖啡",
+            "brunch",
+            "sg",
+            "新加坡",
+            "青叶食",
+            "叶食堂",
+            "食堂可",
+            "堂可以",
+            "可以吃",
+            "以吃纯",
+            "吃纯素",
+            "纯素吗",
+            "青叶食堂",
+            "叶食堂可",
+            "食堂可以",
+            "堂可以吃",
+            "可以吃纯",
+            "以吃纯素"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 40,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "food_search",
+            "intent_label": "美食/推荐检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "青叶食堂可以吃纯素吗？周一开门吗？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "青叶食堂可以吃纯素吗 周一开门吗 青叶 叶食 食堂 堂可 可以 以吃",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "推荐 好吃 餐厅 饭店 小红书 美食",
+                "reason": "美食同义词扩展",
+                "weight": 0.9
+              },
+              {
+                "text": "吃 饭 鸡饭 火锅 菜 店",
+                "reason": "场景词扩展",
+                "weight": 0.75
+              }
+            ],
+            "terms": [
+              "青叶食堂可以吃纯素吗",
+              "周一开门吗",
+              "青叶",
+              "叶食",
+              "食堂",
+              "堂可",
+              "可以",
+              "以吃",
+              "吃纯",
+              "纯素",
+              "素吗",
+              "周一",
+              "一开",
+              "开门",
+              "门吗",
+              "餐厅",
+              "饭店",
+              "推荐",
+              "好吃",
+              "鸡饭",
+              "火锅",
+              "烧烤",
+              "烤肉",
+              "日料",
+              "韩餐",
+              "泰餐",
+              "中餐",
+              "西餐",
+              "甜品",
+              "奶茶",
+              "咖啡",
+              "brunch",
+              "sg",
+              "新加坡",
+              "青叶食",
+              "叶食堂",
+              "食堂可",
+              "堂可以",
+              "可以吃",
+              "以吃纯",
+              "吃纯素",
+              "纯素吗",
+              "青叶食堂",
+              "叶食堂可",
+              "食堂可以",
+              "堂可以吃",
+              "可以吃纯",
+              "以吃纯素"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "青叶食堂可以吃纯素吗",
+            "周一开门吗",
+            "青叶",
+            "叶食",
+            "食堂",
+            "堂可",
+            "可以",
+            "以吃",
+            "吃纯",
+            "纯素",
+            "素吗",
+            "周一",
+            "一开",
+            "开门",
+            "门吗",
+            "餐厅",
+            "饭店",
+            "推荐",
+            "好吃",
+            "鸡饭",
+            "火锅",
+            "烧烤",
+            "烤肉",
+            "日料",
+            "韩餐",
+            "泰餐",
+            "中餐",
+            "西餐",
+            "甜品",
+            "奶茶",
+            "咖啡",
+            "brunch"
+          ],
+          "fts_count": 26,
+          "like_count": 58,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 40,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂可以吃纯素吗？周一开门吗？",
+                "推荐 好吃 餐厅 饭店 小红书 美食",
+                "吃 饭 鸡饭 火锅 菜 店"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 26,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂可以吃纯素吗？周一开门吗？",
+                "青叶食堂可以吃纯素吗 周一开门吗 青叶 叶食 食堂 堂可 可以 以吃",
+                "推荐 好吃 餐厅 饭店 小红书 美食",
+                "吃 饭 鸡饭 火锅 菜 店"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 58,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂可以吃纯素吗？周一开门吗？",
+                "青叶食堂可以吃纯素吗 周一开门吗 青叶 叶食 食堂 堂可 可以 以吃",
+                "推荐 好吃 餐厅 饭店 小红书 美食",
+                "吃 饭 鸡饭 火锅 菜 店"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 4,
+            "queries": [
+              "青叶食堂可以吃纯素吗？周一开门吗？",
+              "青叶食堂可以吃纯素吗 周一开门吗 青叶 叶食 食堂 堂可 可以 以吃",
+              "推荐 好吃 餐厅 饭店 小红书 美食",
+              "吃 饭 鸡饭 火锅 菜 店"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 121,
+              "total_tokens": 121
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "根据你提供的聊天记录：\n\n- 能否吃纯素：可以。陈安在 2026-09-16 17:01:00 发消息写到“菌菇拉面可以做纯素，记得不要加蛋。”（聊天：陈安 · 示例，[2]/[3]）。\n\n- 周一是否开门：不开门。余舟在 2026-09-15 12:03:00 发消息写到“青叶食堂周一休息，周末最好提前预约。”（聊天：周末食光 · 示例，[1]/[4]）。\n\n以上结论仅基于你贴出的聊天片段。",
+      "citation_validity": "in_range",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 906,
+        "completion_tokens": 984,
+        "total_tokens": 1890,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 832,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 39416.33
+    },
+    {
+      "id": "E09",
+      "category": "updated fact",
+      "question": "青叶食堂新的午餐套餐多少钱，什么时候供应？",
+      "evidence": [
+        36
+      ],
+      "facts": [
+        "16",
+        "周二到周五"
+      ],
+      "retrieved_message_ids": [
+        36,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        39
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 12,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-22 12:00:00 · 陈安 · 示例 · text\n青叶食堂的新午餐套餐 16 新币，菌菇拉面加无糖茶，周二到周五供应。",
+          "message_ids": [
+            36
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "36",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "青叶食堂的新午餐套餐 16 新币，菌菇拉面加无糖茶，周二到周五供应。",
+          "message_ids": [
+            36
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 9,
+          "sender": "陈安 · 示例、林晓 · 示例、余舟 · 示例",
+          "text": "2026-09-15 12:00:00 · 陈安 · 示例 · text\n推荐青叶食堂的菌菇拉面，人均 18 新币，在示例广场二楼，有素食选项。\n\n2026-09-15 12:02:00 · 林晓 · 示例 · text\n我推荐月台咖啡的冷萃和芝士蛋糕，人均 12 新币，在示例街 8 号。\n\n2026-09-15 12:03:00 · 余舟 · 示例 · text\n青叶食堂周一休息，周末最好提前预约。",
+          "message_ids": [
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "10",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "推荐青叶食堂的菌菇拉面，人均 18 新币，在示例广场二楼，有素食选项。",
+          "message_ids": [
+            10
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 6,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-16 17:00:00 · 我 · text\n周末想吃素食，有推荐吗？\n\n2026-09-16 17:01:00 · 陈安 · 示例 · text\n去青叶食堂吧，菌菇拉面可以做纯素，记得不要加蛋。\n\n2026-09-16 17:02:00 · 我 · text\n好，周六一起去。",
+          "message_ids": [
+            13,
+            14,
+            15
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "12",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "青叶食堂周一休息，周末最好提前预约。",
+          "message_ids": [
+            12
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "14",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "去青叶食堂吧，菌菇拉面可以做纯素，记得不要加蛋。",
+          "message_ids": [
+            14
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "39",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "周六的青叶食堂已经订好，谢谢推荐。",
+          "message_ids": [
+            39
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 24184.2,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "general_search",
+          "intent_label": "普通聊天检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "青叶食堂新的午餐套餐多少钱，什么时候供应？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "青叶食堂新的午餐套餐多少钱 什么时候供应 青叶 叶食 食堂 堂新 新的 的午",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            }
+          ],
+          "terms": [
+            "青叶食堂新的午餐套餐多少钱",
+            "什么时候供应",
+            "青叶",
+            "叶食",
+            "食堂",
+            "堂新",
+            "新的",
+            "的午",
+            "午餐",
+            "餐套",
+            "套餐",
+            "餐多",
+            "多少",
+            "少钱",
+            "什么",
+            "么时",
+            "时候",
+            "候供",
+            "供应",
+            "青叶食",
+            "叶食堂",
+            "食堂新",
+            "堂新的",
+            "新的午",
+            "的午餐",
+            "午餐套",
+            "餐套餐",
+            "套餐多",
+            "餐多少",
+            "多少钱",
+            "青叶食堂",
+            "叶食堂新",
+            "食堂新的",
+            "堂新的午",
+            "新的午餐",
+            "的午餐套",
+            "午餐套餐",
+            "餐套餐多",
+            "套餐多少",
+            "餐多少钱",
+            "什么时",
+            "么时候",
+            "时候供",
+            "候供应",
+            "什么时候",
+            "么时候供",
+            "时候供应"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 32,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "general_search",
+            "intent_label": "普通聊天检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "青叶食堂新的午餐套餐多少钱，什么时候供应？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "青叶食堂新的午餐套餐多少钱 什么时候供应 青叶 叶食 食堂 堂新 新的 的午",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              }
+            ],
+            "terms": [
+              "青叶食堂新的午餐套餐多少钱",
+              "什么时候供应",
+              "青叶",
+              "叶食",
+              "食堂",
+              "堂新",
+              "新的",
+              "的午",
+              "午餐",
+              "餐套",
+              "套餐",
+              "餐多",
+              "多少",
+              "少钱",
+              "什么",
+              "么时",
+              "时候",
+              "候供",
+              "供应",
+              "青叶食",
+              "叶食堂",
+              "食堂新",
+              "堂新的",
+              "新的午",
+              "的午餐",
+              "午餐套",
+              "餐套餐",
+              "套餐多",
+              "餐多少",
+              "多少钱",
+              "青叶食堂",
+              "叶食堂新",
+              "食堂新的",
+              "堂新的午",
+              "新的午餐",
+              "的午餐套",
+              "午餐套餐",
+              "餐套餐多",
+              "套餐多少",
+              "餐多少钱",
+              "什么时",
+              "么时候",
+              "时候供",
+              "候供应",
+              "什么时候",
+              "么时候供",
+              "时候供应"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "青叶食堂新的午餐套餐多少钱",
+            "什么时候供应",
+            "青叶",
+            "叶食",
+            "食堂",
+            "堂新",
+            "新的",
+            "的午",
+            "午餐",
+            "餐套",
+            "套餐",
+            "餐多",
+            "多少",
+            "少钱",
+            "什么",
+            "么时",
+            "时候",
+            "候供",
+            "供应",
+            "青叶食",
+            "叶食堂",
+            "食堂新",
+            "堂新的",
+            "新的午",
+            "的午餐",
+            "午餐套",
+            "餐套餐",
+            "套餐多",
+            "餐多少",
+            "多少钱",
+            "青叶食堂",
+            "叶食堂新"
+          ],
+          "fts_count": 16,
+          "like_count": 18,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 32,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂新的午餐套餐多少钱，什么时候供应？",
+                "青叶食堂新的午餐套餐多少钱 什么时候供应 青叶 叶食 食堂 堂新 新的 的午"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 16,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂新的午餐套餐多少钱，什么时候供应？",
+                "青叶食堂新的午餐套餐多少钱 什么时候供应 青叶 叶食 食堂 堂新 新的 的午"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 18,
+              "best_rank": 1,
+              "queries": [
+                "青叶食堂新的午餐套餐多少钱，什么时候供应？",
+                "青叶食堂新的午餐套餐多少钱 什么时候供应 青叶 叶食 食堂 堂新 新的 的午"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 2,
+            "queries": [
+              "青叶食堂新的午餐套餐多少钱，什么时候供应？",
+              "青叶食堂新的午餐套餐多少钱 什么时候供应 青叶 叶食 食堂 堂新 新的 的午"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 87,
+              "total_tokens": 87
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "青叶食堂的新午餐套餐：16 新币（含菌菇拉面＋无糖茶），供应时间为周二到周五。  \n依据：周末食光 聊天，2026-09-22 12:00:00，发送者：陈安。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 906,
+        "completion_tokens": 520,
+        "total_tokens": 1426,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 448,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 31290.86
+    },
+    {
+      "id": "E10",
+      "category": "correction",
+      "question": "项目演示最后改到什么时候？",
+      "evidence": [
+        19,
+        20
+      ],
+      "facts": [
+        "周六上午十点",
+        "取消"
+      ],
+      "retrieved_message_ids": [
+        20,
+        21,
+        19,
+        30,
+        34,
+        37,
+        33
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "20",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "更正：项目演示改到周六上午十点，周五三点的安排取消。",
+          "message_ids": [
+            20
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 18,
+          "sender": "陈安 · 示例、林晓 · 示例",
+          "text": "2026-09-19 09:00:00 · 林晓 · 示例 · text\n更正：项目演示改到周六上午十点，周五三点的安排取消。\n\n2026-09-19 09:02:00 · 陈安 · 示例 · text\n界面截图只用合成数据，不放真实联系人和聊天记录。",
+          "message_ids": [
+            20,
+            21
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "19",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "项目演示原定周五下午三点。",
+          "message_ids": [
+            19
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 17,
+          "sender": "余舟 · 示例",
+          "text": "2026-09-18 15:00:00 · 余舟 · 示例 · text\n项目演示原定周五下午三点。",
+          "message_ids": [
+            19
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "30",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "README 不要只列技术名词，要先说为什么需要这个项目。",
+          "message_ids": [
+            30
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "34",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "收到，我今天整理好项目再发给你。",
+          "message_ids": [
+            34
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "37",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "新增消息导入后只更新受影响的索引块，别每次都全量重建。",
+          "message_ids": [
+            37
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "33",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。",
+          "message_ids": [
+            33
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 15635.99,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "general_search",
+          "intent_label": "普通聊天检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "项目演示最后改到什么时候？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "项目演示最后改到什么时候 项目 目演 演示 示最 最后 后改 改到",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            }
+          ],
+          "terms": [
+            "项目演示最后改到什么时候",
+            "项目",
+            "目演",
+            "演示",
+            "示最",
+            "最后",
+            "后改",
+            "改到",
+            "到什",
+            "什么",
+            "么时",
+            "时候",
+            "项目演",
+            "目演示",
+            "演示最",
+            "示最后",
+            "最后改",
+            "后改到",
+            "改到什",
+            "到什么",
+            "什么时",
+            "么时候",
+            "项目演示",
+            "目演示最",
+            "演示最后",
+            "示最后改",
+            "最后改到",
+            "后改到什",
+            "改到什么",
+            "到什么时",
+            "什么时候"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 37,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "general_search",
+            "intent_label": "普通聊天检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "项目演示最后改到什么时候？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "项目演示最后改到什么时候 项目 目演 演示 示最 最后 后改 改到",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              }
+            ],
+            "terms": [
+              "项目演示最后改到什么时候",
+              "项目",
+              "目演",
+              "演示",
+              "示最",
+              "最后",
+              "后改",
+              "改到",
+              "到什",
+              "什么",
+              "么时",
+              "时候",
+              "项目演",
+              "目演示",
+              "演示最",
+              "示最后",
+              "最后改",
+              "后改到",
+              "改到什",
+              "到什么",
+              "什么时",
+              "么时候",
+              "项目演示",
+              "目演示最",
+              "演示最后",
+              "示最后改",
+              "最后改到",
+              "后改到什",
+              "改到什么",
+              "到什么时",
+              "什么时候"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "项目演示最后改到什么时候",
+            "项目",
+            "目演",
+            "演示",
+            "示最",
+            "最后",
+            "后改",
+            "改到",
+            "到什",
+            "什么",
+            "么时",
+            "时候",
+            "项目演",
+            "目演示",
+            "演示最",
+            "示最后",
+            "最后改",
+            "后改到",
+            "改到什",
+            "到什么",
+            "什么时",
+            "么时候",
+            "项目演示",
+            "目演示最",
+            "演示最后",
+            "示最后改",
+            "最后改到",
+            "后改到什",
+            "改到什么",
+            "到什么时",
+            "什么时候"
+          ],
+          "fts_count": 26,
+          "like_count": 28,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 37,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "项目演示最后改到什么时候？",
+                "项目演示最后改到什么时候 项目 目演 演示 示最 最后 后改 改到"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 26,
+              "best_rank": 1,
+              "queries": [
+                "项目演示最后改到什么时候？",
+                "项目演示最后改到什么时候 项目 目演 演示 示最 最后 后改 改到"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 28,
+              "best_rank": 1,
+              "queries": [
+                "项目演示最后改到什么时候？",
+                "项目演示最后改到什么时候 项目 目演 演示 示最 最后 后改 改到"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 2,
+            "queries": [
+              "项目演示最后改到什么时候？",
+              "项目演示最后改到什么时候 项目 目演 演示 示最 最后 后改 改到"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 49,
+              "total_tokens": 49
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "项目演示改到“周六上午十点”。依据：聊天：检索项目组 · 示例，2026-09-19 09:00:00，发送者：林晓 · 示例，消息内容：“更正：项目演示改到周六上午十点，周五三点的安排取消。”（原先为周五下午3点，见：检索项目组 · 示例，2026-09-18 15:00:00，余舟 · 示例）。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 708,
+        "completion_tokens": 947,
+        "total_tokens": 1655,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 832,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 28238.0
+    },
+    {
+      "id": "E11",
+      "category": "responsibility",
+      "question": "检索项目谁负责数据导入、评测和前端？",
+      "evidence": [
+        16
+      ],
+      "facts": [
+        "余舟",
+        "林晓",
+        "陈安"
+      ],
+      "retrieved_message_ids": [
+        16,
+        17,
+        18,
+        33,
+        34,
+        21,
+        27,
+        20
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 16,
+          "sender": "林晓 · 示例、我、余舟 · 示例",
+          "text": "2026-09-17 10:00:00 · 余舟 · 示例 · text\n检索项目分工：我负责数据导入，林晓负责评测，陈安负责前端。\n\n2026-09-17 10:01:00 · 林晓 · 示例 · text\n评测先做 15 个问题，检查正确会话、证据引用和回答完整性，保留失败案例。\n\n2026-09-17 10:02:00 · 我 · text\n增量索引先根据消息 ID 和时间追加，已有语音转写不重复调用。",
+          "message_ids": [
+            16,
+            17,
+            18
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "16",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "检索项目分工：我负责数据导入，林晓负责评测，陈安负责前端。",
+          "message_ids": [
+            16
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "17",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "评测先做 15 个问题，检查正确会话、证据引用和回答完整性，保留失败案例。",
+          "message_ids": [
+            17
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 15,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-22 09:10:00 · 林晓 · 示例 · text\n远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。\n\n2026-09-22 09:11:00 · 我 · text\n收到，我今天整理好项目再发给你。",
+          "message_ids": [
+            33,
+            34
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "21",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "界面截图只用合成数据，不放真实联系人和聊天记录。",
+          "message_ids": [
+            21
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "33",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位适合你的聊天助手项目。把 Demo 和评测链接加进简历。",
+          "message_ids": [
+            33
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "27",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "不要把联系人名称命中当成硬过滤，主题也要搜全部聊天正文。",
+          "message_ids": [
+            27
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 18,
+          "sender": "陈安 · 示例、林晓 · 示例",
+          "text": "2026-09-19 09:00:00 · 林晓 · 示例 · text\n更正：项目演示改到周六上午十点，周五三点的安排取消。\n\n2026-09-19 09:02:00 · 陈安 · 示例 · text\n界面截图只用合成数据，不放真实联系人和聊天记录。",
+          "message_ids": [
+            20,
+            21
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 10531.06,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "person_summary",
+          "intent_label": "联系人/频率问题",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "检索项目谁负责数据导入、评测和前端？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "检索项目谁负责数据导入 评测和前端 检索 索项 项目 目谁 谁负 负责",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "最近 聊天 联系人 频繁 谁 好友",
+              "reason": "联系人摘要扩展",
+              "weight": 0.75
+            }
+          ],
+          "terms": [
+            "检索项目谁负责数据导入",
+            "评测和前端",
+            "检索",
+            "索项",
+            "项目",
+            "目谁",
+            "谁负",
+            "负责",
+            "责数",
+            "数据",
+            "据导",
+            "导入",
+            "评测",
+            "测和",
+            "和前",
+            "前端",
+            "检索项",
+            "索项目",
+            "项目谁",
+            "目谁负",
+            "谁负责",
+            "负责数",
+            "责数据",
+            "数据导",
+            "据导入",
+            "检索项目",
+            "索项目谁",
+            "项目谁负",
+            "目谁负责",
+            "谁负责数",
+            "负责数据",
+            "责数据导",
+            "数据导入",
+            "评测和",
+            "测和前",
+            "和前端",
+            "评测和前",
+            "测和前端",
+            "最近",
+            "聊天",
+            "联系人",
+            "频繁",
+            "好友"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 39,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "person_summary",
+            "intent_label": "联系人/频率问题",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "检索项目谁负责数据导入、评测和前端？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "检索项目谁负责数据导入 评测和前端 检索 索项 项目 目谁 谁负 负责",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "最近 聊天 联系人 频繁 谁 好友",
+                "reason": "联系人摘要扩展",
+                "weight": 0.75
+              }
+            ],
+            "terms": [
+              "检索项目谁负责数据导入",
+              "评测和前端",
+              "检索",
+              "索项",
+              "项目",
+              "目谁",
+              "谁负",
+              "负责",
+              "责数",
+              "数据",
+              "据导",
+              "导入",
+              "评测",
+              "测和",
+              "和前",
+              "前端",
+              "检索项",
+              "索项目",
+              "项目谁",
+              "目谁负",
+              "谁负责",
+              "负责数",
+              "责数据",
+              "数据导",
+              "据导入",
+              "检索项目",
+              "索项目谁",
+              "项目谁负",
+              "目谁负责",
+              "谁负责数",
+              "负责数据",
+              "责数据导",
+              "数据导入",
+              "评测和",
+              "测和前",
+              "和前端",
+              "评测和前",
+              "测和前端",
+              "最近",
+              "聊天",
+              "联系人",
+              "频繁",
+              "好友"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "检索项目谁负责数据导入",
+            "评测和前端",
+            "检索",
+            "索项",
+            "项目",
+            "目谁",
+            "谁负",
+            "负责",
+            "责数",
+            "数据",
+            "据导",
+            "导入",
+            "评测",
+            "测和",
+            "和前",
+            "前端",
+            "检索项",
+            "索项目",
+            "项目谁",
+            "目谁负",
+            "谁负责",
+            "负责数",
+            "责数据",
+            "数据导",
+            "据导入",
+            "检索项目",
+            "索项目谁",
+            "项目谁负",
+            "目谁负责",
+            "谁负责数",
+            "负责数据",
+            "责数据导"
+          ],
+          "fts_count": 28,
+          "like_count": 35,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 39,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "检索项目谁负责数据导入 评测和前端 检索 索项 项目 目谁 谁负 负责",
+                "检索项目谁负责数据导入、评测和前端？"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 28,
+              "best_rank": 1,
+              "queries": [
+                "检索项目谁负责数据导入、评测和前端？",
+                "检索项目谁负责数据导入 评测和前端 检索 索项 项目 目谁 谁负 负责",
+                "最近 聊天 联系人 频繁 谁 好友"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 35,
+              "best_rank": 1,
+              "queries": [
+                "检索项目谁负责数据导入、评测和前端？",
+                "检索项目谁负责数据导入 评测和前端 检索 索项 项目 目谁 谁负 负责",
+                "最近 聊天 联系人 频繁 谁 好友"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 3,
+            "queries": [
+              "检索项目谁负责数据导入、评测和前端？",
+              "检索项目谁负责数据导入 评测和前端 检索 索项 项目 目谁 谁负 负责",
+              "最近 聊天 联系人 频繁 谁 好友"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 84,
+              "total_tokens": 84
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "数据导入：余舟（依据：检索项目组 · 示例，2026-09-17 10:00:00，发送者：余舟 · 示例 — “我负责数据导入”）\n评测：林晓（同条记录 — “林晓负责评测”；另见 2026-09-17 10:01:00，林晓 · 示例 的补充说明）\n前端：陈安（同条记录 — “陈安负责前端”）",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 928,
+        "completion_tokens": 370,
+        "total_tokens": 1298,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 256,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 16228.45
+    },
+    {
+      "id": "E12",
+      "category": "actionable reply",
+      "question": "余舟还在等我回复什么？",
+      "evidence": [
+        22,
+        38
+      ],
+      "facts": [
+        "评测结果",
+        "意见"
+      ],
+      "retrieved_message_ids": [
+        38,
+        30,
+        22,
+        37,
+        35,
+        25,
+        19
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_yu",
+          "chat_title": "余舟 · 示例",
+          "local_id": "38",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "今天能帮忙确认一下评测结果吗？我还在等你的意见。",
+          "message_ids": [
+            38
+          ]
+        },
+        {
+          "chat_id": "demo_yu",
+          "chat_title": "余舟 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 23,
+          "sender": "余舟 · 示例",
+          "text": "2026-09-22 13:15:00 · 余舟 · 示例 · text\n今天能帮忙确认一下评测结果吗？我还在等你的意见。",
+          "message_ids": [
+            38
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "30",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "README 不要只列技术名词，要先说为什么需要这个项目。",
+          "message_ids": [
+            30
+          ]
+        },
+        {
+          "chat_id": "demo_yu",
+          "chat_title": "余舟 · 示例",
+          "local_id": "22",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "可以帮我看一下增量索引的测试结果吗？今天晚点给我意见就好。",
+          "message_ids": [
+            22
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "37",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "新增消息导入后只更新受影响的索引块，别每次都全量重建。",
+          "message_ids": [
+            37
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "35",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。",
+          "message_ids": [
+            35
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "25",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "有人知道海风餐厅的地址吗？我还没去过，不算推荐。",
+          "message_ids": [
+            25
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": "19",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "项目演示原定周五下午三点。",
+          "message_ids": [
+            19
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 7091.25,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + 联系人软召回 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + 联系人软召回 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [
+          "余舟 · 示例"
+        ],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "general_search",
+          "intent_label": "普通聊天检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [
+            {
+              "id": "demo_yu",
+              "name": "余舟 · 示例",
+              "message_count": 11
+            }
+          ],
+          "queries": [
+            {
+              "text": "余舟还在等我回复什么？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "余舟还在等我回复什么 余舟 舟还 还在 在等 等我 我回 回复",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            }
+          ],
+          "terms": [
+            "余舟还在等我回复什么",
+            "余舟",
+            "舟还",
+            "还在",
+            "在等",
+            "等我",
+            "我回",
+            "回复",
+            "复什",
+            "什么",
+            "余舟还",
+            "舟还在",
+            "还在等",
+            "在等我",
+            "等我回",
+            "我回复",
+            "回复什",
+            "复什么",
+            "余舟还在",
+            "舟还在等",
+            "还在等我",
+            "在等我回",
+            "等我回复",
+            "我回复什",
+            "回复什么"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "发现 1 个相关联系人，只作为补充召回，不缩小主检索范围",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 36,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "general_search",
+            "intent_label": "普通聊天检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [
+              {
+                "id": "demo_yu",
+                "name": "余舟 · 示例",
+                "message_count": 11
+              }
+            ],
+            "queries": [
+              {
+                "text": "余舟还在等我回复什么？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "余舟还在等我回复什么 余舟 舟还 还在 在等 等我 我回 回复",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              }
+            ],
+            "terms": [
+              "余舟还在等我回复什么",
+              "余舟",
+              "舟还",
+              "还在",
+              "在等",
+              "等我",
+              "我回",
+              "回复",
+              "复什",
+              "什么",
+              "余舟还",
+              "舟还在",
+              "还在等",
+              "在等我",
+              "等我回",
+              "我回复",
+              "回复什",
+              "复什么",
+              "余舟还在",
+              "舟还在等",
+              "还在等我",
+              "在等我回",
+              "等我回复",
+              "我回复什",
+              "回复什么"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "发现 1 个相关联系人，只作为补充召回，不缩小主检索范围",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "余舟还在等我回复什么",
+            "余舟",
+            "舟还",
+            "还在",
+            "在等",
+            "等我",
+            "我回",
+            "回复",
+            "复什",
+            "什么",
+            "余舟还",
+            "舟还在",
+            "还在等",
+            "在等我",
+            "等我回",
+            "我回复",
+            "回复什",
+            "复什么",
+            "余舟还在",
+            "舟还在等",
+            "还在等我",
+            "在等我回",
+            "等我回复",
+            "我回复什",
+            "回复什么"
+          ],
+          "fts_count": 24,
+          "like_count": 26,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 36,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "余舟还在等我回复什么？"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 24,
+              "best_rank": 1,
+              "queries": [
+                "余舟还在等我回复什么？",
+                "余舟还在等我回复什么 余舟 舟还 还在 在等 等我 我回 回复"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 26,
+              "best_rank": 1,
+              "queries": [
+                "余舟还在等我回复什么？",
+                "余舟还在等我回复什么 余舟 舟还 还在 在等 等我 我回 回复"
+              ]
+            },
+            {
+              "source": "contact",
+              "label": "联系人软召回",
+              "count": 22,
+              "best_rank": 1,
+              "queries": [
+                "余舟还在等我回复什么？",
+                "余舟还在等我回复什么 余舟 舟还 还在 在等 等我 我回 回复"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 2,
+            "queries": [
+              "余舟还在等我回复什么？",
+              "余舟还在等我回复什么 余舟 舟还 还在 在等 等我 我回 回复"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 48,
+              "total_tokens": 48
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "他在等你对“评测结果”的意见/确认。\n\n依据：\n- 聊天：余舟 · 示例，时间：2026-09-22 13:15:00；发送者：余舟 · 示例；内容：“今天能帮忙确认一下评测结果吗？我还在等你的意见。”\n- 相关历史：余舟 2026-09-20 10:00:00 曾说“可以帮我看一下增量索引的测试结果吗？今天晚点给我意见就好。”（表明此前也是在等你对测试/评测结果的意见）。\n\n备注：当前片段没有说明是哪一份具体的评测/测试报告，如果需要确定具体文件或内容，聊天记录里没有明确指向。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 641,
+        "completion_tokens": 750,
+        "total_tokens": 1391,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 576,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 16583.87
+    },
+    {
+      "id": "E13",
+      "category": "answered conversation",
+      "question": "陈安约我讨论页面，我回复了吗？",
+      "evidence": [
+        23,
+        24
+      ],
+      "facts": [
+        "已经回复",
+        "下午三点"
+      ],
+      "retrieved_message_ids": [
+        24,
+        23,
+        39,
+        14,
+        40,
+        29,
+        15
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "24",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "可以，下午三点见。",
+          "message_ids": [
+            24
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 7,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-20 11:00:00 · 陈安 · 示例 · text\n下午三点要不要一起讨论页面？\n\n2026-09-20 11:05:00 · 我 · text\n可以，下午三点见。",
+          "message_ids": [
+            23,
+            24
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "23",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "下午三点要不要一起讨论页面？",
+          "message_ids": [
+            23
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "39",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "周六的青叶食堂已经订好，谢谢推荐。",
+          "message_ids": [
+            39
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "14",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "去青叶食堂吧，菌菇拉面可以做纯素，记得不要加蛋。",
+          "message_ids": [
+            14
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "40",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            40
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "29",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "月台咖啡下个月装修，具体闭店时间还没公布。",
+          "message_ids": [
+            29
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "15",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "好，周六一起去。",
+          "message_ids": [
+            15
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 8481.86,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + 联系人软召回 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + 联系人软召回 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [
+          "陈安 · 示例"
+        ],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "general_search",
+          "intent_label": "普通聊天检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [
+            {
+              "id": "demo_chen",
+              "name": "陈安 · 示例",
+              "message_count": 13
+            }
+          ],
+          "queries": [
+            {
+              "text": "陈安约我讨论页面，我回复了吗？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "陈安约我讨论页面 我回复了吗 陈安 安约 约我 我讨 讨论 论页",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            }
+          ],
+          "terms": [
+            "陈安约我讨论页面",
+            "我回复了吗",
+            "陈安",
+            "安约",
+            "约我",
+            "我讨",
+            "讨论",
+            "论页",
+            "页面",
+            "我回",
+            "回复",
+            "复了",
+            "了吗",
+            "陈安约",
+            "安约我",
+            "约我讨",
+            "我讨论",
+            "讨论页",
+            "论页面",
+            "陈安约我",
+            "安约我讨",
+            "约我讨论",
+            "我讨论页",
+            "讨论页面",
+            "我回复",
+            "回复了",
+            "复了吗",
+            "我回复了",
+            "回复了吗"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "发现 1 个相关联系人，只作为补充召回，不缩小主检索范围",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 37,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "general_search",
+            "intent_label": "普通聊天检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [
+              {
+                "id": "demo_chen",
+                "name": "陈安 · 示例",
+                "message_count": 13
+              }
+            ],
+            "queries": [
+              {
+                "text": "陈安约我讨论页面，我回复了吗？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "陈安约我讨论页面 我回复了吗 陈安 安约 约我 我讨 讨论 论页",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              }
+            ],
+            "terms": [
+              "陈安约我讨论页面",
+              "我回复了吗",
+              "陈安",
+              "安约",
+              "约我",
+              "我讨",
+              "讨论",
+              "论页",
+              "页面",
+              "我回",
+              "回复",
+              "复了",
+              "了吗",
+              "陈安约",
+              "安约我",
+              "约我讨",
+              "我讨论",
+              "讨论页",
+              "论页面",
+              "陈安约我",
+              "安约我讨",
+              "约我讨论",
+              "我讨论页",
+              "讨论页面",
+              "我回复",
+              "回复了",
+              "复了吗",
+              "我回复了",
+              "回复了吗"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "发现 1 个相关联系人，只作为补充召回，不缩小主检索范围",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "陈安约我讨论页面",
+            "我回复了吗",
+            "陈安",
+            "安约",
+            "约我",
+            "我讨",
+            "讨论",
+            "论页",
+            "页面",
+            "我回",
+            "回复",
+            "复了",
+            "了吗",
+            "陈安约",
+            "安约我",
+            "约我讨",
+            "我讨论",
+            "讨论页",
+            "论页面",
+            "陈安约我",
+            "安约我讨",
+            "约我讨论",
+            "我讨论页",
+            "讨论页面",
+            "我回复",
+            "回复了",
+            "复了吗",
+            "我回复了",
+            "回复了吗"
+          ],
+          "fts_count": 28,
+          "like_count": 28,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 37,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "陈安约我讨论页面，我回复了吗？",
+                "陈安约我讨论页面 我回复了吗 陈安 安约 约我 我讨 讨论 论页"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 28,
+              "best_rank": 1,
+              "queries": [
+                "陈安约我讨论页面，我回复了吗？",
+                "陈安约我讨论页面 我回复了吗 陈安 安约 约我 我讨 讨论 论页"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 28,
+              "best_rank": 1,
+              "queries": [
+                "陈安约我讨论页面，我回复了吗？",
+                "陈安约我讨论页面 我回复了吗 陈安 安约 约我 我讨 讨论 论页"
+              ]
+            },
+            {
+              "source": "contact",
+              "label": "联系人软召回",
+              "count": 26,
+              "best_rank": 1,
+              "queries": [
+                "陈安约我讨论页面，我回复了吗？",
+                "陈安约我讨论页面 我回复了吗 陈安 安约 约我 我讨 讨论 论页"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 2,
+            "queries": [
+              "陈安约我讨论页面，我回复了吗？",
+              "陈安约我讨论页面 我回复了吗 陈安 安约 约我 我讨 讨论 论页"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 54,
+              "total_tokens": 54
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "是的，你回复了。\n\n依据：\n- 聊天：陈安 · 示例  \n  2026-09-20 11:00:00，发送者：陈安 · 示例，内容：下午三点要不要一起讨论页面？（片段 [3]）\n- 聊天：陈安 · 示例  \n  2026-09-20 11:05:00，发送者：我，内容：可以，下午三点见。（片段 [1]，并在语义片段 [2] 中也有合并记录）",
+      "citation_validity": "in_range",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 619,
+        "completion_tokens": 386,
+        "total_tokens": 1005,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 256,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 14612.23
+    },
+    {
+      "id": "E14",
+      "category": "unknown value",
+      "question": "星桥实习月薪是多少？",
+      "evidence": [
+        26
+      ],
+      "facts": [
+        "没有公布",
+        "不能确定"
+      ],
+      "retrieved_message_ids": [
+        26,
+        40,
+        2,
+        32,
+        5,
+        35,
+        7
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "26",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "之前有人问实习薪资，星桥没有公布具体数字，不能确定。",
+          "message_ids": [
+            26
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 4,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-20 13:00:00 · 陈安 · 示例 · text\n之前有人问实习薪资，星桥没有公布具体数字，不能确定。",
+          "message_ids": [
+            26
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "40",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            40
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "2",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "32",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。",
+          "message_ids": [
+            32
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "5",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "蓝湾产品设计岗位申请截止 10 月 2 日，申请地址 careers.example.com/bluebay。",
+          "message_ids": [
+            5
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "35",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。",
+          "message_ids": [
+            35
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "7",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "星桥搜索算法实习需要准备什么？",
+          "message_ids": [
+            7
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 21570.88,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "internship_search",
+          "intent_label": "实习/岗位检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "星桥实习月薪是多少？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "星桥实习月薪是多少 星桥 桥实 实习 习月 月薪 薪是 是多",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "reason": "实习岗位扩展",
+              "weight": 0.9
+            },
+            {
+              "text": "公司 职位 apply application career job opening",
+              "reason": "英文岗位词扩展",
+              "weight": 0.72
+            }
+          ],
+          "terms": [
+            "星桥实习月薪是多少",
+            "星桥",
+            "桥实",
+            "实习",
+            "习月",
+            "月薪",
+            "薪是",
+            "是多",
+            "多少",
+            "星桥实",
+            "桥实习",
+            "实习月",
+            "习月薪",
+            "月薪是",
+            "薪是多",
+            "是多少",
+            "星桥实习",
+            "桥实习月",
+            "实习月薪",
+            "习月薪是",
+            "月薪是多",
+            "薪是多少",
+            "新加坡",
+            "本地",
+            "intern",
+            "internship",
+            "岗位",
+            "招聘",
+            "内推",
+            "校招",
+            "公司",
+            "职位",
+            "apply",
+            "application",
+            "career",
+            "job",
+            "opening"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 39,
+        "scored_count": 32,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "internship_search",
+            "intent_label": "实习/岗位检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "星桥实习月薪是多少？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "星桥实习月薪是多少 星桥 桥实 实习 习月 月薪 薪是 是多",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "reason": "实习岗位扩展",
+                "weight": 0.9
+              },
+              {
+                "text": "公司 职位 apply application career job opening",
+                "reason": "英文岗位词扩展",
+                "weight": 0.72
+              }
+            ],
+            "terms": [
+              "星桥实习月薪是多少",
+              "星桥",
+              "桥实",
+              "实习",
+              "习月",
+              "月薪",
+              "薪是",
+              "是多",
+              "多少",
+              "星桥实",
+              "桥实习",
+              "实习月",
+              "习月薪",
+              "月薪是",
+              "薪是多",
+              "是多少",
+              "星桥实习",
+              "桥实习月",
+              "实习月薪",
+              "习月薪是",
+              "月薪是多",
+              "薪是多少",
+              "新加坡",
+              "本地",
+              "intern",
+              "internship",
+              "岗位",
+              "招聘",
+              "内推",
+              "校招",
+              "公司",
+              "职位",
+              "apply",
+              "application",
+              "career",
+              "job",
+              "opening"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "星桥实习月薪是多少",
+            "星桥",
+            "桥实",
+            "实习",
+            "习月",
+            "月薪",
+            "薪是",
+            "是多",
+            "多少",
+            "星桥实",
+            "桥实习",
+            "实习月",
+            "习月薪",
+            "月薪是",
+            "薪是多",
+            "是多少",
+            "星桥实习",
+            "桥实习月",
+            "实习月薪",
+            "习月薪是",
+            "月薪是多",
+            "薪是多少",
+            "新加坡",
+            "本地",
+            "intern",
+            "internship",
+            "岗位",
+            "招聘",
+            "内推",
+            "校招",
+            "公司",
+            "职位"
+          ],
+          "fts_count": 44,
+          "like_count": 47,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 32,
+          "rerank_error": "",
+          "candidate_count": 39,
+          "scored_count": 32,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "星桥实习月薪是多少？",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "星桥实习月薪是多少 星桥 桥实 实习 习月 月薪 薪是 是多"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 44,
+              "best_rank": 1,
+              "queries": [
+                "星桥实习月薪是多少？",
+                "星桥实习月薪是多少 星桥 桥实 实习 习月 月薪 薪是 是多",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 47,
+              "best_rank": 1,
+              "queries": [
+                "星桥实习月薪是多少？",
+                "星桥实习月薪是多少 星桥 桥实 实习 习月 月薪 薪是 是多",
+                "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+                "公司 职位 apply application career job opening"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 4,
+            "queries": [
+              "星桥实习月薪是多少？",
+              "星桥实习月薪是多少 星桥 桥实 实习 习月 月薪 薪是 是多",
+              "新加坡 本地 实习 intern internship 岗位 招聘 内推 校招",
+              "公司 职位 apply application career job opening"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 91,
+              "total_tokens": 91
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "没有具体数字。依据：聊天 “AI 实习交流 · 示例” — 2026-09-20 13:00:00，发送者：陈安，内容为“之前有人问实习薪资，星桥没有公布具体数字，不能确定。”（见你提供的聊天片段）。在其它片段中也未发现星桥实习的月薪信息。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 662,
+        "completion_tokens": 540,
+        "total_tokens": 1202,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 448,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 27905.74
+    },
+    {
+      "id": "E15",
+      "category": "multi-turn reference",
+      "question": "那它什么时候截止？",
+      "history": [
+        {
+          "role": "user",
+          "content": "远帆 RAG 实习怎么样？"
+        },
+        {
+          "role": "assistant",
+          "content": "这是新加坡的 RAG 工程实习，要求 Python 和向量检索。"
+        }
+      ],
+      "evidence": [
+        32
+      ],
+      "facts": [
+        "9 月 30 日"
+      ],
+      "retrieved_message_ids": [
+        31,
+        32,
+        35,
+        40,
+        5,
+        2,
+        1,
+        4,
+        6,
+        19,
+        7
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 5,
+          "sender": "陈安 · 示例、林晓 · 示例、余舟 · 示例",
+          "text": "2026-09-22 09:00:00 · 林晓 · 示例 · text\n新增实习：远帆智能招聘 RAG 工程实习生，地点新加坡，要求 Python、向量检索和工具调用。\n\n2026-09-22 09:01:00 · 林晓 · 示例 · text\n远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。\n\n2026-09-22 09:15:00 · 余舟 · 示例 · text\n再次转发远帆 RAG 实习，还是新加坡那个岗位，不是新的第二个岗位。\n\n2026-09-22 14:30:00 · 陈安 · 示例 · text\n澄空公司招聘北京后端开发全职，不是实习岗位，也不是新加坡。",
+          "message_ids": [
+            31,
+            32,
+            35,
+            40
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "32",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。",
+          "message_ids": [
+            32
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "5",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "蓝湾产品设计岗位申请截止 10 月 2 日，申请地址 careers.example.com/bluebay。",
+          "message_ids": [
+            5
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": "2",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 1,
+          "sender": "林晓 · 示例",
+          "text": "2026-09-10 10:00:00 · 林晓 · 示例 · text\n星桥实验室招聘搜索算法实习生，地点新加坡，要求 Python、信息检索和 RAG 项目经验。\n\n2026-09-10 10:01:00 · 林晓 · 示例 · text\n星桥搜索算法实习申请截止 9 月 25 日，至少实习三个月，通过 careers.example.com/starbridge 提交简历。",
+          "message_ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "chat_id": "demo_career@chatroom",
+          "chat_title": "AI 实习交流 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 3,
+          "sender": "我、余舟 · 示例",
+          "text": "2026-09-12 09:00:00 · 余舟 · 示例 · text\n蓝湾工作室招聘产品设计实习生，地点新加坡，需要 Figma 作品集。\n\n2026-09-12 09:01:00 · 余舟 · 示例 · text\n蓝湾产品设计岗位申请截止 10 月 2 日，申请地址 careers.example.com/bluebay。\n\n2026-09-12 09:10:00 · 我 · text\n我优先考虑搜索算法方向，产品设计暂时不投。",
+          "message_ids": [
+            4,
+            5,
+            6
+          ]
+        },
+        {
+          "chat_id": "demo_project@chatroom",
+          "chat_title": "检索项目组 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 17,
+          "sender": "余舟 · 示例",
+          "text": "2026-09-18 15:00:00 · 余舟 · 示例 · text\n项目演示原定周五下午三点。",
+          "message_ids": [
+            19
+          ]
+        },
+        {
+          "chat_id": "demo_lin",
+          "chat_title": "林晓 · 示例",
+          "local_id": "7",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "星桥搜索算法实习需要准备什么？",
+          "message_ids": [
+            7
+          ]
+        }
+      ],
+      "conversation_hit": true,
+      "evidence_recall": 1.0,
+      "all_evidence_found": true,
+      "retrieval_ms": 21400.41,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "general_search",
+          "intent_label": "普通聊天检索",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "那它什么时候截止？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "那它什么时候截止 那它 它什 什么 么时 时候 候截 截止",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            }
+          ],
+          "terms": [
+            "那它什么时候截止",
+            "那它",
+            "它什",
+            "什么",
+            "么时",
+            "时候",
+            "候截",
+            "截止",
+            "那它什",
+            "它什么",
+            "什么时",
+            "么时候",
+            "时候截",
+            "候截止",
+            "那它什么",
+            "它什么时",
+            "什么时候",
+            "么时候截",
+            "时候截止"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 29,
+        "scored_count": 29,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "general_search",
+            "intent_label": "普通聊天检索",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "那它什么时候截止？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "那它什么时候截止 那它 它什 什么 么时 时候 候截 截止",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              }
+            ],
+            "terms": [
+              "那它什么时候截止",
+              "那它",
+              "它什",
+              "什么",
+              "么时",
+              "时候",
+              "候截",
+              "截止",
+              "那它什",
+              "它什么",
+              "什么时",
+              "么时候",
+              "时候截",
+              "候截止",
+              "那它什么",
+              "它什么时",
+              "什么时候",
+              "么时候截",
+              "时候截止"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "那它什么时候截止",
+            "那它",
+            "它什",
+            "什么",
+            "么时",
+            "时候",
+            "候截",
+            "截止",
+            "那它什",
+            "它什么",
+            "什么时",
+            "么时候",
+            "时候截",
+            "候截止",
+            "那它什么",
+            "它什么时",
+            "什么时候",
+            "么时候截",
+            "时候截止"
+          ],
+          "fts_count": 10,
+          "like_count": 12,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 29,
+          "rerank_error": "",
+          "candidate_count": 29,
+          "scored_count": 29,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "那它什么时候截止 那它 它什 什么 么时 时候 候截 截止",
+                "那它什么时候截止？"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 10,
+              "best_rank": 1,
+              "queries": [
+                "那它什么时候截止？",
+                "那它什么时候截止 那它 它什 什么 么时 时候 候截 截止"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 12,
+              "best_rank": 1,
+              "queries": [
+                "那它什么时候截止？",
+                "那它什么时候截止 那它 它什 什么 么时 时候 候截 截止"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 2,
+            "queries": [
+              "那它什么时候截止？",
+              "那它什么时候截止 那它 它什 什么 么时 时候 候截 截止"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 55,
+              "total_tokens": 55
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "截止是 9 月 30 日。依据：聊天“AI 实习交流”，2026-09-22 09:01:00，林晓： “远帆 RAG 岗位截止 9 月 30 日，投递 careers.example.com/farsail，至少四个月。”",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 1095,
+        "completion_tokens": 521,
+        "total_tokens": 1616,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 448,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 28165.98
+    },
+    {
+      "id": "E16",
+      "category": "no evidence",
+      "question": "谁推荐了极光寿司，人均价格是多少？",
+      "evidence": [],
+      "facts": [
+        "没有找到证据"
+      ],
+      "unanswerable": true,
+      "retrieved_message_ids": [
+        11,
+        10,
+        12,
+        39,
+        25,
+        13,
+        14,
+        15
+      ],
+      "retrieved": [
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "11",
+          "semantic_chunk_id": null,
+          "sender": "林晓 · 示例",
+          "text": "我推荐月台咖啡的冷萃和芝士蛋糕，人均 12 新币，在示例街 8 号。",
+          "message_ids": [
+            11
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "10",
+          "semantic_chunk_id": null,
+          "sender": "陈安 · 示例",
+          "text": "推荐青叶食堂的菌菇拉面，人均 18 新币，在示例广场二楼，有素食选项。",
+          "message_ids": [
+            10
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 9,
+          "sender": "陈安 · 示例、林晓 · 示例、余舟 · 示例",
+          "text": "2026-09-15 12:00:00 · 陈安 · 示例 · text\n推荐青叶食堂的菌菇拉面，人均 18 新币，在示例广场二楼，有素食选项。\n\n2026-09-15 12:02:00 · 林晓 · 示例 · text\n我推荐月台咖啡的冷萃和芝士蛋糕，人均 12 新币，在示例街 8 号。\n\n2026-09-15 12:03:00 · 余舟 · 示例 · text\n青叶食堂周一休息，周末最好提前预约。",
+          "message_ids": [
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": "39",
+          "semantic_chunk_id": null,
+          "sender": "我",
+          "text": "周六的青叶食堂已经订好，谢谢推荐。",
+          "message_ids": [
+            39
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": "25",
+          "semantic_chunk_id": null,
+          "sender": "余舟 · 示例",
+          "text": "有人知道海风餐厅的地址吗？我还没去过，不算推荐。",
+          "message_ids": [
+            25
+          ]
+        },
+        {
+          "chat_id": "demo_food@chatroom",
+          "chat_title": "周末食光 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 10,
+          "sender": "余舟 · 示例",
+          "text": "2026-09-20 12:00:00 · 余舟 · 示例 · text\n有人知道海风餐厅的地址吗？我还没去过，不算推荐。",
+          "message_ids": [
+            25
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 6,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-16 17:00:00 · 我 · text\n周末想吃素食，有推荐吗？\n\n2026-09-16 17:01:00 · 陈安 · 示例 · text\n去青叶食堂吧，菌菇拉面可以做纯素，记得不要加蛋。\n\n2026-09-16 17:02:00 · 我 · text\n好，周六一起去。",
+          "message_ids": [
+            13,
+            14,
+            15
+          ]
+        },
+        {
+          "chat_id": "demo_chen",
+          "chat_title": "陈安 · 示例",
+          "local_id": null,
+          "semantic_chunk_id": 8,
+          "sender": "陈安 · 示例",
+          "text": "2026-09-22 14:00:00 · 我 · text\n周六的青叶食堂已经订好，谢谢推荐。",
+          "message_ids": [
+            39
+          ]
+        }
+      ],
+      "conversation_hit": null,
+      "evidence_recall": null,
+      "all_evidence_found": null,
+      "retrieval_ms": 13615.49,
+      "retrieval_mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+      "retrieval_diagnostics": {
+        "mode": "Embedding 主召回 + SQLite 精确补漏 + Rerank",
+        "scope": "全库",
+        "matched_people": [],
+        "related_people": [],
+        "time_scope": "",
+        "query_plan": {
+          "intent": "person_summary",
+          "intent_label": "联系人/频率问题",
+          "scope": "global",
+          "scope_label": "全库",
+          "time_since": null,
+          "time_since_label": "",
+          "people": [],
+          "related_people": [],
+          "queries": [
+            {
+              "text": "谁推荐了极光寿司，人均价格是多少？",
+              "reason": "原始问题",
+              "weight": 1.0
+            },
+            {
+              "text": "谁推荐了极光寿司 人均价格是多少 谁推 推荐 荐了 了极 极光 光寿",
+              "reason": "关键词拆分",
+              "weight": 0.9
+            },
+            {
+              "text": "最近 聊天 联系人 频繁 谁 好友",
+              "reason": "联系人摘要扩展",
+              "weight": 0.75
+            }
+          ],
+          "terms": [
+            "谁推荐了极光寿司",
+            "人均价格是多少",
+            "谁推",
+            "推荐",
+            "荐了",
+            "了极",
+            "极光",
+            "光寿",
+            "寿司",
+            "人均",
+            "均价",
+            "价格",
+            "格是",
+            "是多",
+            "多少",
+            "谁推荐",
+            "推荐了",
+            "荐了极",
+            "了极光",
+            "极光寿",
+            "光寿司",
+            "谁推荐了",
+            "推荐了极",
+            "荐了极光",
+            "了极光寿",
+            "极光寿司",
+            "人均价",
+            "均价格",
+            "价格是",
+            "格是多",
+            "是多少",
+            "人均价格",
+            "均价格是",
+            "价格是多",
+            "格是多少",
+            "最近",
+            "聊天",
+            "联系人",
+            "频繁",
+            "好友"
+          ],
+          "notes": [
+            "未命中特定联系人，使用全库召回",
+            "联系人索引 4 人"
+          ]
+        },
+        "candidate_count": 31,
+        "scored_count": 31,
+        "context_count": 8,
+        "search": {
+          "search_db_ready": true,
+          "search_db_usable": true,
+          "search_db_stale": false,
+          "search_db_messages": 40,
+          "plan": {
+            "intent": "person_summary",
+            "intent_label": "联系人/频率问题",
+            "scope": "global",
+            "scope_label": "全库",
+            "time_since": null,
+            "time_since_label": "",
+            "people": [],
+            "related_people": [],
+            "queries": [
+              {
+                "text": "谁推荐了极光寿司，人均价格是多少？",
+                "reason": "原始问题",
+                "weight": 1.0
+              },
+              {
+                "text": "谁推荐了极光寿司 人均价格是多少 谁推 推荐 荐了 了极 极光 光寿",
+                "reason": "关键词拆分",
+                "weight": 0.9
+              },
+              {
+                "text": "最近 聊天 联系人 频繁 谁 好友",
+                "reason": "联系人摘要扩展",
+                "weight": 0.75
+              }
+            ],
+            "terms": [
+              "谁推荐了极光寿司",
+              "人均价格是多少",
+              "谁推",
+              "推荐",
+              "荐了",
+              "了极",
+              "极光",
+              "光寿",
+              "寿司",
+              "人均",
+              "均价",
+              "价格",
+              "格是",
+              "是多",
+              "多少",
+              "谁推荐",
+              "推荐了",
+              "荐了极",
+              "了极光",
+              "极光寿",
+              "光寿司",
+              "谁推荐了",
+              "推荐了极",
+              "荐了极光",
+              "了极光寿",
+              "极光寿司",
+              "人均价",
+              "均价格",
+              "价格是",
+              "格是多",
+              "是多少",
+              "人均价格",
+              "均价格是",
+              "价格是多",
+              "格是多少",
+              "最近",
+              "聊天",
+              "联系人",
+              "频繁",
+              "好友"
+            ],
+            "notes": [
+              "未命中特定联系人，使用全库召回",
+              "联系人索引 4 人"
+            ]
+          },
+          "primary": "embedding",
+          "terms": [
+            "谁推荐了极光寿司",
+            "人均价格是多少",
+            "谁推",
+            "推荐",
+            "荐了",
+            "了极",
+            "极光",
+            "光寿",
+            "寿司",
+            "人均",
+            "均价",
+            "价格",
+            "格是",
+            "是多",
+            "多少",
+            "谁推荐",
+            "推荐了",
+            "荐了极",
+            "了极光",
+            "极光寿",
+            "光寿司",
+            "谁推荐了",
+            "推荐了极",
+            "荐了极光",
+            "了极光寿",
+            "极光寿司",
+            "人均价",
+            "均价格",
+            "价格是",
+            "格是多",
+            "是多少",
+            "人均价格"
+          ],
+          "fts_count": 10,
+          "like_count": 13,
+          "embedding_count": 23,
+          "rerank_used": true,
+          "rerank_count": 31,
+          "rerank_error": "",
+          "candidate_count": 31,
+          "scored_count": 31,
+          "branches": [
+            {
+              "source": "embedding",
+              "label": "Embedding 语义召回",
+              "count": 23,
+              "best_rank": 1,
+              "queries": [
+                "谁推荐了极光寿司，人均价格是多少？",
+                "最近 聊天 联系人 频繁 谁 好友",
+                "谁推荐了极光寿司 人均价格是多少 谁推 推荐 荐了 了极 极光 光寿"
+              ]
+            },
+            {
+              "source": "fts",
+              "label": "SQLite FTS 关键词召回",
+              "count": 10,
+              "best_rank": 1,
+              "queries": [
+                "谁推荐了极光寿司，人均价格是多少？",
+                "谁推荐了极光寿司 人均价格是多少 谁推 推荐 荐了 了极 极光 光寿",
+                "最近 聊天 联系人 频繁 谁 好友"
+              ]
+            },
+            {
+              "source": "like",
+              "label": "SQLite LIKE 精确补漏",
+              "count": 13,
+              "best_rank": 1,
+              "queries": [
+                "谁推荐了极光寿司，人均价格是多少？",
+                "谁推荐了极光寿司 人均价格是多少 谁推 推荐 荐了 了极 极光 光寿",
+                "最近 聊天 联系人 频繁 谁 好友"
+              ]
+            }
+          ],
+          "fusion": {
+            "method": "RRF",
+            "k": 60,
+            "weights": {
+              "embedding": 1.65,
+              "fts": 1.2,
+              "like": 0.85,
+              "contact": 0.35
+            }
+          },
+          "semantic": {
+            "enabled": true,
+            "ready": true,
+            "usable": true,
+            "chunk_count": 23,
+            "candidate_count": 23,
+            "query_count": 3,
+            "queries": [
+              "谁推荐了极光寿司，人均价格是多少？",
+              "谁推荐了极光寿司 人均价格是多少 谁推 推荐 荐了 了极 极光 光寿",
+              "最近 聊天 联系人 频繁 谁 好友"
+            ],
+            "model": "text-embedding-3-small",
+            "error": "",
+            "usage": {
+              "prompt_tokens": 91,
+              "total_tokens": 91
+            }
+          },
+          "rerank_enabled": true
+        }
+      },
+      "answer": "没有找到。 在你提供的聊天片段中未出现“极光寿司”或其人均价格的任何推荐记录。举例说明我查到的相关片段：\n\n- 周末食光 · 示例，2026-09-15 12:00:00，发送者：陈安 — 推荐青叶食堂， 人均 18 新币。  \n- 周末食光 · 示例，2026-09-15 12:02:00，发送者：林晓 — 推荐月台咖啡， 人均 12 新币。  \n- 周末食光 · 示例，2026-09-20 12:00:00，发送者：余舟 — 询问海风餐厅地址（表示未推荐）。\n\n如果你有包含“极光寿司”那条消息的聊天片段，请贴出来，我会根据那段记录回答谁推荐的以及人均多少。",
+      "citation_validity": "no_numeric_citations",
+      "answer_completeness": "not_reviewed",
+      "manual_review": {
+        "correct_context_cited": null,
+        "answer_complete": null,
+        "notes": ""
+      },
+      "usage": {
+        "prompt_tokens": 910,
+        "completion_tokens": 591,
+        "total_tokens": 1501,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 384,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "end_to_end_ms": 21634.79
+    }
+  ],
+  "models": {
+    "qa": "gpt-5-mini",
+    "embedding": "text-embedding-3-small",
+    "rerank": "gpt-5-nano"
+  },
+  "api_calls": 49,
+  "api_total_tokens": 140292,
+  "limits": [
+    "Small authored synthetic dataset; not representative of private history.",
+    "Top-k counts retrieved items: a semantic chunk may contain several messages, unlike a local message hit. Compare with a fixed token budget before claiming a quality gain.",
+    "Conversation hit is lenient; all-evidence hit requires every annotated message in top-k.",
+    "Citation range checks do not establish semantic support. Human review is required.",
+    "Multi-turn history is passed to generation, but current retrieval sees the latest question only."
+  ]
+}
