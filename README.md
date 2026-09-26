@@ -1,66 +1,115 @@
 # WeChat Agent
 
-[English](README.md) | [中文](README.zh-CN.md) | [Evaluation](eval/README.md) | [Demo guide](docs/DEMO.md)
+[English](README.md) | [中文](README.zh-CN.md)
 
-**Find useful context buried across years of conversations, then turn it into follow-up actions.**
+**A personal knowledge assistant for your WeChat conversations.**
 
-An internship link in a group, a friend's preparation advice in a private chat,
-and a later deadline correction should not require three manual searches.
-WeChat Agent brings these scattered messages into a local, inspectable knowledge
-base: search, ask follow-up questions, check the evidence, and schedule recurring
-information-tracking tasks. It never sends WeChat messages on your behalf.
+WeChat Agent turns scattered private and group messages into a searchable
+knowledge base. Find earlier discussions, ask questions across conversations,
+and schedule tasks that bring relevant updates back to you.
 
-![Chat browser with entirely fictional messages](docs/images/chats.png)
+An opportunity shared in a group and a friend's advice in a private chat can
+be retrieved together, with links to the original evidence. Recurring tasks
+extend this from answering questions to tracking information over time.
 
-## One-Minute Overview
+![Chat history browser](docs/images/chats.png)
 
-| Need | What the project does |
-|---|---|
-| Import and revisit history | Read authorized local WeChat snapshots; merge shards, resolve contacts, paginate chats and display supported media |
-| Avoid rebuilding everything | Append new messages; update changed voice transcripts and invalidate affected semantic chunks |
-| Ask across conversations | Combine semantic and keyword retrieval, use contacts as soft signals, fuse with RRF and optionally rerank with an LLM |
-| Continue the conversation | Save multi-turn Q&A with per-paragraph citations; source labels come from retrieved metadata, and background jobs survive browser navigation |
-| Track something over time | Set a goal, interval and lookback window; a tool-calling assistant searches messages and saves structured findings and suggestions |
-| Inspect and control the system | View query plans, recall branches and index logs; configure five model roles separately |
+*All screenshots use fictional sample conversations.*
 
-## Architecture
+## What You Can Do
+
+### Ask Across Conversations
+
+Ask questions in natural language, combine context from different chats, and
+continue with follow-up questions. Answers include expandable sources showing
+the conversation, sender, time and original text. Conversations are saved, and
+background requests continue when you switch tabs or close the page.
+
+Examples: “What internships have been shared recently?” or “What advice did my
+friend give me about preparing for the interview?”
+
+![Q&A with expandable source messages](docs/images/qa-citations.png)
+
+### Set Recurring Tasks
+
+Describe what to look for, choose an execution interval and set a lookback
+window. The assistant selects read-only search tools, retrieves messages within
+that window, and saves findings and suggestions for each run. Tasks can also
+be run immediately, paused or reviewed through their execution history.
+
+Examples include checking private conversations you have not replied to,
+tracking new internship postings, or collecting restaurant recommendations.
+The assistant provides suggestions; it does not send WeChat messages.
+
+![Task results and execution history](docs/images/task-live.png)
+
+### Browse and Prepare Your History
+
+Browse private and group chats in a familiar layout, search contacts, and load
+older messages on demand. The app supports automatic and manual sync from
+configured local WeChat data, supported local media, and cached voice transcripts.
+
+Prepare retrieval data in one sequence: voice transcription, incremental text
+indexing, then semantic indexing. New messages are appended; changed transcripts
+update the affected records and semantic chunks. The RAG workspace exposes index
+status, retrieval diagnostics and scheduled preparation.
+
+<details>
+<summary>Index preparation and retrieval settings</summary>
+
+![RAG configuration](docs/images/rag.png)
+
+</details>
+
+## How It Works
+
+Two paths share the local chat data: **hybrid retrieval for Q&A** and
+**tool-driven search for scheduled tasks**.
 
 ```mermaid
 flowchart LR
-    A[Authorized WeChat snapshot] --> B[Decode / normalize / deduplicate]
-    S[Synthetic JSON sample] --> B
-    B --> D[(Local message snapshots)]
-    V[Voice transcription] --> I[Incremental text index]
-    D --> I
-    I --> F[SQLite FTS5 + LIKE]
-    I --> E[Embedding chunks + vectors]
-    Q[Question] --> P[Query planning / contact soft signals]
-    P --> F
-    P --> E
-    F --> R[RRF fusion + optional LLM rerank]
+    A[Local WeChat snapshots / sample data] --> B[Normalize and deduplicate]
+    B --> C[(Local chat data)]
+    V[Voice transcripts] --> I[Incremental indexing]
+    C --> I
+    I --> K[Keyword index]
+    I --> E[Embedding index]
+    Q[Question + query planning] --> K
+    Q --> E
+    K --> R[RRF fusion + optional reranking]
     E --> R
     R --> G[Answer model + conversation history]
-    G --> K[Structured conclusions + validated source IDs]
-    K --> U[Answer + server-owned source labels]
-    D --> T[Read-only search / private-chat / context tools]
-    V --> T
-    C[Task + schedule + time window] --> H[Tool-calling task model]
-    H <--> T
-    H --> J[Citation validation + saved structured report]
+    G --> O[Structured answer + source validation]
+    T[Task + interval + lookback window] --> H[Task model]
+    H <--> S[Read-only search and context tools]
+    C --> S
+    V --> S
+    H --> P[Saved findings and suggestions]
 ```
 
-**Actual stack:** Python 3.9+, SQLite/FTS5, HTML/CSS/JavaScript, OpenAI-compatible
-model APIs, PyCryptodome and Zstandard. Retrieval and scheduling are implemented
-in this repository; **it does not use LlamaIndex or Streamlit**. Vectors are
-stored in SQLite and scored locally, not in an external vector DB. Reranking
-uses a chat-model relevance prompt, not a dedicated cross-encoder.
+- **Hybrid retrieval:** rule-based query planning, semantic and keyword recall,
+  contact associations as soft signals, RRF fusion and optional LLM reranking.
+- **Evidence-backed answers:** the model returns conclusions and source IDs;
+  code validates the references and renders source metadata from retrieved records.
+- **Task execution:** a local scheduler runs a tool-calling loop over synced
+  messages. Task search is separate from the Q&A vector index.
+- **Independent model roles:** configure transcription, Q&A, tasks, embeddings
+  and reranking separately.
 
-See [code map and design boundaries](docs/ARCHITECTURE.md).
+| Layer | Technology |
+|---|---|
+| Backend and scheduling | Python 3.9+, local HTTP server and background jobs |
+| Storage and retrieval | SQLite, FTS5/LIKE, embedding vectors scored locally |
+| Model integration | OpenAI-compatible APIs; JSON-schema answers and tool calling |
+| Frontend | HTML, CSS and JavaScript |
+| Local data processing | PyCryptodome and Zstandard |
 
-## Run the Public Sample
+See the [architecture and code map](docs/ARCHITECTURE.md) for implementation details.
 
-No WeChat installation, private history, decryption key or API key is needed to
-browse and inspect **40 fictional messages in 6 conversations**.
+## Quick Start
+
+Try the app with **40 fictional messages in 6 conversations**. Browsing and
+local keyword retrieval require neither WeChat nor an API key.
 
 ```bash
 git clone https://github.com/Fongkai777/wechat-agent.git
@@ -69,106 +118,47 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 
-python -m wechat_agent.demo init       # import 30 fictional messages
-python -m wechat_agent.demo index      # build the initial text index
-python -m wechat_agent.demo append     # import 10 additional messages
-python -m wechat_agent.demo index      # incremental update: +10, not a rebuild
+python -m wechat_agent.demo init       # import the initial sample
+python -m wechat_agent.demo index      # build the text index
+python -m wechat_agent.demo append     # add new sample messages
+python -m wechat_agent.demo index      # update the index incrementally
 python -m wechat_agent.demo serve
 ```
 
-Open [localhost:8787](http://127.0.0.1:8787). The sample stores everything in
-ignored `.demo/`; it never falls back to private source or model settings.
-If port 8787 is occupied, it exits instead of silently opening another port.
-Use the RAG tab's retrieval debugger without credentials. Q&A generation, task
-execution, embedding and transcription require model configuration and incur
-provider charges. Embedding/reranking are disabled in the initial sample config.
+Open [localhost:8787](http://127.0.0.1:8787). The demo keeps its data and settings
+in `.demo/`, separate from private data. If the port is occupied, stop the
+existing server before starting the demo.
 
-For your own data, see [private-data setup](docs/USAGE.md) and the
-[version-dependent extraction guide](docs/KEY_EXTRACTION.md).
+Configure models in the **Model Settings** tab to enable generated answers,
+tasks, embeddings and transcription. These features may incur provider charges.
+Q&A requires strict JSON-schema support; task execution additionally requires
+tool calling. Embedding and reranking start disabled in the sample.
 
-## Product Views
+For your own history, follow the [local-data setup guide](docs/USAGE.md).
+WeChat extraction depends on client version and local data availability.
 
-These are screenshots of the **running application with synthetic data**, not
-private conversations or invented online model results.
+## Limitations and Roadmap
 
-<details><summary>Index preparation and real model answers</summary>
-
-![Index preparation](docs/images/rag.png)
-![Structured answer with expandable private-chat and group-chat citations](docs/images/qa-citations.png)
-
-</details>
-
-<details><summary>Recurring tasks and independent model settings</summary>
-
-![Completed tool-calling task with cited suggestions](docs/images/task-live.png)
-![Model configuration with empty credentials](docs/images/models.png)
-
-</details>
-
-[75-second recording script and reproducible demo steps](docs/DEMO.md).
-An online end-to-end recording has not yet been published; no placeholder video
-or fabricated answer is presented as a live run.
-
-## Retrieval Quality, Not Just an API Wrapper
-
-The [16-question evaluation](eval/results/local/REPORT.md) exercises exact
-entities, cross-chat evidence, new imports, duplicate postings, corrections,
-ambiguous follow-ups and missing information.
-
-**Measured local-only baseline, top 8:** correct-chat hit **15/15** answerable
-questions; all annotated evidence retrieved **14/15**. One additional question
-has no answer in the corpus and is excluded from those denominators. The failed
-case and every retrieved message are retained in the report.
-
-The [live hybrid run](eval/results/live/REPORT.md) also completed all 16 questions:
-**15/15** answerable questions had all annotated evidence present. Models:
-`text-embedding-3-small`, `gpt-5-nano` reranking, `gpt-5-mini` answers.
-It used **140,292 tokens across 49 API calls**. Top-8 semantic chunks can contain
-more messages than top-8 local hits, so this is not a controlled improvement claim.
-
-This tiny authored set is not production accuracy. See the
-[answer review and concrete attribution failure](eval/results/live/REVIEW.md).
-The review is by Codex, not an independent human evaluator; retrieval coverage,
-answer completeness and citation correctness are kept separate.
-
-The [source-attribution regression](eval/results/citation-regression/REPORT.md)
-now passes in one real API run: internship postings cite group messages, while
-resume advice cites the private chat. Q&A returns structured conclusions and
-source IDs; code validates IDs and renders chat type/name, sender and time.
-All supplied sources are saved, including references beyond the former 12-item
-storage cap. The original failure remains available for comparison. This is a
-targeted regression, not a rerun of the 16-question benchmark or proof of zero
-hallucinations. Compatible Q&A models must support strict JSON-schema output.
-
-```bash
-python scripts/evaluate_retrieval.py
-python -m unittest discover -s tests -p 'test_*.py'
-node --test tests/test_*.cjs
-python scripts/privacy_check.py
-```
-
-## Limits and Next Steps
-
-- Local WeChat extraction is version-dependent; history/media must exist locally.
-- Retrieval plans from the latest question; saved dialogue helps generation,
-  but ambiguous follow-ups still need retrieval-side rewriting.
-- Keyword matching can over-rank negated statements. A missing cross-chat detail
-  motivates better context expansion and measured reranking.
-- Vectors are scored in-process; large archives need profiling before claiming ANN-scale performance.
-- Tasks search synced snapshots directly, not the Q&A vector index. Wide time
-  windows increase scan cost and context size. Scheduling requires an awake computer and running service.
-- Next: held-out questions, local/semantic/hybrid/rerank ablations, citation-support
-  review, query rewriting and stage-level latency/token accounting.
+- Only locally available history and media can be read. Media decoding depends
+  on format, keys and cache availability.
+- Saved history helps answer generation; retrieval-side rewriting of ambiguous
+  follow-up questions is still planned.
+- Source validation makes answers inspectable, but does not guarantee that every
+  conclusion is supported by its cited text.
+- Tasks require a running service and an awake computer. Broad lookback windows
+  can increase processing time and model usage.
+- Next priorities: multi-turn query rewriting, broader retrieval evaluation,
+  citation-support checks and performance improvements for large archives.
 
 ## Privacy and Credits
 
-The public sample is entirely fictional. Private databases, keys, transcripts,
-caches, recordings and config are excluded from Git. Cloud features transmit
-selected text/audio to the configured provider; local storage does not mean
-offline inference. Use only authorized data. See [publication audit](docs/PRIVACY.md).
+Chat data is stored locally. Cloud model features send selected text or audio
+to the configured provider; this is not an offline-only application. Use only
+data you are authorized to process. Private databases, keys and caches are
+excluded from Git. The server is intended for local use, not public exposure.
 
 Extraction research and helper references:
 [wechat-db-decrypt-macos](https://github.com/Thearas/wechat-db-decrypt-macos),
 [wechat-chat-history-mac](https://github.com/BIBOYANG425/wechat-chat-history-mac),
 [wechat-suite](https://github.com/raclen/wechat-suite).
-Review upstream licenses before redistribution. Not affiliated with Tencent/WeChat.
+Review upstream licenses before redistribution. Not affiliated with Tencent or WeChat.
