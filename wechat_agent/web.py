@@ -6703,7 +6703,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--decrypted", type=Path, default=Path("decrypted"))
     parser.add_argument("--keys", type=Path, default=Path("all_keys.json"))
     parser.add_argument("--media-root", type=Path, default=Path(source["media_root"]) if source.get("media_root") else None)
-    parser.add_argument("--account", default="")
+    parser.add_argument("--account", default=source.get("account") or "", help="Your WeChat sender ID; needed when a copied path no longer identifies the account")
     parser.add_argument("--since", default="", help="Only show messages at or after this date, e.g. 2023-01-01")
     parser.add_argument("--sync-interval", type=int, default=60, help="Automatic sync interval in seconds; 0 disables it")
     parser.add_argument("--image-aes-key", default="", help="Optional WeChat V2 image AES key")

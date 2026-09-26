@@ -2,6 +2,8 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
+[Features](#what-you-can-do) · [Architecture](#how-it-works) · [Deployment](#installation-and-configuration) · [Models](#model-configuration) · [Usage](#using-the-app) · [Maintenance](#maintenance)
+
 **A personal knowledge assistant for your WeChat conversations.**
 
 WeChat Agent turns scattered private and group messages into a searchable
@@ -206,7 +208,26 @@ Check the command's failures and skipped databases before continuing, especially
 message, contact and session databases. Creating a JSON file with no matched
 keys is not a successful extraction.
 
-### 4. Start the Local Service
+### 4. Configure Your Account and Start
+
+A copied `db_storage/` path no longer identifies your account. Create `web_cache/`
+and a local `web_cache/source.json` in the repository to identify your outgoing messages:
+
+```json
+{
+  "db_storage": "db_storage",
+  "media_root": "msg",
+  "account": "YOUR_WECHAT_ID"
+}
+```
+
+Replace `YOUR_WECHAT_ID` with your sender ID in the database, not a nickname.
+For an original account folder shaped like `wxid_example_ab12`, the ID is
+`wxid_example`, without the final directory suffix. Use this rule only for
+folders matching that form. The `--account` startup argument overrides this
+setting. An incorrect ID affects message alignment and unreplied-chat analysis.
+
+Start the service:
 
 ```bash
 bash scripts/start_web.sh
@@ -217,14 +238,17 @@ Keep this terminal running; `Ctrl+C` stops the service. The default date filter
 shows records from 2023-01-01 onward without deleting older source data.
 To change it, pass, for example, `--since 2020-01-01` to the startup script.
 
+#### Continuous Sync (Optional)
+
 **For continuous sync**, point the service at the live account directory,
-rather than the static copy. Create `web_cache/source.json` using absolute
-paths on your machine:
+rather than the static copy. Update the same `web_cache/source.json` with your
+absolute source paths and sender ID:
 
 ```json
 {
   "db_storage": "/absolute/path/to/account-folder/db_storage",
-  "media_root": "/absolute/path/to/account-folder/msg"
+  "media_root": "/absolute/path/to/account-folder/msg",
+  "account": "YOUR_WECHAT_ID"
 }
 ```
 
@@ -242,7 +266,9 @@ for database changes every 60 seconds; **Sync latest messages** checks manually.
 A copied folder stays static until you replace its contents. Syncing messages
 does not itself update RAG indexes or trigger model calls.
 
-### 5. Configure Model Services
+## Model Configuration
+
+### Services and Credentials
 
 Open **Model Settings** and set the service base URL, model ID and API key for
 the roles you want to use. For OpenAI, create a key through the
@@ -259,6 +285,8 @@ model IDs and endpoint. Do not append `/chat/completions` to the base URL.
 | Embedding | Build and query semantic indexes | Embeddings |
 | Rerank | Reorder retrieved candidates | Chat completions; this is LLM-based reranking |
 
+### Defaults and Persistence
+
 The current defaults are `gpt-4o-mini-transcribe`, `gpt-5-mini` for Q&A and tasks,
 `text-embedding-3-small`, and `gpt-5-nano` for reranking. These are configuration
 defaults, not guarantees of availability; choose models your provider/account
@@ -272,7 +300,9 @@ are stored locally in `web_cache/llm_config.json`, so protect this directory.
 Disable optional embedding/reranking if you do not intend to use them.
 Cloud calls transmit relevant content and may incur usage charges.
 
-### 6. Prepare Indexes and Use the App
+## Using the App
+
+### Prepare Indexes
 
 In **RAG Configuration**, run **Prepare Retrieval** to execute:
 
@@ -283,6 +313,8 @@ Voice transcription -> incremental text index -> incremental semantic index
 Configure transcription first when local voice messages are present. Existing
 transcripts are reused. Text and semantic indexes can also be updated separately;
 semantic indexing requires an enabled, configured embedding service.
+
+### Chat, Q&A and Tasks
 
 | Workspace | How to use it |
 |---|---|
@@ -297,11 +329,37 @@ require the Q&A vector index. Tasks save results and history without sending
 messages to WeChat. Both recurring tasks and scheduled index preparation need
 a running server and an awake computer.
 
+## Maintenance
+
 New messages normally need an incremental index update, not a full rebuild.
 Private configuration, Q&A/task history and indexes live under `web_cache/`;
 decrypted databases live under `decrypted/`. Do not delete these directories
 as an upgrade step. V2 images may require a separate `image_aes_key`; missing
 media or audio cannot be recovered from message metadata alone.
+
+### Installation Check and Troubleshooting
+
+Without private databases or keys, validate installation, synthetic import,
+incremental indexing, static assets and local API responses with:
+
+```bash
+python scripts/smoke_test.py
+```
+
+This uses temporary fictional data and no cloud calls. Its temporary server
+closes automatically and never occupies 8787. See the [sample-data guide](docs/DEMO.md)
+for an interactive session and the [usage guide](docs/USAGE.md) for operational details.
+
+| Symptom | Check first |
+|---|---|
+| No databases or zero matching keys | Data paths, logged-in account, extraction permissions and client version |
+| All messages appear incoming | Your sender ID in `web_cache/source.json`'s `account` field |
+| Recent messages missing | Live source versus static copy; terminal file-access permissions |
+| Port 8787 is occupied | Check the existing service; do not start duplicates or stop unrelated processes |
+| Model request fails | The role's base URL, credentials, model capabilities, network and provider limits |
+
+Passing this check does not establish key-extraction compatibility or verify
+your cloud model access.
 
 ## Limitations and Roadmap
 

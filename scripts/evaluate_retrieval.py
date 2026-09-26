@@ -164,7 +164,7 @@ def write_report(report, output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("eval/results/local"))
+    parser.add_argument("--output", type=Path, default=Path("artifacts/eval"))
     parser.add_argument("--live-config", type=Path, help="Opt in to billable requests using ONLY synthetic messages; config is read, not copied")
     parser.add_argument("--top-k", type=int, default=8)
     args = parser.parse_args()

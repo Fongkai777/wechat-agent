@@ -2,6 +2,8 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
+[功能介绍](#核心功能) · [技术概览](#技术概览) · [部署配置](#部署与配置) · [模型配置](#模型配置) · [开始使用](#开始使用) · [日常维护](#日常维护)
+
 **把微信聊天记录变成可检索、可追问、可持续跟进的个人知识库。**
 
 WeChat Agent 帮你从分散的私聊和群聊中找回信息：回顾过去的讨论，
@@ -194,7 +196,25 @@ python -m wechat_agent decrypt --keys all_keys.json
 继续前检查失败和跳过的数据库，尤其是消息库、联系人库和会话库。
 仅生成一个没有匹配密钥的 JSON 文件不算提取成功。
 
-### 4. 启动服务与配置同步
+### 4. 配置账号并启动
+
+复制后的 `db_storage/` 路径不再包含账号 ID，需要显式告诉程序哪些消息是你发出的。
+在项目根目录创建 `web_cache/`，新建本机配置 `web_cache/source.json`：
+
+```json
+{
+  "db_storage": "db_storage",
+  "media_root": "msg",
+  "account": "YOUR_WECHAT_ID"
+}
+```
+
+将 `YOUR_WECHAT_ID` 替换为数据库中的发送者 ID，不是昵称或备注。
+对于形如 `wxid_example_ab12` 的原始账号文件夹，账号 ID 为 `wxid_example`，
+不含最后的目录后缀；仅在原始目录符合该形式时这样提取。
+也可用启动参数 `--account` 覆盖此配置。缺少正确账号 ID 会影响气泡方向和待回复判断。
+
+启动服务：
 
 ```bash
 bash scripts/start_web.sh
@@ -205,13 +225,16 @@ bash scripts/start_web.sh
 默认展示 2023-01-01 以来的消息，不会删除更早的原始数据。
 需要修改起始日期时，可给启动脚本传入 `--since 2020-01-01` 等参数。
 
+#### 持续同步（可选）
+
 **需要持续同步新消息时**，应将数据源指向微信实时账号目录，而不是静态副本。
-创建本机配置 `web_cache/source.json`，使用自己的绝对路径：
+修改上面的本机配置 `web_cache/source.json`，使用自己的绝对路径和账号 ID：
 
 ```json
 {
   "db_storage": "/absolute/path/to/account-folder/db_storage",
-  "media_root": "/absolute/path/to/account-folder/msg"
+  "media_root": "/absolute/path/to/account-folder/msg",
+  "account": "YOUR_WECHAT_ID"
 }
 ```
 
@@ -227,7 +250,9 @@ bash scripts/restart_web.command
 服务每 60 秒检查一次数据库变化，也可以点击“同步最新消息”。
 复制出来的文件夹不会自行更新；同步消息也不会自动更新 RAG 索引或调用模型。
 
-### 5. 获取 API Key 并配置模型
+## 模型配置
+
+### 服务与密钥
 
 打开**模型配置**页，为需要使用的功能填写服务 Base URL、模型名称和 API Key。
 使用 OpenAI 时，按[官方 API 配置指南](https://developers.openai.com/api/docs/quickstart)
@@ -243,6 +268,8 @@ Base URL 不要额外拼接 `/chat/completions`。
 | Embedding | 建立和查询语义索引 | Embeddings 接口 |
 | Rerank | 对检索结果重排 | Chat Completions；当前使用 LLM 重排 |
 
+### 默认模型与保存位置
+
 代码默认分别使用 `gpt-4o-mini-transcribe`、问答和任务的 `gpt-5-mini`、
 `text-embedding-3-small`，以及重排的 `gpt-5-nano`。
 这些是配置默认值，不代表你的账号一定可用；请按服务商实际支持的模型与接口能力填写。
@@ -253,7 +280,9 @@ Base URL 不要额外拼接 `/chat/completions`。
 网页保存的设置位于本机 `web_cache/llm_config.json`，请保护好该目录。
 不使用 Embedding 或重排时可关闭对应开关。云端请求会传输相关内容，并可能产生费用。
 
-### 6. 准备索引并开始使用
+## 开始使用
+
+### 准备索引
 
 进入 **RAG 配置**，点击“一键准备检索”，按顺序执行：
 
@@ -263,6 +292,8 @@ Base URL 不要额外拼接 `/chat/completions`。
 
 有本地语音时先配置转写服务，已转写内容会复用。
 也可以分别更新全文索引与语义索引；语义索引需要启用并配置 Embedding 服务。
+
+### 问答、任务与聊天浏览
 
 | 页面 | 使用方法 |
 |---|---|
@@ -276,10 +307,33 @@ Base URL 不要额外拼接 `/chat/completions`。
 执行结果和历史会保存，但不会发送微信消息。
 周期任务和定时索引更新都要求服务在线、电脑保持唤醒。
 
+## 日常维护
+
 新消息通常只需增量更新，不必每次全量重建。
 本机配置、问答和任务历史、索引保存在 `web_cache/`，
 解密数据库在 `decrypted/`，升级代码时不要把这些目录当作临时文件删除。
 V2 图片可能需要额外的 `image_aes_key`；缺失的媒体或音频无法仅靠消息元数据恢复。
+
+### 安装自检与排错
+
+没有微信数据和密钥时，也可运行以下自检，验证安装、示例导入、增量索引、网页资源和本地接口：
+
+```bash
+python scripts/smoke_test.py
+```
+
+自检仅使用临时生成数据，不调用云端模型；临时服务会自动关闭，不占用 8787。
+交互式示例见[示例运行说明](docs/DEMO.md)，更多运行细节见[使用指南](docs/USAGE.zh-CN.md)。
+
+| 现象 | 优先检查 |
+|---|---|
+| 找不到数据库或匹配密钥为 0 | 数据目录、登录账号、提取权限及客户端版本 |
+| 消息全部出现在对方一侧 | `web_cache/source.json` 的 `account` 是否为自己的发送者 ID |
+| 没有最新消息 | 数据源是否为实时目录，而不是旧副本；终端是否有文件访问权限 |
+| 端口 8787 已占用 | 确认已有服务，不要重复启动或停止不相关进程 |
+| 模型请求失败 | 对应配置框的 Base URL、密钥、模型能力、网络及服务商额度 |
+
+自检通过不代表所有微信版本都能提取密钥，也不验证你的云端模型权限。
 
 ## 已知限制与计划
 

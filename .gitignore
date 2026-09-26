@@ -27,7 +27,13 @@ runtime_probe.txt
 *.tar
 *.gz
 artifacts/
-eval/results/**/checkpoint.json
+eval/results/
+# Superseded demo captures, retained locally only
+docs/images/models.png
+docs/images/qa-live.png
+docs/images/retrieval.png
+docs/images/sources-live.png
+docs/images/tasks.png
 
 # Logs and generated output
 logs/

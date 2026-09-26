@@ -5,6 +5,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from wechat_agent.voice_transcribe import cached_voice_transcription, decode_silk_to_wav, voice_cache_path
 from wechat_agent.web import DEFAULT_DB_STORAGE, AppState, fetch_voice_data, infer_account, iter_voice_items, load_llm_config, parse_since, resolve_llm_api_key

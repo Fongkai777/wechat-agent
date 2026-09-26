@@ -35,9 +35,8 @@ The scanner writes:
 
 Then decrypt:
   cd "$ROOT"
-  .venv/bin/wechat-agent decrypt --keys all_keys.json
-  .venv/bin/wechat-agent index
+  .venv/bin/python -m wechat_agent decrypt --keys all_keys.json
+  .venv/bin/python -m wechat_agent index
 
 If sudo scanning says task_for_pid failed, see docs/KEY_EXTRACTION.md.
 EOF
-

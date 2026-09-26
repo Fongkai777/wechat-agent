@@ -4,88 +4,39 @@
 
 Setup, operating behavior, and implementation limits. For a feature overview, start with the README.
 
-## Quick Start
+## Installation and Sync
 
-Requires Python 3.9+, your own macOS WeChat 4.x databases, and matching database
-keys. Key extraction depends on the WeChat/macOS version and permissions; this
-is not a universal one-click backup decoder.
+Follow the [README deployment guide](../README.md#installation-and-configuration)
+for installation, keys, account identity, startup and model configuration.
 
-From the repository root, create the environment used by the startup scripts:
+Decryption applies valid encrypted SQLite WAL records to the snapshot. The
+default date filter shows messages since 2023 without deleting source history.
+Copied paths need an explicit `account` in `web_cache/source.json`. Ongoing
+sync also needs a live source directory; a static copy cannot update itself.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
+The service checks for changed databases every 60 seconds and supports manual
+sync. Automatic sync waits while background work uses the snapshot. Only changed
+databases are decrypted again; syncing does not call models or update semantic
+indexes by itself.
 
-Place a database copy and your extracted `all_keys.json` in the project root.
-Keep the sibling media directory if you need local media:
-
-```text
-db_storage/
-  message/message_0.db
-  contact/contact.db
-  session/session.db
-  ...
-msg/                    # optional local media
-all_keys.json           # secret; never commit
-```
-
-Inspect, decrypt, and start:
-
-```bash
-python -m wechat_agent inspect
-python -m wechat_agent decrypt --keys all_keys.json
-bash scripts/start_web.sh
-```
-
-Open [http://127.0.0.1:8787](http://127.0.0.1:8787). The startup script defaults
-to records since January 1, 2023. This filters visible/indexed data; it does not
-delete or rewrite original WeChat databases. Decryption applies available
-encrypted SQLite WAL data to the decrypted copies, including recent records not
-yet checkpointed into the main database.
-
-To use the live database directory instead of a static copy:
-
-```bash
-WECHAT_AGENT_DB_STORAGE="/path/to/db_storage" bash scripts/start_web.sh
-```
-
-Alternatively, save `{"db_storage": "/path/to/db_storage"}` in the ignored file
-`web_cache/source.json`. Command-line arguments and the environment variable
-take precedence. If macOS blocks the container directory, launch from Terminal
-and grant that application Full Disk Access.
-
-The service syncs on startup and checks for changes every 60 seconds. The sidebar
-sync button checks immediately. Only changed databases are decrypted again.
-A copied folder cannot receive new WeChat messages by itself. Sync does not
-automatically call models or rebuild semantic indexes; configure RAG updates
-separately. Automatic sync is deferred while relevant background work uses the
-snapshots.
-
-Restart the existing default-port service with:
-
-```bash
-bash scripts/restart_web.command
-```
-
-The restart script targets port 8787. Optional startup overrides are
-`WECHAT_AGENT_HOST`, `WECHAT_AGENT_PORT`, and `WECHAT_AGENT_SINCE`. Keep the
-default loopback host unless you have separately secured access.
+Startup supports `WECHAT_AGENT_HOST`, `WECHAT_AGENT_PORT` and
+`WECHAT_AGENT_SINCE`. Keep the default loopback host. The restart helper stops
+the listener on 8787, so use it only after confirming that listener is this app.
 
 ## Two Retrieval Paths
 
 **Chat Q&A** uses a custom Python/SQLite retrieval pipeline:
 
 ```text
-Question + conversation history
-  -> query planning / rewriting
+Question
+  -> rule-based query planning
   -> embedding retrieval + SQLite lexical retrieval + soft contact matches
   -> reciprocal rank fusion (RRF) + optional LLM reranking
-  -> selected context -> answer with evidence
+  -> selected context + conversation history -> answer with evidence
 ```
 
-Contact matches are recall/ranking signals, not a hard route excluding other
+Conversation history informs answer generation; retrieval-side follow-up rewriting
+is not yet implemented. Contact matches are recall/ranking signals, not a hard route excluding other
 chats. Reranking currently asks a chat-completion model to judge candidates; it
 is not a dedicated OpenAI rerank endpoint. Diagnostics expose the plan, recall
 paths, ranking, and selected context. The debug fragment count affects only that
@@ -95,7 +46,7 @@ debug request; Q&A has its own retrieval-count setting.
 
 ```text
 Task + rolling time window
-  -> Q&A model selects read-only tools
+  -> independently configured task model selects read-only tools
   -> search_messages / list_private_chats / read_chat
   -> synced decrypted snapshots + saved voice transcripts
   -> structured result -> citation validation -> saved execution history
@@ -113,7 +64,7 @@ to make a model request fit.
 
 - Set an interval of every N hours/days and a lookback of the last N days/weeks/months. Supported lookbacks are 1-90 days, 1-12 weeks, or 1-3 calendar months.
 - The first scheduled task runs after one interval. Manual execution uses the same rolling window; for an enabled task it resets the next run from the manual start time. A paused task can run manually without re-enabling its schedule.
-- Task results use JSON Schema structured output. The Q&A model must support both tool calling and structured output. Replies are suggestions only; no WeChat messages are sent.
+- Task results use JSON Schema structured output. The task model must support both tool calling and structured output. Replies are suggestions only; no WeChat messages are sent.
 - Citations are registered across tool calls. Invalid references receive up to two correction attempts; unresolved references fail the run rather than being saved as a success.
 - History includes evidence, tool steps, and reported token usage. A failed request without usage data is not treated as zero-cost. Task model reads have a 300-second timeout; timeouts do not automatically retry the request.
 - Q&A, transcription, indexing, retrieval debugging, and tasks run on the server. Switching tabs, refreshing, or closing the browser does not cancel them. Stopping may need to wait for an in-flight API request to return.

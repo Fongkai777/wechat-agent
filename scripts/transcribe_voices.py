@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from wechat_agent.voice_transcribe import cached_voice_transcription, voice_cache_path
 from wechat_agent.web import (

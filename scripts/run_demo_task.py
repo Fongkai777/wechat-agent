@@ -14,7 +14,7 @@ def main():
     parser.add_argument("--root", type=Path, default=Path(".demo/showcase"))
     parser.add_argument("--mode", choices=("qa", "task"), default="task")
     parser.add_argument("--live-config", type=Path, required=True)
-    parser.add_argument("--output", type=Path, default=Path("eval/results/task"))
+    parser.add_argument("--output", type=Path, default=Path("artifacts/demo-task"))
     args = parser.parse_args()
     demo.initialize(args.root)
     demo.import_messages(args.root, demo.fixture()["increment"])

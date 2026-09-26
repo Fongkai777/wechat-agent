@@ -1,76 +1,81 @@
-# A 75-Second End-to-End Demo
+# Run with Fictional Data
 
-**Status:** synthetic import, incremental indexing, hybrid retrieval, real online
-Q&A and a tool-calling task have been verified. Their screenshots and API records
-are available. A continuous screen recording has not been produced or uploaded.
-This is a recording plan, not a claim that a video exists.
+[Project overview](../README.md) | [中文项目介绍](../README.zh-CN.md)
 
-## Verified Online Run
+This optional path runs the same application with the 40 authored messages in
+`examples/chats.json`. It needs neither a WeChat installation nor database
+keys. It is useful for exploring the UI or recording a demonstration without
+exposing private conversations. It does not test real-client key extraction.
 
-- [Current Q&A events and evidence](../eval/results/citation-regression/events.json):
-  the real application's handler generated structured conclusions and source IDs;
-  code rendered the private/group labels. No authored response was substituted.
-- [30-day task result](../eval/results/task/run.json): scanned 40 messages, retrieved
-  14 sources, consolidated two internship postings and preparation suggestions.
-- [Original attribution failure](../eval/results/live/REVIEW.md): the earlier Q&A
-  demo mislabeled private advice as a group source. Its output is retained.
-  [Post-fix regression](../eval/results/citation-regression/REPORT.md) correctly
-  cites the private chat, but does not establish general semantic correctness.
+## Prepare the Environment
 
-![Current Q&A with expanded private-chat evidence](images/qa-citations.png)
-![Task result](images/task-live.png)
-
-Reproduce online steps against only synthetic data (billable):
+From the repository root:
 
 ```bash
-python scripts/run_demo_task.py --root .demo/showcase --mode qa --live-config .demo/models.json --output artifacts/demo-qa
-python scripts/run_demo_task.py --root .demo/showcase --mode task --live-config .demo/models.json --output artifacts/demo-task
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+## Import and Index
+
+```bash
+python -m wechat_agent.demo init --root .demo/showcase
+python -m wechat_agent.demo index --root .demo/showcase
+python -m wechat_agent.demo append --root .demo/showcase
+python -m wechat_agent.demo index --root .demo/showcase
+```
+
+The first import contains 30 messages. The append adds 10, and the second index
+update processes the additions. Repeating the append or index does not duplicate
+messages. Each command must use the same root.
+
+The demo refuses to overwrite a nonempty directory without its demo marker.
+Use a new empty directory for a fresh run; never remove private data to reset it.
+
+## Open the Application
+
+```bash
 python -m wechat_agent.demo serve --root .demo/showcase
 ```
 
-Tasks created by this helper remain paused; it runs once, not on a paid schedule.
-For a citation-only regression take, use `--mode qa --root .demo/citation-check`
-and `--output artifacts/citation-regression`. Results include `answer_data`, the
-complete ordered source list and per-call usage. The checked-in screenshot was
-taken after reloading the saved answer and expanding private-chat reference 7;
-reference 22 also survived reload. No credentials are copied into the demo root.
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787). If that port is occupied,
+the command exits instead of taking over the running service or opening another
+port. Stop it with Ctrl+C. Automatic syncing from real WeChat is disabled.
 
-## Setup
+Browse the six conversations, inspect the index, and try retrieval debugging.
+The local demo starts with embedding and reranking disabled. Chat Q&A and task
+generation need a model service: configure their independent profiles in the
+demo's **Model Settings** page. This can incur provider charges; only sample
+messages should be used. Never record or publish the credential fields.
 
-Follow the README sample commands. Use only `examples/chats.json`, never a real
-account. For a fresh take use a new empty root, e.g. `--root .demo/take-2`, on
-every demo command; do not erase private data or overwrite a non-demo directory.
+All demo settings and generated history stay beneath the selected root
+(model settings here are `.demo/showcase/models.json`).
+No private source directory or existing model configuration is used as fallback.
 
-Configure Q&A/task models in the demo's model page for online steps. This uses
-separate `.demo/models.json` and requires authorized provider usage. Do not record
-credentials. Keep the local service running.
+## Suggested Walkthrough
 
-## Recording Script
+1. Import the sample and open a conversation.
+2. Append the new messages and update the index.
+3. Ask which search/RAG internships were shared in Singapore.
+4. Expand sources to compare a group posting with private interview advice.
+5. Create a task to collect internship deadlines and preparation suggestions.
 
-| Time | Show | Narration |
-|---|---|---|
-| 0–10 s | Import 30 messages; open chat browser | “Useful information is scattered between group chats and private conversations. This example uses fictional data only.” |
-| 10–22 s | Build index, append 10 messages, update index | “New messages are indexed incrementally. The second run adds ten messages rather than reprocessing the archive.” |
-| 22–38 s | Ask `新加坡有哪些搜索或 RAG 算法实习？列出要求、截止时间和申请方式。` | “I ask a question across conversations. The system retrieves evidence before generating an answer.” |
-| 38–50 s | Expand sources, compare group posting and private advice | “The answer can be checked against the original message, sender and time.” |
-| 50–65 s | Create `追踪新加坡的搜索与 RAG 实习，列出截止时间和准备建议`, interval 1 day/lookback 30 days; run once | “The same information need becomes a recurring task using read-only tools.” |
-| 65–75 s | Show task report and evaluation report | “Suggestions stay linked to evidence. I keep evaluation cases, including retrieval failures.” |
+The fixture dates are September 10-22, 2026. Task lookback windows use the
+current time; a later run may correctly find no messages. For a recording,
+adjust the fictional fixture dates consistently to the current demonstration
+period. Do not substitute an authored answer for a model response.
 
-Sample messages are dated September 10–22, 2026. For later recordings advance
-fixture dates consistently or select an appropriate lookback window. Show real
-completion states. Edit out long waits and label time cuts; do not substitute
-authored text for model output.
+Screenshots in the README use this fixture. No hosted video is currently
+provided.
 
-## Sharing Checklist
+## Automated Installation Check
 
-- Record only the isolated demo window; hide OS notifications and personal tabs.
-- Keep usernames, credentials and private sidebar content out of frame.
-- Verify all cited evidence is fictional, frame by frame.
-- Export H.264 MP4, 60–90 seconds. Upload to a user-approved Drive folder or
-  YouTube account with intended visibility. Unlisted URLs remain shareable.
-- After verifying playback, add the actual URL here, in both READMEs and to the
-  resume project title. Do not add guessed or placeholder URLs.
+```bash
+python scripts/smoke_test.py
+```
 
-Suggested title after upload:
-
-`WeChat Agent | Evidence-backed conversational search and recurring task assistant | GitHub · Demo`
+This creates temporary demo data, verifies incremental indexing, starts a
+short-lived loopback server on an OS-assigned port, checks the page, assets and
+workspace APIs, then closes the server and removes its data. It does not call
+a model or interfere with an existing service on 8787.

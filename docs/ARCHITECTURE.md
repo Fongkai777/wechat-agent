@@ -46,7 +46,7 @@ turns. Older plain-text conversations remain readable without being rewritten.
 
 Valid IDs do not establish that the cited text supports a claim. A model can
 still select the wrong valid source or misinterpret it; semantic review remains
-necessary. See the [targeted regression](../eval/results/citation-regression/REPORT.md).
+necessary. See the [evaluation guide](../eval/README.md) for reproducible checks.
 
 ## Incremental Work
 

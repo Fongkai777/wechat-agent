@@ -131,10 +131,23 @@ class SourceSyncTests(unittest.TestCase):
             self.assertEqual(handler.json_response.call_args.args[0]["messages"][0]["text"], "new")
 
     def test_local_source_config_survives_restart_and_cli_can_override(self):
-        with patch.object(web, "source_settings", return_value={"db_storage": str(self.state.db_storage)}), \
+        with patch.object(web, "source_settings", return_value={"db_storage": str(self.state.db_storage), "account": "demo_me"}), \
                 patch.dict(os.environ, {"WECHAT_AGENT_DB_STORAGE": ""}):
             self.assertEqual(web.build_parser().parse_args([]).db_storage, self.state.db_storage)
             self.assertEqual(web.build_parser().parse_args(["--db-storage", "/another/source"]).db_storage, Path("/another/source"))
+            self.assertEqual(web.build_parser().parse_args([]).account, "demo_me")
+            self.assertEqual(web.build_parser().parse_args(["--account", "demo_other"]).account, "demo_other")
+
+    def test_copied_source_keeps_explicit_sender_identity(self):
+        with patch.object(web, "source_settings", return_value={"db_storage": str(self.state.db_storage), "account": "demo_me"}), \
+                patch.dict(os.environ, {"WECHAT_AGENT_DB_STORAGE": ""}), \
+                patch.object(web, "ensure_decrypted", return_value={}), \
+                patch.object(web, "load_avatar_versions", return_value={}), \
+                patch.object(web, "build_chat_index", return_value=[]), \
+                patch.object(web, "load_image_key_settings", return_value=(None, 0)):
+            state = web.load_state(web.build_parser().parse_args([]))
+        self.assertEqual(web.infer_account(state.db_storage), "")
+        self.assertEqual(state.account, "demo_me")
 
     def test_manual_sync_reports_busy_readers_without_replacing_their_snapshot(self):
         with patch.object(web.threading.Thread, "start"):
