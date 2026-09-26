@@ -106,10 +106,19 @@ flowchart LR
 
 See the [architecture and code map](docs/ARCHITECTURE.md) for implementation details.
 
-## Quick Start
+## Installation and Configuration
 
-Try the app with **40 fictional messages in 6 conversations**. Browsing and
-local keyword retrieval require neither WeChat nor an API key.
+This guide deploys the application locally on **macOS with WeChat 4.x**.
+You need your own logged-in WeChat account, locally synced history, Python 3.9+
+and Apple's Command Line Tools. Database-key extraction is version-dependent;
+it is not guaranteed to work on every WeChat/macOS release. There is no Docker
+or public-server setup in this guide: extraction needs the local client, and
+the web service has no built-in authentication.
+
+### 1. Install the Application
+
+If Command Line Tools are not installed, run `xcode-select --install` and finish
+the installer first. Then:
 
 ```bash
 git clone https://github.com/Fongkai777/wechat-agent.git
@@ -117,25 +126,182 @@ cd wechat-agent
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-
-python -m wechat_agent.demo init       # import the initial sample
-python -m wechat_agent.demo index      # build the text index
-python -m wechat_agent.demo append     # add new sample messages
-python -m wechat_agent.demo index      # update the index incrementally
-python -m wechat_agent.demo serve
 ```
 
-Open [localhost:8787](http://127.0.0.1:8787). The demo keeps its data and settings
-in `.demo/`, separate from private data. If the port is occupied, stop the
-existing server before starting the demo.
+Run subsequent commands from the repository root with this environment active.
+For cloud voice transcription, also install the local SILK decoder:
 
-Configure models in the **Model Settings** tab to enable generated answers,
-tasks, embeddings and transcription. These features may incur provider charges.
-Q&A requires strict JSON-schema support; task execution additionally requires
-tool calling. Embedding and reranking start disabled in the sample.
+```bash
+python -m pip install 'pilk>=0.2'
+```
 
-For your own history, follow the [local-data setup guide](docs/USAGE.md).
-WeChat extraction depends on client version and local data availability.
+No Node.js build is required to run the web interface.
+
+### 2. Prepare Your WeChat Data
+
+Locate the account directory containing `db_storage/` and usually `msg/`.
+A common macOS location is:
+
+```text
+~/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/<account-folder>/
+```
+
+Use your actual account folder; the path may differ between client versions.
+Quit WeChat before copying to avoid a changing database snapshot. Copy the
+**whole** `db_storage` directory into the project, preserving any `-wal` and
+`-shm` files. Copy its sibling `msg` directory too if you need local media.
+Do not overwrite or modify the original WeChat files.
+
+```text
+wechat-agent/
+  db_storage/
+    message/message_0.db
+    contact/contact.db
+    session/session.db
+    ...
+  msg/                    # optional media; may be large
+```
+
+Inspect the copy:
+
+```bash
+python -m wechat_agent inspect
+```
+
+### 3. Obtain the Database Keys
+
+**Database keys and model API keys are different.** The app reads matching
+database keys from `all_keys.json`; an API key cannot decrypt WeChat data.
+
+Reopen WeChat and log in to the same account as the copied databases.
+The included LLDB scanner attempts to recover keys from that running process
+and verifies them against the copied databases. Run it from your own macOS
+Terminal:
+
+```bash
+bash scripts/key_scan_python_lldb.sh
+```
+
+The wrapper requests administrator permission and uses the Command Line Tools
+Python, not the project's virtualenv or Conda Python. If successful, it writes
+`all_keys.json` in the project root. Opening chats, contacts and search can
+cause additional databases to load; this does not mean every conversation has
+a separate key.
+
+If attachment is denied, no keys are found, or LLDB cannot load, follow the
+[key extraction and troubleshooting guide](docs/KEY_EXTRACTION.md).
+File-access permission and process-debugging permission are different. Do not
+disable SIP or re-sign WeChat as a routine install step; these changes affect
+system security or application integrity.
+
+Keep `all_keys.json` local and protect it as sensitive data. Then decrypt:
+
+```bash
+python -m wechat_agent doctor --keys all_keys.json
+python -m wechat_agent decrypt --keys all_keys.json
+```
+
+Decrypted copies are written to `decrypted/`; original databases are unchanged.
+Check the command's failures and skipped databases before continuing, especially
+message, contact and session databases. Creating a JSON file with no matched
+keys is not a successful extraction.
+
+### 4. Start the Local Service
+
+```bash
+bash scripts/start_web.sh
+```
+
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787).
+Keep this terminal running; `Ctrl+C` stops the service. The default date filter
+shows records from 2023-01-01 onward without deleting older source data.
+To change it, pass, for example, `--since 2020-01-01` to the startup script.
+
+**For continuous sync**, point the service at the live account directory,
+rather than the static copy. Create `web_cache/source.json` using absolute
+paths on your machine:
+
+```json
+{
+  "db_storage": "/absolute/path/to/account-folder/db_storage",
+  "media_root": "/absolute/path/to/account-folder/msg"
+}
+```
+
+Keep the matching `all_keys.json` in the project root. If macOS blocks reading
+the container, grant Full Disk Access to the terminal application launching the
+server. Restart after changing paths or permissions:
+
+```bash
+bash scripts/restart_web.command
+```
+
+This script stops the listener on **8787**; use it only when that port belongs
+to this project, and wait for active work to finish first. The service checks
+for database changes every 60 seconds; **Sync latest messages** checks manually.
+A copied folder stays static until you replace its contents. Syncing messages
+does not itself update RAG indexes or trigger model calls.
+
+### 5. Configure Model Services
+
+Open **Model Settings** and set the service base URL, model ID and API key for
+the roles you want to use. For OpenAI, create a key through the
+[official API setup guide](https://developers.openai.com/api/docs/quickstart);
+the base URL for this application's OpenAI integration is
+`https://api.openai.com/v1`. For another compatible provider, use its credentials,
+model IDs and endpoint. Do not append `/chat/completions` to the base URL.
+
+| Configuration | Purpose | API capability needed |
+|---|---|---|
+| Voice transcription | Convert local voice messages to text | Audio transcription |
+| Chat Q&A | Answer questions with source citations | Chat completions + strict JSON Schema |
+| Task assistant | Execute scheduled or manual tasks | Chat completions + tool calling + strict JSON Schema |
+| Embedding | Build and query semantic indexes | Embeddings |
+| Rerank | Reorder retrieved candidates | Chat completions; this is LLM-based reranking |
+
+The current defaults are `gpt-4o-mini-transcribe`, `gpt-5-mini` for Q&A and tasks,
+`text-embedding-3-small`, and `gpt-5-nano` for reranking. These are configuration
+defaults, not guarantees of availability; choose models your provider/account
+supports. Compatible model services may implement different API capabilities.
+
+Save the configuration before preparing indexes. Embedding and reranking can
+inherit the Q&A URL/key when left blank. Q&A, tasks and voice have separate
+profiles; they can also read the configured API-key environment variable
+(default `OPENAI_API_KEY`) from the server process. Settings entered in the UI
+are stored locally in `web_cache/llm_config.json`, so protect this directory.
+Disable optional embedding/reranking if you do not intend to use them.
+Cloud calls transmit relevant content and may incur usage charges.
+
+### 6. Prepare Indexes and Use the App
+
+In **RAG Configuration**, run **Prepare Retrieval** to execute:
+
+```text
+Voice transcription -> incremental text index -> incremental semantic index
+```
+
+Configure transcription first when local voice messages are present. Existing
+transcripts are reused. Text and semantic indexes can also be updated separately;
+semantic indexing requires an enabled, configured embedding service.
+
+| Workspace | How to use it |
+|---|---|
+| Chat content | Select a contact/group, browse history, expand supported media, or sync new messages |
+| Chat Q&A | Create a conversation, ask a question, continue with follow-ups and expand sources |
+| Task assistant | Enter a task, choose every N hours/days and a recent N days/weeks/months window; save or run immediately |
+| RAG Configuration | Update indexes, inspect retrieval and schedule automatic preparation |
+| Model Settings | Change each model role's provider, credentials and parameters |
+
+Task tools read synced chat data and saved transcripts directly; they do not
+require the Q&A vector index. Tasks save results and history without sending
+messages to WeChat. Both recurring tasks and scheduled index preparation need
+a running server and an awake computer.
+
+New messages normally need an incremental index update, not a full rebuild.
+Private configuration, Q&A/task history and indexes live under `web_cache/`;
+decrypted databases live under `decrypted/`. Do not delete these directories
+as an upgrade step. V2 images may require a separate `image_aes_key`; missing
+media or audio cannot be recovered from message metadata alone.
 
 ## Limitations and Roadmap
 

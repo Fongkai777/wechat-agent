@@ -99,10 +99,18 @@ flowchart LR
 
 实现细节和代码入口见[架构说明](docs/ARCHITECTURE.md)。
 
-## 快速开始
+## 部署与配置
 
-项目提供 **6 个会话、40 条虚构消息**。
-浏览示例和使用本地关键词检索，无需安装微信或配置 API key。
+以下流程是在 **macOS + 微信 4.x** 上部署完整应用。
+需要你自己的已登录微信账号、本地已同步的聊天记录、Python 3.9+ 和
+Apple Command Line Tools。数据库密钥提取受微信与 macOS 版本影响，
+并不保证所有版本都能成功。这里采用本机部署，不提供 Docker 或公网部署方案：
+密钥提取需要本地客户端，网页服务也没有内置登录鉴权。
+
+### 1. 安装项目
+
+如果尚未安装 Command Line Tools，先运行 `xcode-select --install` 并完成安装。
+然后执行：
 
 ```bash
 git clone https://github.com/Fongkai777/wechat-agent.git
@@ -110,24 +118,168 @@ cd wechat-agent
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-
-python -m wechat_agent.demo init       # 导入初始示例
-python -m wechat_agent.demo index      # 建立全文索引
-python -m wechat_agent.demo append     # 追加示例消息
-python -m wechat_agent.demo index      # 增量更新索引
-python -m wechat_agent.demo serve
 ```
 
-访问 [localhost:8787](http://127.0.0.1:8787)。
-示例数据和配置保存在 `.demo/`，与私人数据隔离。
-如果端口已被占用，请先停止原服务，再启动示例。
+后续命令均在仓库根目录、已激活的虚拟环境中执行。
+如果需要调用云端模型转写微信语音，再安装本地 SILK 解码依赖：
 
-在**模型配置**页设置模型后，即可使用生成回答、任务执行、Embedding 和语音转写，
-这些功能可能产生服务商费用。问答模型需支持严格 JSON Schema，
-任务模型还需支持工具调用。示例默认关闭 Embedding 和重排。
+```bash
+python -m pip install 'pilk>=0.2'
+```
 
-接入自己的聊天记录请参考[本地数据使用指南](docs/USAGE.zh-CN.md)。
-微信解析能力取决于客户端版本以及本地数据是否可用。
+运行网页不需要安装 Node.js 或编译前端。
+
+### 2. 准备微信数据
+
+找到包含 `db_storage/` 和通常与其同级的 `msg/` 的账号目录。
+macOS 上常见位置为：
+
+```text
+~/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/<账号目录>/
+```
+
+请使用自己实际的账号目录，不同客户端版本的路径可能不同。
+复制前先退出微信，避免复制过程中数据库仍在变化。
+将**整个** `db_storage` 复制到项目根目录，保留其中已有的 `-wal`、`-shm` 文件；
+需要图片、视频等本地媒体时，再复制同级的 `msg`。
+不要覆盖或修改微信原始目录。
+
+```text
+wechat-agent/
+  db_storage/
+    message/message_0.db
+    contact/contact.db
+    session/session.db
+    ...
+  msg/                    # 可选媒体目录，体积可能较大
+```
+
+检查数据库副本：
+
+```bash
+python -m wechat_agent inspect
+```
+
+### 3. 获取数据库密钥并解密
+
+**数据库密钥与模型 API Key 是两回事。**
+程序从 `all_keys.json` 读取与数据库匹配的密钥；模型 API Key 不能用于解密微信。
+
+重新打开微信，登录与数据库副本对应的账号。
+项目内置的 LLDB 扫描脚本会尝试从运行中的客户端提取密钥，
+并使用数据库副本验证是否匹配。请在本机 Terminal 中运行：
+
+```bash
+bash scripts/key_scan_python_lldb.sh
+```
+
+脚本会请求管理员权限，使用 Command Line Tools 自带的 Python，
+而非项目虚拟环境或 Conda Python。成功后，项目根目录会生成 `all_keys.json`。
+打开聊天、联系人和搜索页面可促使更多数据库被加载，
+这不代表每个联系人都使用独立密钥。
+
+遇到无法附加进程、找到 0 个密钥或 LLDB 导入错误时，
+请查看[密钥提取与排错说明](docs/KEY_EXTRACTION.md)。
+文件访问权限和进程调试权限不同；不要把关闭 SIP 或重新签名微信当作默认安装步骤，
+这些操作会影响系统安全或应用完整性。
+
+`all_keys.json` 属于敏感数据，只应保存在本机。提取后执行：
+
+```bash
+python -m wechat_agent doctor --keys all_keys.json
+python -m wechat_agent decrypt --keys all_keys.json
+```
+
+解密副本写入 `decrypted/`，不会修改原始数据库。
+继续前检查失败和跳过的数据库，尤其是消息库、联系人库和会话库。
+仅生成一个没有匹配密钥的 JSON 文件不算提取成功。
+
+### 4. 启动服务与配置同步
+
+```bash
+bash scripts/start_web.sh
+```
+
+访问 [http://127.0.0.1:8787](http://127.0.0.1:8787)。
+保持终端运行，按 `Ctrl+C` 停止服务。
+默认展示 2023-01-01 以来的消息，不会删除更早的原始数据。
+需要修改起始日期时，可给启动脚本传入 `--since 2020-01-01` 等参数。
+
+**需要持续同步新消息时**，应将数据源指向微信实时账号目录，而不是静态副本。
+创建本机配置 `web_cache/source.json`，使用自己的绝对路径：
+
+```json
+{
+  "db_storage": "/absolute/path/to/account-folder/db_storage",
+  "media_root": "/absolute/path/to/account-folder/msg"
+}
+```
+
+项目根目录仍需保留与该账号匹配的 `all_keys.json`。
+如果 macOS 阻止读取微信容器，请为启动服务的终端应用授予“完全磁盘访问权限”。
+修改路径或权限后重启：
+
+```bash
+bash scripts/restart_web.command
+```
+
+该脚本会停止 **8787** 上的监听进程，务必确认端口属于本项目，并先等待正在执行的任务结束。
+服务每 60 秒检查一次数据库变化，也可以点击“同步最新消息”。
+复制出来的文件夹不会自行更新；同步消息也不会自动更新 RAG 索引或调用模型。
+
+### 5. 获取 API Key 并配置模型
+
+打开**模型配置**页，为需要使用的功能填写服务 Base URL、模型名称和 API Key。
+使用 OpenAI 时，按[官方 API 配置指南](https://developers.openai.com/api/docs/quickstart)
+在服务商控制台创建密钥，本项目对应的 Base URL 为 `https://api.openai.com/v1`。
+使用其他兼容服务时，填写对应服务商的密钥、模型 ID 和接口地址。
+Base URL 不要额外拼接 `/chat/completions`。
+
+| 配置框 | 用途 | 服务需要支持的能力 |
+|---|---|---|
+| 语音转文字 | 将本地语音转成文本 | 音频转写接口 |
+| 聊天问答 | 生成带来源引用的回答 | Chat Completions + 严格 JSON Schema |
+| 任务助手 | 执行定时或手动任务 | Chat Completions + 工具调用 + 严格 JSON Schema |
+| Embedding | 建立和查询语义索引 | Embeddings 接口 |
+| Rerank | 对检索结果重排 | Chat Completions；当前使用 LLM 重排 |
+
+代码默认分别使用 `gpt-4o-mini-transcribe`、问答和任务的 `gpt-5-mini`、
+`text-embedding-3-small`，以及重排的 `gpt-5-nano`。
+这些是配置默认值，不代表你的账号一定可用；请按服务商实际支持的模型与接口能力填写。
+
+保存配置后再准备索引。Embedding 和重排的地址、密钥留空时可继承问答配置。
+问答、任务、语音使用独立配置框，也可从服务进程的环境变量读取密钥
+（默认变量名为 `OPENAI_API_KEY`）。
+网页保存的设置位于本机 `web_cache/llm_config.json`，请保护好该目录。
+不使用 Embedding 或重排时可关闭对应开关。云端请求会传输相关内容，并可能产生费用。
+
+### 6. 准备索引并开始使用
+
+进入 **RAG 配置**，点击“一键准备检索”，按顺序执行：
+
+```text
+语音转文字 → 增量全文索引 → 增量语义索引
+```
+
+有本地语音时先配置转写服务，已转写内容会复用。
+也可以分别更新全文索引与语义索引；语义索引需要启用并配置 Embedding 服务。
+
+| 页面 | 使用方法 |
+|---|---|
+| 聊天内容 | 选择联系人或群聊，浏览历史、查看支持的媒体、同步新消息 |
+| 聊天问答 | 新建对话，输入问题，连续追问，展开来源核对原文 |
+| 任务助手 | 填写任务内容，设置每 N 小时／天执行和最近 N 天／周／月的检索范围，保存或立即执行 |
+| RAG 配置 | 更新索引、调试检索、设置自动准备检索的周期 |
+| 模型配置 | 分别修改各功能的服务商、凭据、模型与参数 |
+
+任务工具直接读取已同步聊天及保存的语音转写，不要求先建立问答向量索引。
+执行结果和历史会保存，但不会发送微信消息。
+周期任务和定时索引更新都要求服务在线、电脑保持唤醒。
+
+新消息通常只需增量更新，不必每次全量重建。
+本机配置、问答和任务历史、索引保存在 `web_cache/`，
+解密数据库在 `decrypted/`，升级代码时不要把这些目录当作临时文件删除。
+V2 图片可能需要额外的 `image_aes_key`；缺失的媒体或音频无法仅靠消息元数据恢复。
 
 ## 已知限制与计划
 
