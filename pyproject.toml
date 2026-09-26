@@ -5,7 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wechat-agent"
 version = "0.1.0"
-description = "Local macOS WeChat 4.x database decrypt and export helpers"
+description = "A local, citation-backed knowledge assistant for searching and tracking information across WeChat conversations."
+license = {file = "LICENSE"}
 requires-python = ">=3.9"
 dependencies = [
   "pycryptodome>=3.20",

@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-[Features](#what-you-can-do) · [Architecture](#how-it-works) · [Deployment](#installation-and-configuration) · [Models](#model-configuration) · [Usage](#using-the-app) · [Maintenance](#maintenance)
+[Quick Demo](#quick-demo) · [Features](#what-you-can-do) · [Architecture](#how-it-works) · [Real Data](#installation-and-configuration) · [Models](#model-configuration) · [Usage](#using-the-app)
 
 **A personal knowledge assistant for your WeChat conversations.**
 
@@ -14,9 +14,46 @@ An opportunity shared in a group and a friend's advice in a private chat can
 be retrieved together, with links to the original evidence. Recurring tasks
 extend this from answering questions to tracking information over time.
 
-![Chat history browser](docs/images/chats.png)
+## Quick Demo
 
-*All screenshots use fictional sample conversations.*
+**[Watch the 77-second walkthrough](docs/demo/wechat-agent-demo.mp4)**
+
+[![Watch: browse chats, ask across conversations, inspect evidence, create a task and incrementally index new messages](docs/images/demo-poster.jpg)](docs/demo/wechat-agent-demo.mp4)
+
+Browse chats → ask across conversations → expand original evidence → create a
+daily task → inspect findings → import 10 messages and update the index.
+
+Recorded from the real application with fictional data and live model answers.
+English captions, Chinese interface, no audio. Model waiting time is edited out
+and labeled. This take uses local keyword retrieval; embedding and reranking
+are optional and are not demonstrated in the video.
+
+### Run the Fictional Workspace
+
+**No WeChat installation, database keys or private messages required.**
+Python 3.9+ is sufficient for browsing and local indexing. Run from a terminal:
+
+```bash
+git clone https://github.com/Fongkai777/wechat-agent.git
+cd wechat-agent
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m wechat_agent.demo init --root .demo/quick
+python -m wechat_agent.demo index --root .demo/quick
+python -m wechat_agent.demo serve --root .demo/quick
+```
+
+Open [localhost:8787](http://127.0.0.1:8787). To generate new Q&A answers or task
+results, configure your own model credentials in the demo's **Model Settings**;
+those calls may incur charges. The video can be watched without any setup.
+If 8787 is already in use, stop your existing instance first rather than
+starting a duplicate. The demo never falls back to private account data.
+
+[Demo details and recording notes](docs/DEMO.md) ·
+[Connect your own WeChat history](#installation-and-configuration)
+
+*All screenshots and the recording use fictional sample conversations.*
 
 ## What You Can Do
 
@@ -55,6 +92,8 @@ Prepare retrieval data in one sequence: voice transcription, incremental text
 indexing, then semantic indexing. New messages are appended; changed transcripts
 update the affected records and semantic chunks. The RAG workspace exposes index
 status, retrieval diagnostics and scheduled preparation.
+
+![Chat history browser](docs/images/chats.png)
 
 <details>
 <summary>Index preparation and retrieval settings</summary>
@@ -361,6 +400,10 @@ for an interactive session and the [usage guide](docs/USAGE.md) for operational 
 Passing this check does not establish key-extraction compatibility or verify
 your cloud model access.
 
+Optional [answer-quality checks](docs/ANSWER_QUALITY.md) cover correctness,
+completeness, citation support, latency and cost on fictional conversations.
+They are small model-graded checks, not a production accuracy benchmark.
+
 ## Limitations and Roadmap
 
 - Only locally available history and media can be read. Media decoding depends
@@ -375,6 +418,9 @@ your cloud model access.
   citation-support checks and performance improvements for large archives.
 
 ## Privacy and Credits
+
+Original project code is available under the [MIT License](LICENSE).
+See [third-party notices](THIRD_PARTY_NOTICES.md) for separately licensed material.
 
 Chat data is stored locally. Cloud model features send selected text or audio
 to the configured provider; this is not an offline-only application. Use only

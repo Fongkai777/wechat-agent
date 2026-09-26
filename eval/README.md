@@ -1,4 +1,4 @@
-# Retrieval Checks
+# Retrieval and Answer Checks
 
 The repository includes 16 labeled questions and 40 fictional messages for
 repeatable retrieval checks. This is a small synthetic fixture, not a production
@@ -26,6 +26,20 @@ and API usage metadata in the ignored `artifacts/` directory.
 The no-evidence question is excluded from positive retrieval-hit denominators.
 Valid source IDs do not prove that a generated claim is supported by its source.
 Answer completeness and citation support require separate semantic review.
+
+## Current Answer Quality
+
+The [answer quality check](../docs/ANSWER_QUALITY.md) runs the current structured
+Q&A handler and grades correctness, completeness and citation support. It also
+records end-to-end latency and estimated API cost. Its small synthetic results
+are explicitly model-graded, not a production accuracy benchmark.
+
+```bash
+python scripts/evaluate_answers.py --live-config .demo/showcase/models.json
+```
+
+This is a paid opt-in run. Use `--cases E03,E04,E08,E10,E12,E13,E14,E16` to
+reproduce the documented subset; omitting it runs all 16 cases.
 
 ## Optional Cloud Run
 

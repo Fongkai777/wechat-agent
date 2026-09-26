@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-[功能介绍](#核心功能) · [技术概览](#技术概览) · [部署配置](#部署与配置) · [模型配置](#模型配置) · [开始使用](#开始使用) · [日常维护](#日常维护)
+[Quick Demo](#quick-demo) · [功能介绍](#核心功能) · [技术概览](#技术概览) · [接入真实数据](#部署与配置) · [模型配置](#模型配置) · [开始使用](#开始使用)
 
 **把微信聊天记录变成可检索、可追问、可持续跟进的个人知识库。**
 
@@ -13,9 +13,43 @@ WeChat Agent 帮你从分散的私聊和群聊中找回信息：回顾过去的�
 你可以把它们放在一个问题里检索、汇总，并展开原文核对。
 对于需要持续关注的信息，则交给定时任务跟进。
 
-![聊天内容浏览](docs/images/chats.png)
+## Quick Demo
 
-*页面截图均使用虚构示例数据。*
+**[观看 77 秒完整演示](docs/demo/wechat-agent-demo.mp4)**
+
+[![点击观看：浏览聊天、跨会话提问、展开证据、定时任务和增量索引](docs/images/demo-poster.jpg)](docs/demo/wechat-agent-demo.mp4)
+
+浏览聊天 → 跨会话提问 → 展开原始证据 → 创建每日任务 → 查看执行结果
+→ 导入 10 条新消息并增量更新索引。
+
+视频录自真实应用，数据全部虚构，问答与任务结果来自真实模型调用。
+中文界面、英文说明字幕，无音轨；较长的模型等待已剪去并标注。
+本次展示本地关键词检索，未启用可选的 Embedding 和重排。
+
+### 运行虚构数据工作区
+
+**不需要安装微信、提取数据库密钥，也不需要私人聊天记录。**
+使用 Python 3.9+ 即可体验聊天浏览与本地索引：
+
+```bash
+git clone https://github.com/Fongkai777/wechat-agent.git
+cd wechat-agent
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m wechat_agent.demo init --root .demo/quick
+python -m wechat_agent.demo index --root .demo/quick
+python -m wechat_agent.demo serve --root .demo/quick
+```
+
+访问 [localhost:8787](http://127.0.0.1:8787)。生成新的问答或任务结果时，
+需要在 Demo 的「模型配置」中填写自己的服务凭据，相关调用可能产生费用。
+仅观看视频无需任何安装。端口已被占用时，请先确认并停止自己已有的实例，勿重复启动。
+Demo 不会回退读取真实账号数据。
+
+[示例与录制说明](docs/DEMO.md) · [接入自己的微信记录](#部署与配置)
+
+*页面截图与视频均使用虚构示例数据。*
 
 ## 核心功能
 
@@ -49,6 +83,8 @@ WeChat Agent 帮你从分散的私聊和群聊中找回信息：回顾过去的�
 语音转文字、全文索引和语义索引可以依次执行。
 新消息增量追加，转写变化更新对应记录及受影响的语义块。
 RAG 配置页集中展示索引状态、检索调试和定时更新设置。
+
+![聊天内容浏览](docs/images/chats.png)
 
 <details>
 <summary>索引准备与检索配置</summary>
@@ -335,6 +371,9 @@ python scripts/smoke_test.py
 
 自检通过不代表所有微信版本都能提取密钥，也不验证你的云端模型权限。
 
+可选的[回答质量检查](docs/ANSWER_QUALITY.md)覆盖正确性、完整性、引用支持度、延迟与费用。
+它使用少量虚构对话和模型评审，不代表生产环境准确率。
+
 ## 已知限制与计划
 
 - 只能读取本地已有的历史和媒体；媒体解析取决于格式、密钥及缓存是否可用。
@@ -344,6 +383,9 @@ python scripts/smoke_test.py
 - 后续重点：多轮查询改写、更丰富的检索评测、引用支持度检查，以及大规模聊天数据的性能优化。
 
 ## 隐私与致谢
+
+项目原创代码采用 [MIT License](LICENSE)，第三方材料保留各自许可，
+详见[第三方声明](THIRD_PARTY_NOTICES.md)。
 
 聊天数据存储在本地；使用云端模型时，相关文本或音频会发送给配置的服务商，
 因此本项目并非纯离线应用。请仅处理你有权访问的数据。

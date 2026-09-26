@@ -21,6 +21,7 @@ runtime_probe.txt
 *.key
 *.pkl
 *.mp4
+!docs/demo/wechat-agent-demo.mp4
 *.mov
 *.webm
 *.zip
