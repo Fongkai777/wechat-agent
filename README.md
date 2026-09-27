@@ -1,5 +1,7 @@
 # WeChat Agent
 
+[![Tests and publication safety](https://github.com/Fongkai777/wechat-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Fongkai777/wechat-agent/actions/workflows/ci.yml?query=branch%3Amain)
+
 [English](README.md) | [中文](README.zh-CN.md)
 
 [Quick Demo](#quick-demo) · [Features](#what-you-can-do) · [Architecture](#how-it-works) · [Real Data](#installation-and-configuration) · [Models](#model-configuration) · [Usage](#using-the-app)
