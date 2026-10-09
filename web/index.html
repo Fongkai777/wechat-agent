@@ -205,7 +205,21 @@
                   <footer class="goal-editor-footer"><span></span><button id="goalCancelBtn" type="button" class="goal-secondary">取消</button><button id="goalSaveBtn" type="submit" class="goal-primary">保存</button></footer>
                 </form>
               </article>
-              <section id="goalEditorResult" class="goal-output" aria-label="执行结果" hidden></section>
+              <section id="goalEditorResult" class="goal-output goal-skill-editor" aria-label="Skill 编辑器" hidden>
+                <header class="goal-output-header"><h2>Skill</h2><button id="goalSkillGenerate" type="button" class="goal-primary"><img src="/static/icons/plus.svg" alt="" />生成 Skill</button></header>
+                <p id="goalSkillSummary" class="goal-note"></p>
+                <div class="goal-output-body">
+                  <div class="skill-file-toolbar">
+                    <select id="goalSkillFile" aria-label="Skill 文件" hidden></select>
+                    <button id="goalSkillImport" class="goal-secondary" type="button">导入代码包</button>
+                    <button id="goalSkillExport" class="goal-secondary" type="button">导出代码包</button>
+                    <button id="goalSkillValidate" class="goal-secondary" type="button">测试 Skill</button>
+                    <input id="goalSkillUpload" type="file" accept=".json,application/json" hidden />
+                  </div>
+                  <label>Skill 文件<textarea id="goalSkillText" spellcheck="false" aria-label="Skill 源码或执行计划"></textarea></label>
+                  <p id="goalSkillStatus" class="goal-note" role="status"></p>
+                </div>
+              </section>
             </div>
             <div id="goalCards" class="goal-cards"></div>
           </div>

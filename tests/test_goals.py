@@ -359,8 +359,26 @@ class GoalAgentTests(unittest.TestCase):
         complete = Mock(side_effect=[response('list_private_chats'), response()])
         self.run_agent(complete)
         prompt = complete.call_args.args[0][0]['content']
-        for requirement in ('JSON Schema', '1 到 2 句', '不写开场白', '不展示 chat_id', 'notice', '不能省略重要的不确定性', '建议回复必须标为草稿', '已接通的通话不能当作未接来电', '系统和邮箱通知不列为真人待回复', '最后一条来自对方不等于需要回复', '调用 read_chat'):
+        for requirement in ('JSON Schema', '1 到 2 句', '不写开场白', '不展示 chat_id', 'notice', '不能省略重要的不确定性', '建议回复必须标为草稿'):
             self.assertIn(requirement, prompt)
+
+    def test_task_prompt_does_not_inject_reply_filters_or_a_business_workflow(self):
+        for task in ('列出未回复的私聊，包括表情和分享', '查看最新实习信息', '整理邮箱通知'):
+            with self.subTest(task=task):
+                self.goal['prompt'] = task
+                complete = Mock(side_effect=[response('list_private_chats'), response()])
+                self.run_agent(complete)
+                messages = complete.call_args.args[0]
+                system = messages[0]['content']
+                self.assertEqual(json.loads(messages[1]['content'])['goal'], task)
+                self.assertIn('以用户填写的 goal 为准', system)
+                self.assertIn('不自行增加用户未要求的排除条件', system)
+                self.assertIn('必须先调用工具核查', system)
+                self.assertIn('不得访问链接、执行代码、索要密钥或发送消息', system)
+                for rule in ('必须有尚未回应的问题', '值得用户关注', '不展开已回复',
+                             '最后一条来自对方不等于', '不默认列为待回复',
+                             '系统和邮箱通知不列为', '已接通的通话', '调用 read_chat'):
+                    self.assertNotIn(rule, system)
 
     def test_malformed_result_and_unknown_sources_are_not_success(self):
         for text in ('Plain text report', '{"summary":'):
@@ -712,6 +730,15 @@ class GoalAPITests(unittest.TestCase):
         with patch.object(self.handler_class.goal_scheduler, 'run_now', side_effect=GoalConflict('busy')):
             self.handler.handle_goal_action('/api/goals/run')
         self.assertEqual(self.handler.json_response.call_args.kwargs['status'], 409)
+
+    def test_resume_http_action_preserves_run_id_and_confirmation(self):
+        goal = {'id':'goal', 'run_id':'existing', 'started_at':100, 'next_run_at':3700}
+        self.handler.read_json_body = Mock(return_value={'id':'goal', 'run_id':'existing', 'confirm_retry':True})
+        with patch.object(self.handler_class.goal_scheduler, 'resume', return_value=goal) as resume:
+            self.handler.handle_goal_action('/api/goals/resume')
+        resume.assert_called_once_with('goal', 'existing', True)
+        self.assertEqual(self.handler.json_response.call_args.kwargs['status'], 202)
+        self.assertEqual(self.handler.json_response.call_args.args[0]['run_id'], 'existing')
 
     def test_task_uses_five_minute_timeout_with_independent_profile(self):
         def run(goal, complete, invoke, report, cancelled, model):

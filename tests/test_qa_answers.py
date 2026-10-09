@@ -100,6 +100,11 @@ class AnswerPersistenceTests(unittest.TestCase):
             mock = patch.object(web, target, return_value=value)
             mock.start()
             self.addCleanup(mock.stop)
+        def agent(question, history, people, tools, complete, generate, emit, checkpoint, check, **kwargs):
+            context = sources()
+            return generate(question, context, history), context, {"query_plan": {"query": question}, "trace": [{"tool": "hybrid_search"}]}
+        mock = patch.object(web, "run_conversation_agent", side_effect=agent)
+        mock.start(); self.addCleanup(mock.stop)
 
     def run_answer(self, question="What did Lin suggest?", **payload):
         emit = Mock()
@@ -127,11 +132,11 @@ class AnswerPersistenceTests(unittest.TestCase):
         self.assertEqual(len(event["conversation"]["messages"]), 2)
         self.assertEqual(call.args[4], [])
 
-    def test_person_summary_is_an_explicit_separate_source(self):
-        with patch.object(web, "build_person_summary", return_value="Lin sent 5 messages."):
-            event, call = self.run_answer()
-        self.assertEqual(event["sources"][-1]["chat_type"], "index_summary")
-        self.assertEqual(len(call.args[3]), 14)
+    def test_query_plan_and_tool_trace_survive_reload(self):
+        event, call = self.run_answer()
+        stored = web.get_qa_conversation(self.state.qa_store, "test")["messages"][-1]
+        self.assertEqual(stored["retrieval"]["query_plan"]["query"], "What did Lin suggest?")
+        self.assertEqual(stored["retrieval"]["trace"][0]["tool"], "hybrid_search")
 
     def test_legacy_and_malformed_structured_records_remain_readable(self):
         for data in (None, answer([99])):

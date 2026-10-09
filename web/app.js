@@ -711,7 +711,7 @@ async function saveActiveQaConversation() {
   const data = await postJSON("/api/qa/conversation", {
     id: state.activeQaConversation.id,
     title: state.activeQaConversation.title,
-    messages: state.qaMessages.filter((item) => !item.pending && !item.error),
+    messages: state.qaMessages.filter((item) => !item.pending),
   });
   state.activeQaConversation = data.conversation;
   state.qaConversations = data.conversations || [];
@@ -1825,7 +1825,6 @@ async function askQuestion(event) {
   startQaTimer(assistantMessage);
   updateQaProgressFromMessage(assistantMessage);
   try {
-    await saveActiveQaConversation().catch(() => {});
     await streamQuestion(question, assistantMessage, conversationId, controller);
   } catch (error) {
     assistantMessage.pending = false;
@@ -1844,6 +1843,7 @@ async function askQuestion(event) {
     state.qaStreamController = null;
     qaAskBtn.disabled = false;
     qaAskBtn.textContent = "↑";
+    await reloadQaAnswerHistory(conversationId);
   }
 }
 
@@ -1860,6 +1860,7 @@ async function streamQuestion(question, assistantMessage, conversationId, contro
 }
 
 function handleQaStreamEvent(event, assistantMessage) {
+  if (event.turn_id) assistantMessage.turn_id = event.turn_id;
   if (event.event === "progress") {
     assistantMessage.progress = event.message || "正在处理";
     updateQaProgressFromMessage(assistantMessage);
@@ -1876,6 +1877,9 @@ function handleQaStreamEvent(event, assistantMessage) {
     return;
   }
   if (event.event === "done") {
+    delete assistantMessage.error;
+    delete assistantMessage.stopped;
+    assistantMessage.resumable = false;
     assistantMessage.pending = false;
     assistantMessage.processing_ms = Number(event.processing_ms || 0) || elapsedForMessage(assistantMessage);
     assistantMessage.elapsed_ms = assistantMessage.processing_ms;
@@ -1948,23 +1952,78 @@ function renderQaAnswer(message) {
 
 function renderQaResponseMeta(message) {
   const elapsed = message.elapsed_ms || message.processing_ms || 0;
-  const status = message.pending ? (message.progress || "正在处理") : message.stopped ? "已停止" : elapsed ? "已完成" : "";
+  const status = message.pending ? (message.progress || "正在处理") : message.stopped ? "已停止" : message.error ? "已中断" : elapsed ? "已完成" : "";
   if (!status && !elapsed) return "";
   const stop = message.pending
     ? `<button class="qa-stop-answer" type="button" data-qa-stop="1">停止</button>`
     : "";
+  const resume = message.resumable && !message.pending && !message.stopped
+    ? `<button class="qa-stop-answer qa-resume-answer" type="button" data-qa-resume="${escapeHtml(message.turn_id || "")}" title="继续原问题和原时间范围">继续回答</button>` : "";
   return `
     <div class="qa-response-meta">
       <span data-qa-status="${escapeHtml(message.id || "")}">${escapeHtml(status)}</span>
       ${elapsed ? `<span data-qa-elapsed="${escapeHtml(message.id || "")}">${escapeHtml(formatElapsed(elapsed))}</span>` : `<span data-qa-elapsed="${escapeHtml(message.id || "")}">0.0s</span>`}
       ${stop}
+      ${resume}
     </div>
   `;
 }
 
 function bindQaMessageActions() {
-  for (const button of qaMessages.querySelectorAll(".qa-stop-answer")) {
+  for (const button of qaMessages.querySelectorAll("[data-qa-stop]")) {
     button.addEventListener("click", stopQaAnswer);
+  }
+  for (const button of qaMessages.querySelectorAll("[data-qa-resume]")) {
+    button.addEventListener("click", () => resumeQaAnswer(button.dataset.qaResume));
+  }
+}
+
+async function reloadQaAnswerHistory(conversationId) {
+  const controller = state.qaStreamController;
+  const data = await getJSON(`/api/qa/conversation?id=${encodeURIComponent(conversationId)}`).catch(() => null);
+  if (data?.conversation && state.activeQaConversation?.id === conversationId && state.qaStreamController === controller) {
+    state.activeQaConversation = data.conversation;
+    state.qaMessages = data.conversation.messages || [];
+    qaTitle.textContent = data.conversation.title || "新对话";
+    renderQaMessages();
+  }
+}
+
+async function resumeQaAnswer(turnId) {
+  if (state.qaStreamController || state.qaStarting) return;
+  const message = state.qaMessages.find(item => item.turn_id === turnId);
+  if (!message?.resumable) return;
+  const warning = message.retry_confirmation_required
+    ? "上次模型请求结果未知，可能已经计费。继续可能再次计费，确认继续吗？"
+    : "继续这条原回答？将沿用原问题、原时间范围和已保存证据，不会重新提交整段对话。";
+  if (!window.confirm(warning)) return;
+  const conversationId = state.activeQaConversation.id;
+  const controller = new AbortController();
+  state.qaStreamController = controller;
+  message.pending = true;
+  message.progress = "恢复原回答";
+  message.id = message.id || makeClientId("qa");
+  message.started_at = Date.now() - Number(message.processing_ms || 0);
+  qaAskBtn.disabled = true;
+  startQaTimer(message);
+  renderQaMessages();
+  try {
+    await window.WechatJobs.run("/api/qa/resume", {
+      conversation_id: conversationId, turn_id: turnId,
+      confirm_retry: message.retry_confirmation_required === true,
+    }, {signal: controller.signal, onEvent: event => handleQaStreamEvent(event, message)});
+  } catch (error) {
+    message.pending = false;
+    message.error = error.message || "恢复失败";
+    message.content = message.error;
+  } finally {
+    stopQaTimer(message);
+    state.qaStreamController = null;
+    qaAskBtn.disabled = false;
+    qaAskBtn.textContent = "↑";
+    await reloadQaAnswerHistory(conversationId);
+    renderQaMessages();
+    setQaProgress("");
   }
 }
 
@@ -1973,7 +2032,7 @@ function renderQaSources(message) {
   const retrievalBits = [];
   if (retrieval.mode) retrievalBits.push(retrieval.mode);
   if (retrieval.scope) retrievalBits.push(retrieval.scope);
-  if (retrieval.time_scope) retrievalBits.push(`自 ${retrieval.time_scope}`);
+  if (retrieval.time_scope) retrievalBits.push(retrieval.time_scope);
   if (Array.isArray(retrieval.related_people) && retrieval.related_people.length) {
     retrievalBits.push(`相关联系人 ${retrieval.related_people.slice(0, 4).join("、")}`);
   }
@@ -1988,15 +2047,33 @@ function renderQaSources(message) {
       const meta = qaSourceMeta(source, index + 1);
       return `
         <div class="qa-source">
-          <div class="qa-source-meta">${escapeHtml(meta)}</div>
+          <div class="qa-source-meta">${escapeHtml(meta)}${source.evidence_role === "background" ? " · 历史背景" : source.evidence_role === "surrounding" ? " · 周边对话" : ""}</div>
           <div class="qa-source-text">${escapeHtml(source.text || "")}</div>
         </div>
       `;
     })
     .join("");
-  return sources
+  const trace = renderQaSearchTrace(retrieval);
+  return trace + (sources
     ? `<details class="qa-sources"><summary>${escapeHtml(summary)}</summary>${sources}</details>`
-    : "";
+    : "");
+}
+
+function renderQaSearchTrace(retrieval) {
+  const plan = retrieval.query_plan;
+  if (!plan) return "";
+  const people = (plan.people || []).map(p => p.name).join("、") || "全库";
+  const tools = {timeline: "人物时间查询", hybrid_search: "混合搜索", surrounding: "展开前后文", background: "历史背景补查", statistics: "会话统计", unanswered: "未回复线索"};
+  const rows = (retrieval.trace || []).map(t => `<div class="qa-source">
+    <div class="qa-source-meta">${escapeHtml(tools[t.tool] || t.tool)} · ${Number(t.elapsed_ms || 0)} ms</div>
+    <div>返回 ${Number(t.returned || 0)} 条 · 纳入 ${Number(t.included || 0)} 条${t.matched == null ? "" : ` · 匹配 ${Number(t.matched)} 条`}${t.complete ? "" : " · 部分覆盖"}</div>
+    ${t.parameters?.query ? `<div class="qa-source-text">${escapeHtml(t.parameters.query)}</div>` : ""}
+  </div>`).join("");
+  return `<details class="qa-sources qa-search-trace"><summary>查询过程</summary>
+    <div class="qa-source"><div class="qa-source-text">${escapeHtml(plan.query || "")}</div>
+      <div class="qa-source-meta">对象：${escapeHtml(people)} · ${escapeHtml(retrieval.time_scope || "未限定日期")}</div>
+      ${plan.clarification ? `<div>${escapeHtml(plan.clarification)}</div>` : ""}
+    </div>${rows}</details>`;
 }
 
 function setQaProgress(text) {
@@ -2276,7 +2353,7 @@ async function recoverBackgroundJobs() {
     const jobs = await window.WechatJobs.recoverable();
     for (const job of jobs) {
       // Observation does not submit a new model request.
-      if (job.kind === "/api/qa_stream" || job.kind === "/api/qa") {
+      if (job.kind === "/api/qa_stream" || job.kind === "/api/qa" || job.kind === "/api/qa/resume") {
         if (!state.qaStreamController) resumeQaJob(job).catch(showPanelError);
       } else {
         resumeMaintenanceJob(job).catch(showPanelError);
@@ -2293,16 +2370,18 @@ async function resumeQaJob(job) {
   try {
     const data = await getJSON(`/api/qa/conversation?id=${encodeURIComponent(job.conversation_id)}`);
     state.activeQaConversation = data.conversation;
-    state.qaMessages = (data.conversation.messages || []).filter(item => !item.pending);
-    message = { id: makeClientId("qa"), role: "assistant", pending: true, content: "",
+    state.qaMessages = data.conversation.messages || [];
+    message = state.qaMessages.find(item => item.pending);
+    const existing = Boolean(message);
+    message = Object.assign(message || {}, { id: makeClientId("qa"), role: "assistant", pending: true,
       progress: "恢复后台进度", started_at: (job.started_at || Date.now()/1000) * 1000,
-      conversation_id: job.conversation_id };
+      conversation_id: job.conversation_id });
     // A completed answer may already be in history; do not append it twice.
     if (job.status && job.status !== "running") {
       await window.WechatJobs.watch(job);
       return;
     }
-    state.qaMessages.push(message);
+    if (!existing) state.qaMessages.push(message);
     qaTitle.textContent = data.conversation.title;
     renderQaMessages();
     startQaTimer(message);

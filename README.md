@@ -74,9 +74,25 @@ friend give me about preparing for the interview?”
 ### Set Recurring Tasks
 
 Describe what to look for, choose an execution interval and set a lookback
-window. The assistant selects read-only search tools, retrieves messages within
-that window, and saves findings and suggestions for each run. Tasks can also
-be run immediately, paused or reviewed through their execution history.
+window. The model generates a Skill that you can inspect and edit before saving.
+Recurring runs reuse that version: local rules read and filter messages, and a
+model is called only when the Skill requests analysis or suggestions. Tasks can
+also be run immediately, paused or reviewed through their execution history.
+
+New Skills are portable Python code packages containing a workflow, prompts,
+documentation, permissions and tests. Inspect/edit every file or export the whole
+package, improve it with another assistant, and import it back. The model designs
+the task-specific SQL, rules and workflow; the platform provides generic read-only
+message/index APIs, model calls and scheduling. Code runs in a separate macOS
+sandbox, not in the web server. Tests must pass before saving an edited package.
+Semantic tasks reuse the configured embedding service and local index. Index-backed
+Skill calls automatically prepare missing or outdated indexes before continuing,
+with progress reporting and incremental updates where possible. Recall thresholds and context sizes live in the
+visible code, with no hidden top-K cap. See [Code Skills](docs/CODE_SKILLS.md)
+for the contract, recovery behavior and current sandbox limitations.
+API embeddings send text to the provider: indexing sends message chunks, while task
+search sends only the query. Model output receives the selected evidence and context.
+Existing tool-calling tasks keep their behavior until you generate and save a Skill.
 
 Examples include checking private conversations you have not replied to,
 tracking new internship postings, or collecting restaurant recommendations.
@@ -134,14 +150,17 @@ flowchart LR
   contact associations as soft signals, RRF fusion and optional LLM reranking.
 - **Evidence-backed answers:** the model returns conclusions and source IDs;
   code validates the references and renders source metadata from retrieved records.
-- **Task execution:** a local scheduler runs a tool-calling loop over synced
-  messages. Task search is separate from the Q&A vector index.
+- **Task execution:** a local scheduler runs a LangGraph tool-calling agent over
+  synced messages, with SQLite checkpoints and explicit interrupted-run recovery.
+  Unknown model requests require confirmation before retry. Code Skills can read
+  raw messages or reuse the text/vector indexes through platform APIs.
 - **Independent model roles:** configure transcription, Q&A, tasks, embeddings
   and reranking separately.
 
 | Layer | Technology |
 |---|---|
 | Backend and scheduling | Python 3.9+, local HTTP server and background jobs |
+| Agent orchestration | LangGraph; local SQLite checkpoints for Q&A and task recovery |
 | Storage and retrieval | SQLite, FTS5/LIKE, embedding vectors scored locally |
 | Model integration | OpenAI-compatible APIs; JSON-schema answers and tool calling |
 | Frontend | HTML, CSS and JavaScript |
@@ -365,8 +384,8 @@ semantic indexing requires an enabled, configured embedding service.
 | RAG Configuration | Update indexes, inspect retrieval and schedule automatic preparation |
 | Model Settings | Change each model role's provider, credentials and parameters |
 
-Task tools read synced chat data and saved transcripts directly; they do not
-require the Q&A vector index. Tasks save results and history without sending
+Raw-message tasks read synced chat data and saved transcripts directly. SQL tasks
+need a current text index; semantic tasks also need the vector index. Tasks save results and history without sending
 messages to WeChat. Both recurring tasks and scheduled index preparation need
 a running server and an awake computer.
 
@@ -410,13 +429,15 @@ They are small model-graded checks, not a production accuracy benchmark.
 
 - Only locally available history and media can be read. Media decoding depends
   on format, keys and cache availability.
-- Saved history helps answer generation; retrieval-side rewriting of ambiguous
-  follow-up questions is still planned.
+- Q&A uses a bounded LangGraph pipeline to resolve follow-up references, validate
+  person/time constraints and select read-only retrieval tools. Expand the query
+  trace to inspect conditions and coverage. Complex dates and ambiguous identities
+  may still need clarification; see [conversational search](docs/CONVERSATIONAL_SEARCH.md).
 - Source validation makes answers inspectable, but does not guarantee that every
   conclusion is supported by its cited text.
 - Tasks require a running service and an awake computer. Broad lookback windows
   can increase processing time and model usage.
-- Next priorities: multi-turn query rewriting, broader retrieval evaluation,
+- Next priorities: broader multi-turn retrieval evaluation,
   citation-support checks and performance improvements for large archives.
 
 ## Privacy and Credits

@@ -62,6 +62,15 @@ test('source list numbers match paragraph references without truncation', () => 
   assert.equal((html.match(/class="qa-source"/g) || []).length, 13);
 });
 
+test('query trace remains visible with no sources and escapes model strings', () => {
+  const html = context().renderQaSources({retrieval: {query_plan: {query: '<img>', people: [], clarification: '请确认人物'},
+    trace: [{tool: 'timeline', returned: 0, included: 0, matched: 0, elapsed_ms: 1, complete: true}]}});
+  assert.match(html, /查询过程/);
+  assert.match(html, /请确认人物/);
+  assert.match(html, /人物时间查询/);
+  assert.doesNotMatch(html, /<img>/);
+});
+
 test('missing evidence renders without invented citations', () => {
   const msg = message();
   msg.answer_data.paragraphs = [{kind: 'limitation', text: 'No deadline found.', source_refs: []}];

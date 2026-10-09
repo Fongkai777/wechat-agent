@@ -13,6 +13,8 @@
   let timingSupported = false;
   let manualSupported = false, pendingGoalId = null;
   const resultCache = new Map();
+  let skillsSupported = false, skillText = '', skillPrompt = '', skillBusy = false;
+  let skillFile = 'workflow.py';
 
   async function request(path, data) {
     const response = await fetch(path, data ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)} : {});
@@ -30,8 +32,7 @@
     const anyRunning = goals.some(goal => goal.latest_run?.status === 'running');
     const editIndex = editing ? goals.findIndex(goal => goal.id === editing.id) : -1;
     $('goalEditorRow').style.order = String(editIndex + 1);
-    $('goalEditorResult').hidden = !editorOpen || !editing;
-    if (editorOpen && editing) $('goalEditorResult').innerHTML = resultMarkup(goals.find(goal=>goal.id===editing.id) || editing);
+    $('goalEditorResult').hidden = !editorOpen || !skillsSupported;
     $('goalNewBtn').disabled = editorOpen || formBusy || !!pendingGoalId;
     $('goalCards').innerHTML = goals.length ? goals.map((goal, index) => {
       if (editorOpen && goal.id === editing?.id) return '';
@@ -52,6 +53,8 @@
         <h2 class="goal-prompt" title="${escape(goal.prompt)}">${escape(goal.prompt)}</h2>
         <div class="goal-schedule"><img src="/static/icons/clock.svg" alt="" /><span>${intervalText(goal)}</span><span>· 检索${rangeText(goal)}</span><span>下次：${goal.enabled ? date(goal.next_run_at) : '已暂停'}</span></div>
         <footer><span>${run ? `${statusText[run.status] || ''} · ${date(run.started_at)}` : '尚无执行记录'}</span><div class="goal-run-actions">
+          ${resumeMarkup(goal.id,run,runDisabled)}
+          ${skillsSupported?`<button class="${goal.skill_version?'goal-secondary':'goal-primary'} goal-skill-action" data-skill="${escape(goal.id)}" title="${goal.skill_version?'查看或编辑 Skill':'生成任务 Skill'}" ${running || editorOpen || pendingGoalId?'disabled':''}><img src="/static/icons/${goal.skill_version?'pencil':'plus'}.svg" alt="" />${goal.skill_version?'更新 Skill':'生成 Skill'}</button>`:''}
           <button class="goal-secondary goal-run-button" data-run="${escape(goal.id)}" title="${runTitle}" ${runDisabled?'disabled':''}><img src="/static/icons/${running?'x':'refresh-cw'}.svg" alt="" />${pending?'提交中':cancelling?'停止中':running?'停止执行':'立即执行'}</button>
           </div></footer>
       </article><section class="goal-output" aria-label="${escape(goal.title)}的执行结果">${resultMarkup(goal)}</section></div>`;
@@ -60,6 +63,30 @@
 
   function resultKey(run) {
     return `${run.id}:${run.status}:${run.finished_at || ''}`;
+  }
+
+  function resumeMarkup(goalId, run, disabled=false) {
+    return run?.resumable ? `<button class="goal-secondary goal-run-button" data-resume="${escape(goalId)}" data-resume-run="${escape(run.id)}" title="沿用这次执行的任务和时间范围" ${disabled?'disabled':''}><img src="/static/icons/refresh-cw.svg" alt="" />恢复执行</button>` : '';
+  }
+
+  async function resumeRun(button) {
+    if (button.disabled || pendingGoalId || editorOpen || goals.some(g=>g.latest_run?.status==='running')) return;
+    const goalId=button.dataset.resume, runId=button.dataset.resumeRun;
+    const run=runs.find(r=>r.id===runId) || goals.find(g=>g.id===goalId)?.latest_run;
+    if (!run?.resumable) return;
+    const message=run.retry_confirmation_required
+      ? '上次模型请求结果未知，可能已计费。恢复将重试该请求，可能重复产生费用；已保存的检索结果会保留。继续吗？'
+      : '从保存的检查点继续，沿用这次执行原来的任务内容和时间范围；后续模型请求仍可能产生费用。继续吗？';
+    if (!confirm(message)) return;
+    pendingGoalId=goalId;
+    render();
+    try {
+      await request('/api/goals/resume',{id:goalId,run_id:runId,confirm_retry:!!run.retry_confirmation_required});
+      resultCache.delete(goalId);
+      await load();
+      if ($('goalHistory').open) await loadHistory(goalId);
+    } catch(e) { error($('goalsError'),e.message); }
+    finally { pendingGoalId=null; render(); }
   }
 
   function conciseResult(run) {
@@ -145,10 +172,11 @@
       const data = await request('/api/goals');
       timingSupported = Array.isArray(data.range_units) && ['days','weeks','months'].every(unit=>data.range_units.includes(unit)) && Array.isArray(data.interval_units) && ['hours','days'].every(unit=>data.interval_units.includes(unit));
       manualSupported = data.manual_run_supported === true;
+      skillsSupported = data.skills_supported === true;
       goals = data.goals;
       $('goalsMeta').textContent = `${goals.length} 个任务 · ${goals.filter(g=>g.enabled).length} 个已启用 · ${data.scheduler_running?'定时服务运行中':'定时服务未运行'}`;
       error($('goalsError'), data.scheduler_error);
-      const signature = JSON.stringify({goals,manualSupported});
+      const signature = JSON.stringify({goals,manualSupported,skillsSupported});
       if (signature !== lastSignature) {
         lastSignature = signature;
         render();
@@ -171,6 +199,9 @@
     editorOpen = true;
     $('goalEditorTitle').textContent = goal ? '编辑任务' : '新增任务';
     $('goalPrompt').value = goal?.prompt || '';
+    skillText = goal?.skill_version ? JSON.stringify(goal.skill, null, 2) : '';
+    skillPrompt = goal?.prompt || '';
+    renderSkillEditor();
     $('goalIntervalValue').value = goal?.interval_value ?? 1;
     $('goalIntervalUnit').value = goal?.interval_unit || (goal?.cadence === 'daily' ? 'days' : 'hours');
     $('goalRangeValue').value = goal?.range_type === 'recent_days' ? goal.range_value ?? goal.range_days ?? 1 : 1;
@@ -196,7 +227,7 @@
   function busy(value) {
     formBusy = value;
     $('goalNewBtn').disabled = editorOpen || formBusy || !!pendingGoalId;
-    for (const id of ['goalPrompt','goalIntervalValue','goalIntervalUnit','goalSaveBtn','goalCancelBtn','goalCancelIcon']) $(id).disabled = value;
+    for (const id of ['goalPrompt','goalIntervalValue','goalIntervalUnit','goalSaveBtn','goalCancelBtn','goalCancelIcon','goalSkillGenerate','goalSkillText','goalSkillFile','goalSkillImport','goalSkillExport','goalSkillValidate']) if ($(id)) $(id).disabled = value;
     updateRange();
   }
 
@@ -209,6 +240,103 @@
   function cancelEdit() {
     if (!formBusy) closeEditor();
   }
+
+  function renderSkillEditor() {
+    $('goalSkillText').value = skillText;
+    $('goalSkillGenerate').innerHTML = `<img src="/static/icons/${skillText?'refresh-cw':'plus'}.svg" alt="" />${skillText ? '重新生成 Skill' : '生成 Skill'}`;
+    $('goalSkillStatus').textContent = skillBusy ? '正在生成 Skill' : skillText ? '待确认保存' : '尚未生成';
+    $('goalSaveBtn').textContent = skillsSupported ? (skillText && skillPrompt===$('goalPrompt').value.trim() ? '确认保存' : '生成 Skill') : '保存';
+    let skill;
+    try { skill = JSON.parse(skillText); } catch {}
+    const fileSelect = $('goalSkillFile');
+    if (fileSelect) {
+      fileSelect.hidden = skill?.schema_version !== 3;
+      if (skill?.schema_version === 3) {
+        if (!skill.files.some(f=>f.path===skillFile)) skillFile=skill.files[0].path;
+        fileSelect.replaceChildren(...skill.files.map(f=>{
+          const option=document.createElement('option'); option.value=f.path; option.textContent=f.path; return option;
+        }));
+        fileSelect.value=skillFile;
+        $('goalSkillText').value=skill.files.find(f=>f.path===skillFile).content;
+      }
+    }
+    const steps = Array.isArray(skill?.steps) ? skill.steps : [];
+    const output = steps.find(s=>s.op==='output') || skill?.output;
+    const source = {private_latest:'私聊末条消息',private_messages:'私聊消息',all_messages:'全部聊天消息'}[steps[0]?.source || skill?.source];
+    const labels = {read:source,semantic_search:'语义 + 关键词召回',filter:'本地筛选',context:'补齐上下文',deduplicate:'去重',output:output?.mode==='list'?'直接列出':'模型整理'};
+    $('goalSkillSummary').textContent = skill ? `${skill.name || ''} · ${steps.length ? steps.map(s=>labels[s.op] || s.op).join(' → ') : `${source || ''} · ${output?.mode==='list'?'本地执行，不调用模型':'筛选后由模型整理'}`}` : '';
+    if (skill?.schema_version===3) {
+      let permissions=[];
+      try { permissions=JSON.parse(skill.files.find(f=>f.path==='manifest.json').content).permissions; } catch {}
+      $('goalSkillSummary').textContent=`${skill.name} · ${skill.files.length} 个文件 · ${permissions.join(' / ')}`;
+    }
+  }
+
+  async function generateSkill() {
+    if (formBusy || skillBusy) return;
+    const prompt=$('goalPrompt').value.trim();
+    if (!prompt) { error($('goalFormError'),'请填写任务'); return; }
+    if (skillText && !confirm('重新生成只替换当前编辑草稿，已保存的 Skill 保持不变。继续吗？')) return;
+    skillBusy=true; busy(true); error($('goalFormError'),'');
+    $('goalSkillStatus').textContent='正在生成 Skill';
+    try {
+      const data=await window.WechatJobs.run('/api/goals/skill/generate',{id:editing?.id || '',prompt}, {
+        onEvent:event=>{if(event.event==='progress') $('goalSkillStatus').textContent=event.message || '正在生成 Skill';}
+      });
+      skillText=JSON.stringify(data.skill,null,2); skillPrompt=data.prompt;
+      renderSkillEditor();
+      $('goalSkillStatus').textContent=`草稿已生成${data.validation?.passed?' · 隔离测试通过':data.validation?' · 测试未通过，需修改':''} · ${Number(data.usage?.total_tokens || 0)} tokens`;
+      if(data.validation?.error) error($('goalFormError'),data.validation.error);
+    } catch(e) { error($('goalFormError'),e.message); $('goalSkillStatus').textContent='生成未完成，原 Skill 未改变'; }
+    finally { skillBusy=false; busy(false); }
+  }
+
+  $('goalSkillGenerate').addEventListener('click',generateSkill);
+  $('goalSkillText').addEventListener('input',()=>{
+    let skill; try { skill=JSON.parse(skillText); } catch {}
+    if (skill?.schema_version===3) {
+      skill.files.find(f=>f.path===skillFile).content=$('goalSkillText').value;
+      skillText=JSON.stringify(skill,null,2);
+    } else skillText=$('goalSkillText').value;
+    $('goalSkillStatus').textContent='已修改 · 保存前需重新测试';
+  });
+  $('goalSkillFile')?.addEventListener('change',()=>{skillFile=$('goalSkillFile').value; renderSkillEditor();});
+  $('goalSkillExport')?.addEventListener('click',()=>{
+    if (!skillText) return;
+    try {
+      const skill=JSON.parse(skillText);
+      const url=URL.createObjectURL(new Blob([JSON.stringify(skill,null,2)],{type:'application/json'}));
+      const link=document.createElement('a'); link.href=url; link.download='wechat-task-skill.json'; link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    } catch { error($('goalFormError'),'代码包格式无效'); }
+  });
+  $('goalSkillImport')?.addEventListener('click',()=>{if (!formBusy) $('goalSkillUpload').click();});
+  $('goalSkillUpload')?.addEventListener('change',async()=>{
+    const file=$('goalSkillUpload').files[0];
+    if (!file || formBusy) return;
+    try {
+      if (file.size>1024*1024) throw new Error('代码包不能超过 1 MB');
+      const skill=JSON.parse(await file.text());
+      if (skill.schema_version!==3 || !Array.isArray(skill.files) || !skill.files.length || skill.files.some(f=>typeof f.path!=='string' || typeof f.content!=='string')) throw new Error('请选择有效的完整代码 Skill 包');
+      skillText=JSON.stringify(skill,null,2); skillPrompt=$('goalPrompt').value.trim(); renderSkillEditor();
+      $('goalSkillStatus').textContent='已导入草稿 · 尚未执行或保存';
+    } catch(e) {error($('goalFormError'),e.message);}
+    finally {$('goalSkillUpload').value='';}
+  });
+  async function validateCodeSkill(skill) {
+    $('goalSkillStatus').textContent='隔离测试中（虚构数据，模拟模型）';
+    const data=await window.WechatJobs.run('/api/goals/skill/validate',{skill,prompt:$('goalPrompt').value.trim()});
+    if (!data.validation?.passed) throw new Error('Skill 测试未通过');
+    $('goalSkillStatus').textContent='隔离测试通过 · 虚构数据与模拟模型';
+  }
+  $('goalSkillValidate')?.addEventListener('click',async()=>{
+    if (formBusy) return;
+    busy(true); error($('goalFormError'),'');
+    try { await validateCodeSkill(JSON.parse(skillText)); }
+    catch(e) {error($('goalFormError'),e.message); $('goalSkillStatus').textContent='测试未通过';}
+    finally {busy(false);}
+  });
+  $('goalPrompt').addEventListener('input',()=>{ if(skillsSupported) $('goalSaveBtn').textContent=skillText && skillPrompt===$('goalPrompt').value.trim()?'确认保存':'生成 Skill'; });
 
   async function loadHistory(id) {
     const data = await request(`/api/goals/history?id=${encodeURIComponent(id)}`);
@@ -230,9 +358,11 @@
     $('goalRunContent').innerHTML = `<h3 class="goal-history-result-title">${escape(date(run.started_at))} · 执行结果</h3><p class="goal-note">${escape(statusText[run.status])} · ${elapsed.toFixed(1)}s · ${escape(run.model || '等待模型')} · ${run.usage?.total_tokens == null ? 'Token 用量未返回' : `${Number(run.usage.total_tokens).toLocaleString()} tokens`}</p>
       <p class="goal-note">${run.trigger === 'manual' ? '手动执行' : '定时执行'}</p>
       ${run.range_type ? `<p class="goal-note">检索范围：${rangeText(run)} · ${escape(date(run.window_start))} 至 ${escape(date(run.window_end))}</p>` : ''}
+      ${run.usage?.model_calls?.some(call=>call.usage_unknown)?'<p class="goal-note">部分请求用量未知，以上 Token 仅为已确认用量，实际费用可能更高。</p>':''}
+      ${resumeMarkup(historyId,run,!!pendingGoalId || goals.some(g=>g.latest_run?.status==='running'))}
       <div class="goal-full-result ${run.error?'is-error':''}">${structured ? structuredMarkup(structured) : escape(run.result || run.error || run.progress)}</div>
-      ${run.usage?.model_calls?.length?`<details class="goal-detail"><summary>模型调用 · ${run.usage.model_calls.length} 轮</summary><ol>${run.usage.model_calls.map(call=>`<li>第 ${escape(call.round)} 轮 · ${escape(call.finish_reason || '未知结束原因')} · 输出 ${escape(call.completion_tokens ?? '未知')} tokens · 推理 ${escape(call.reasoning_tokens ?? '未知')} tokens · ${escape(call.tool_calls)} 次工具请求</li>`).join('')}</ol></details>`:''}
-      ${run.steps?.length?`<details class="goal-detail"><summary>执行过程 · ${run.steps.length} 次工具调用</summary><ol>${run.steps.map(step=>`<li>${escape(step.tool)}${step.query?' · '+escape(step.query):''} · ${step.count ?? 0} 条${step.warning?`<p>${escape(step.warning)}</p>`:''}${step.error?`<p class="is-error">${escape(step.error)}</p>`:''}</li>`).join('')}</ol></details>`:''}
+      ${run.usage?.model_calls?.length?`<details class="goal-detail"><summary>模型调用 · ${run.usage.model_calls.length} 轮</summary><ol>${run.usage.model_calls.map(call=>call.operation?`<li>${call.operation==='embedding'?'查询 Embedding':'回答整理'} · ${Number((call.operation==='embedding'?run.usage.embedding_usage:run.usage.answer_usage)?.total_tokens || 0)} tokens${call.usage_unknown?' · 存在用量未知的尝试':''}</li>`:`<li>第 ${escape(call.round)} 轮 · ${escape(call.finish_reason || '未知结束原因')} · 输出 ${escape(call.completion_tokens ?? '未知')} tokens · 推理 ${escape(call.reasoning_tokens ?? '未知')} tokens · ${escape(call.tool_calls)} 次工具请求</li>`).join('')}</ol></details>`:''}
+      ${run.steps?.length?`<details class="goal-detail"><summary>执行过程 · ${run.steps.length} 步</summary><ol>${run.steps.map(step=>`<li>${escape(step.tool)}${step.query?' · '+escape(step.query):''} · ${step.count ?? 0} 条${step.semantic_messages!=null?` · 语义 ${Number(step.semantic_messages)} / 关键词 ${Number(step.keyword_messages)} 条`:''}${step.warning?`<p>${escape(step.warning)}</p>`:''}${step.error?`<p class="is-error">${escape(step.error)}</p>`:''}</li>`).join('')}</ol></details>`:''}
       ${run.sources?.length?`<details id="goalSources" class="goal-detail"><summary>检索来源 · ${run.sources.length} 条</summary>${run.sources.map(source=>`<div id="goalSource-${escape(source.reference)}" class="goal-source" tabindex="-1"><div><strong>[${escape(source.reference)}] ${escape(source.chat_title)}</strong><button class="goal-text-button" data-chat="${escape(source.chat_id)}">打开聊天</button></div><small>${escape(source.time)} · ${escape(source.sender)}</small><p>${escape(source.text)}</p></div>`).join('')}</details>`:''}`;
   }
 
@@ -271,12 +401,26 @@
       if (!['hours','days'].includes(interval_unit)) throw new Error('执行周期单位仅支持小时或天');
       const max = rangeLimits[range_unit];
       if (!max || !Number.isInteger(range_value) || range_value < 1 || range_value > max) throw new Error(`检索数量须为 1 到 ${max || 90} 的整数`);
-      await request('/api/goals/save',{id:editing?.id,title,prompt,interval_value,interval_unit,range_type,range_value,range_unit,enabled:editing?.enabled ?? true});
+      if (skillsSupported && (!skillText || skillPrompt!==prompt)) {
+        busy(false); await generateSkill(); return;
+      }
+      let skillFields={};
+      if (skillsSupported) {
+        let skill;
+        try { skill=JSON.parse(skillText); } catch { throw new Error('Skill JSON 格式无效，请检查后保存'); }
+        if (skill.schema_version===3) await validateCodeSkill(skill);
+        skillFields={skill,skill_prompt:skillPrompt,expected_skill_version:editing?.skill_version || 0};
+      }
+      await request('/api/goals/save',{id:editing?.id,title,prompt,interval_value,interval_unit,range_type,range_value,range_unit,enabled:editing?.enabled ?? true,...skillFields});
       closeEditor(); await load();
     } catch(e) { error($('goalFormError'),e.message); }
     finally { busy(false); }
   });
   $('goalsGrid').addEventListener('click',async event=>{
+    const skillButton=event.target.closest('[data-skill]');
+    if(skillButton) { if(!skillButton.disabled) edit(goals.find(g=>g.id===skillButton.dataset.skill)); return; }
+    const resumeButton=event.target.closest('[data-resume]');
+    if (resumeButton) { await resumeRun(resumeButton); return; }
     const retryButton=event.target.closest('[data-result-retry]');
     if (retryButton) {
       resultCache.delete(retryButton.dataset.resultRetry);
@@ -361,6 +505,8 @@
     Array.from(document.querySelectorAll('[data-run-select]')).find(item=>item.dataset.runSelect===selectedRunId)?.focus();
   });
   $('goalRunContent').addEventListener('click',event=>{
+    const resumeButton=event.target.closest('[data-resume]');
+    if (resumeButton) { resumeRun(resumeButton); return; }
     const reference=event.target.closest('[data-goal-reference]');
     if (reference) { showReference(reference.dataset.goalReference); return; }
     const button=event.target.closest('[data-chat]');

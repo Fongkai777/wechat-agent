@@ -8,9 +8,49 @@ from .goals import GoalCancelled
 class GoalChatTools:
     """Read all matching messages in the task window from current snapshots."""
 
-    def __init__(self, state, reader, tokenizer, cancelled, voice_cache=None):
+    def __init__(self, state, reader, tokenizer, cancelled, voice_cache=None, latest_reader=None):
         self.state, self.reader, self.tokenizer, self.cancelled = state, reader, tokenizer, cancelled
         self.voice_cache = voice_cache
+        self.latest_reader = latest_reader
+
+    def skill_read(self, source, since, until):
+        self.check()
+        if source not in ('private_latest', 'private_messages', 'all_messages'):
+            raise ValueError('不支持的 Skill 数据源')
+        if not self.state.account:
+            raise ValueError('当前账户未识别，不能可靠执行 Skill 发送者筛选')
+        if not self.state.chats:
+            raise ValueError('尚无可读取的聊天数据，请先同步消息')
+        warnings, messages, scanned = [], [], 0
+        if self.state.since_ts and since < self.state.since_ts:
+            since = self.state.since_ts
+            warnings.append('早于应用数据起始日期的消息不可见')
+        for chat in self.state.chats:
+            self.check()
+            if source != 'all_messages' and chat.get('type') != 'private':
+                continue
+            if (chat.get('last_ts') or 0) < since:
+                continue
+            if source == 'private_latest':
+                if self.latest_reader is None:
+                    raise ValueError('Skill 末条消息读取器不可用')
+                items = self.latest_reader(self.state, chat, since, until, self.check, self.voice_cache)
+            else:
+                # Unlike legacy tools, missing shards cannot silently count as complete.
+                from pathlib import Path
+                if not chat.get('shards') or any(not (Path(self.state.decrypted) / s['db']).is_file() for s in chat['shards']):
+                    raise ValueError('聊天数据库分片缺失，请先同步消息')
+                items = self.reader(self.state, chat, since_ts=since, until_ts=until, max_items=None,
+                                    voice_cache=self.voice_cache, max_text_chars=None, check_cancelled=self.check, strict=True)
+            scanned += len(items)
+            for item in items:
+                known = bool(item.get('sender_username')) and not str(item['sender_username']).isdigit()
+                messages.append({**self.compact(item), 'sender_known': item.get('sender_known', known)})
+        if self.state.sync_error:
+            warnings.append('最近一次同步失败，可能缺少最新消息')
+        if not self.state.last_synced_at:
+            warnings.append('尚未确认同步成功，仅检查现有快照')
+        return {'messages': messages, 'scanned': scanned, 'complete': True, 'warning': '；'.join(warnings)}
 
     def check(self):
         if self.cancelled():
@@ -40,6 +80,8 @@ class GoalChatTools:
 
     def __call__(self, name, args, default_since, now):
         self.check()
+        if name == 'skill_read':
+            return self.skill_read(args.get('source'), default_since, now)
         if not self.state.chats:
             raise ValueError("尚无可读取的聊天数据，请先同步消息")
         requested_since = self.date(args.get("since"), default_since)

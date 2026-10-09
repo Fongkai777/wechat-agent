@@ -4,20 +4,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function setup(initialGoals = [], rangeUnits = ['days','weeks','months'], manualSupported = true) {
-  const nodes = new Map(), documentEvents = new Map(), requests = [], intervals = [];
+function setup(initialGoals = [], rangeUnits = ['days','weeks','months'], manualSupported = true, skillsSupported = false) {
+  const nodes = new Map(), documentEvents = new Map(), requests = [], intervals = [], confirmations = [];
   let goals = initialGoals;
   let failure = '';
   let confirmed = true;
   const histories = new Map();
   let readHistory = id => histories.get(id) || [];
+  let generated = {schema_version:1,name:'待回检查',description:'列出末条来自对方的私聊',source:'private_latest',filters:{sender:'other',keywords:[],keyword_match:'any'},output:{mode:'list',instruction:''}};
   const element = id => {
     if (!nodes.has(id)) nodes.set(id, {value:'',checked:false,disabled:false,hidden:false,open:false,innerHTML:'',textContent:'',events:new Map(),style:{},
       addEventListener(name,fn){this.events.set(name,fn);}, focus(){}, scrollIntoView(){}, showModal(){this.open=true;}, close(){this.open=false;},
-      classList:{contains:()=>true}});
+      replaceChildren(...children){this.children=children;},classList:{contains:()=>true}});
     return nodes.get(id);
   };
-  const document = {hidden:false,getElementById:element,querySelectorAll:()=>[],
+  const document = {hidden:false,getElementById:element,querySelectorAll:()=>[],createElement:()=>({}),
     addEventListener:(name,fn)=>documentEvents.set(name,fn),dispatchEvent:event=>documentEvents.get(event.type)?.(event)};
   const fetch = async (url, options={}) => {
     const data=options.body ? JSON.parse(options.body) : undefined;
@@ -38,16 +39,139 @@ function setup(initialGoals = [], rangeUnits = ['days','weeks','months'], manual
       goals=goals.map(g=>g.id===data.id?{...g,next_run_at:g.enabled?3800:null,latest_run:{id:'manual-run',status:'running',trigger:'manual',started_at:200,progress:'准备检索'}}:g);
     }
     if (url==='/api/goals/stop') goals=goals.map(g=>g.id===data.id?{...g,latest_run:{...g.latest_run,cancel_requested:true,progress:'停止中，等待当前请求结束'}}:g);
-    return {ok:true,json:async()=>({ok:true,goals,scheduler_running:true,runs:[],range_units:rangeUnits,interval_units:['hours','days'],manual_run_supported:manualSupported,...runData})};
+    return {ok:true,json:async()=>({ok:true,goals,scheduler_running:true,runs:[],range_units:rangeUnits,interval_units:['hours','days'],manual_run_supported:manualSupported,skills_supported:skillsSupported,...runData})};
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../web/goals.js'),'utf8'),{
-    document,fetch,setInterval:fn=>intervals.push(fn),Date,console,confirm:()=>confirmed,CustomEvent:class {constructor(type,init){this.type=type;this.detail=init.detail;}}
+    document,fetch,window:{WechatJobs:{run:async(kind,payload)=>{requests.push({url:kind,data:payload}); if(failure) throw new Error(failure);return {skill:generated,prompt:payload.prompt,usage:{total_tokens:100},validation:{passed:true}};}}},setInterval:fn=>intervals.push(fn),Date,console,confirm:message=>{confirmations.push(message);return confirmed;},CustomEvent:class {constructor(type,init){this.type=type;this.detail=init.detail;}}
   });
-  return {element,requests,document,intervals,histories,get goals(){return goals;},fail(message){failure=message;},confirm(value){confirmed=value;},onHistory(fn){readHistory=fn;},
+  return {element,requests,document,intervals,histories,confirmations,get goals(){return goals;},generate(value){generated=value;},fail(message){failure=message;},confirm(value){confirmed=value;},onHistory(fn){readHistory=fn;},
     async load(){documentEvents.get('viewchange')({detail:'goals'});await new Promise(resolve=>setImmediate(resolve));},
     async emit(id,name,event={}) {await element(id).events.get(name)({preventDefault(){},...event});},
   };
 }
+
+test('resuming a saved run keeps its ID and requires confirmation for unknown model charges',async()=>{
+  const app=setup([{id:'one',title:'Task',prompt:'Task',enabled:false,latest_run:{id:'old-run',status:'interrupted',started_at:100,resumable:true,retry_confirmation_required:true}}]);
+  await app.load();
+  assert.match(app.element('goalCards').innerHTML,/恢复执行/);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/resume'));
+  const button={dataset:{resume:'one',resumeRun:'old-run'}};
+  const target={closest:selector=>selector==='[data-resume]'?button:null};
+  app.confirm(false);
+  await app.emit('goalsGrid','click',{target});
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/resume'));
+  assert.match(app.confirmations[0],/可能重复产生费用/);
+  app.confirm(true);
+  await app.emit('goalsGrid','click',{target});
+  const request=app.requests.find(r=>r.url==='/api/goals/resume');
+  assert.deepEqual(request.data,{id:'one',run_id:'old-run',confirm_retry:true});
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/run'));
+});
+
+test('older runs without checkpoints do not expose a resume action',async()=>{
+  const app=setup([{id:'one',title:'Task',prompt:'Task',enabled:false,latest_run:{id:'old',status:'failed',started_at:100}}]);
+  await app.load();
+  assert.ok(!app.element('goalCards').innerHTML.includes('data-resume='));
+});
+
+test('Skill action sits in the footer immediately before run with a concise label',async()=>{
+  const app=setup([{id:'one',title:'Task',prompt:'Task',enabled:false,skill_version:1}],undefined,true,true);
+  await app.load();
+  const html=app.element('goalCards').innerHTML;
+  assert.ok(html.indexOf('<footer>') < html.indexOf('data-skill="one"'));
+  assert.ok(html.indexOf('data-skill="one"') < html.indexOf('data-run="one"'));
+  assert.match(html,/更新 Skill/);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/run'));
+});
+
+test('new task generates an editable skill before explicit save and does not execute it',async()=>{
+  const app=setup([],undefined,true,true); await app.load(); await app.emit('goalNewBtn','click');
+  app.element('goalPrompt').value='检查忘回私聊';
+  await app.emit('goalForm','submit');
+  assert.equal(app.requests.filter(r=>r.url==='/api/goals/skill/generate').length,1);
+  assert.equal(app.requests.filter(r=>r.url==='/api/goals/save').length,0);
+  const generated=JSON.parse(app.element('goalSkillText').value);
+  assert.equal(generated.source,'private_latest');
+  generated.name='我的待回检查';
+  app.element('goalSkillText').value=JSON.stringify(generated);
+  await app.emit('goalSkillText','input'); await app.emit('goalForm','submit');
+  const saved=app.requests.find(r=>r.url==='/api/goals/save').data;
+  assert.equal(saved.skill.name,'我的待回检查');
+  assert.equal(saved.skill_prompt,'检查忘回私聊');
+  assert.equal(saved.expected_skill_version,0);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/run'));
+  assert.ok(!app.requests.some(r=>r.url.startsWith('/api/goals/skills')));
+  assert.ok(!fs.readFileSync(path.join(__dirname,'../web/index.html'),'utf8').includes('goalSkillRevision'));
+});
+
+test('failed regeneration preserves edited skill and never saves or schedules it',async()=>{
+  const app=setup([],undefined,true,true); await app.load(); await app.emit('goalNewBtn','click');
+  app.element('goalPrompt').value='检查忘回私聊'; await app.emit('goalForm','submit');
+  const text=app.element('goalSkillText').value;
+  app.fail('生成失败'); await app.emit('goalSkillGenerate','click');
+  assert.equal(app.element('goalSkillText').value,text);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/save'));
+  assert.equal(app.element('goalSaveBtn').disabled,false);
+});
+
+test('semantic Skill shows editable execution steps and persists them without auto execution',async()=>{
+  const app=setup([],undefined,true,true);
+  const skill={schema_version:2,name:'实习信息',description:'搜索相关消息及上下文',steps:[
+    {op:'semantic_search',source:'all_messages',query:'实习机会',keywords:['intern'],min_similarity:0.25},
+    {op:'filter',sender:'any',keywords:[],keyword_match:'any'},
+    {op:'context',before:3,after:3,max_gap_minutes:30},{op:'deduplicate'},
+    {op:'output',mode:'model',instruction:'整理岗位及来源'}]};
+  app.generate(skill);
+  await app.load(); await app.emit('goalNewBtn','click');
+  app.element('goalPrompt').value='查找实习信息'; await app.emit('goalForm','submit');
+  assert.match(app.element('goalSkillSummary').textContent,/语义 \+ 关键词召回 → 本地筛选 → 补齐上下文 → 去重 → 模型整理/);
+  skill.steps[2].before=5;
+  app.element('goalSkillText').value=JSON.stringify(skill); await app.emit('goalSkillText','input');
+  await app.emit('goalForm','submit');
+  assert.equal(app.requests.find(r=>r.url==='/api/goals/save').data.skill.steps[2].before,5);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/run'));
+});
+
+test('modified task cannot save a skill compiled for an older prompt',async()=>{
+  const app=setup([],undefined,true,true); await app.load(); await app.emit('goalNewBtn','click');
+  app.element('goalPrompt').value='检查忘回私聊'; await app.emit('goalForm','submit');
+  app.element('goalPrompt').value='查询实习'; await app.emit('goalPrompt','input');
+  await app.emit('goalForm','submit');
+  assert.equal(app.requests.filter(r=>r.url==='/api/goals/skill/generate').length,2);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/save'));
+});
+
+test('code package exposes every file and tests edited source before save',async()=>{
+  const app=setup([],undefined,true,true);
+  const skill={schema_version:3,name:'Code task',description:'test',files:[
+    {path:'SKILL.md',content:'Description'}, {path:'workflow.py',content:'def run(api): return {}'},
+    {path:'manifest.json',content:'{"permissions":["messages.read"]}'},{path:'test_skill.py',content:'def test(): pass'}]};
+  app.generate(skill); await app.load(); await app.emit('goalNewBtn','click');
+  app.element('goalPrompt').value='Custom task'; await app.emit('goalForm','submit');
+  assert.equal(app.element('goalSkillFile').hidden,false);
+  assert.equal(app.element('goalSkillFile').children.length,4);
+  assert.equal(app.element('goalSkillText').value,'def run(api): return {}');
+  app.element('goalSkillText').value='def run(api): return {"edited": True}'; await app.emit('goalSkillText','input');
+  app.element('goalSkillFile').value='SKILL.md'; await app.emit('goalSkillFile','change');
+  assert.equal(app.element('goalSkillText').value,'Description');
+  await app.emit('goalForm','submit');
+  const checked=app.requests.find(r=>r.url==='/api/goals/skill/validate');
+  const saved=app.requests.find(r=>r.url==='/api/goals/save');
+  assert.ok(app.requests.indexOf(checked)<app.requests.indexOf(saved));
+  assert.match(saved.data.skill.files.find(f=>f.path==='workflow.py').content,/edited/);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/run'));
+});
+
+test('failed code validation prevents saving and preserves imported draft',async()=>{
+  const app=setup([],undefined,true,true); await app.load(); await app.emit('goalNewBtn','click');
+  app.element('goalPrompt').value='Imported';
+  app.element('goalSkillUpload').files=[{size:100,text:async()=>JSON.stringify({schema_version:3,name:'Import',files:[{path:'workflow.py',content:'def run(api): pass'}]})}];
+  await app.emit('goalSkillUpload','change'); app.fail('Test failed');
+  await app.emit('goalForm','submit');
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/save'));
+  assert.equal(app.element('goalSkillText').value,'def run(api): pass');
+  assert.equal(app.element('goalSaveBtn').disabled,false);
+});
 
 test('opening and polling goal tab only reads, never triggers execution',async()=>{
   const app=setup();await app.load();
@@ -372,18 +496,20 @@ test('history failure retains the preview and explicitly retries without executi
   assert.ok(app.requests.every(r=>!r.data));
 });
 
-test('editing retains the result on the right and result hydration preserves the draft',async()=>{
+test('editing skill on the right and result hydration preserves the draft',async()=>{
   const run={id:'run-one',status:'completed',started_at:100,finished_at:145,result:'Preview'};
-  const app=setup([{id:'one',title:'One',prompt:'Goal',latest_run:run}]);
+  const app=setup([{id:'one',title:'One',prompt:'Goal',latest_run:run}],undefined,true,true);
   let finishHistory;
   app.onHistory(()=>new Promise(resolve=>{finishHistory=resolve;}));
   await app.load();
   await app.emit('goalsGrid','click',{target:{closest:s=>s==='[data-edit]'?{dataset:{edit:'one'}}:null}});
   app.element('goalPrompt').value='Unsaved changes';
+  app.element('goalSkillText').value='unsaved skill';
+  await app.emit('goalSkillText','input');
   finishHistory([{...run,result:'Full result'}]);
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(app.element('goalEditorResult').hidden,false);
-  assert.match(app.element('goalEditorResult').innerHTML,/Full result/);
+  assert.equal(app.element('goalSkillText').value,'unsaved skill');
   assert.equal(app.element('goalPrompt').value,'Unsaved changes');
   assert.ok(!app.element('goalCards').innerHTML.includes('data-goal-row="one"'));
   await app.emit('goalCancelBtn','click');

@@ -35,6 +35,12 @@ from .jobs import JobRegistry, JobConflict, JobCancelled, check_job_cancelled, r
 from .rag_schedule import RagScheduler
 from .message_pages import select_message_page, encode_cursor, target_filter
 from .qa_answers import QA_ANSWER_FORMAT, parse_qa_answer, validate_qa_answer, qa_answer_text, qa_source_kind
+from .qa_agent import run_conversation_agent
+from .qa_tools import ConversationTools
+from .qa_recovery import (checkpoint_path as qa_checkpoint_path, recovery_info as qa_recovery_info,
+                          read_snapshot as read_qa_snapshot, discard_checkpoint as discard_qa_checkpoint,
+                          durable_model_call)
+from .search_storage import FTS_SCHEMA, delete_fts_rows
 
 from .cli import (
     classify_type,
@@ -70,6 +76,8 @@ from .voice_transcribe import (
 )
 from .goals import GoalConflict, GoalScheduler, GoalStore, GOAL_MODEL_TIMEOUT_SECONDS, run_goal_agent
 from .goal_tools import GoalChatTools
+from .task_skills import validate_skill, skill_plan, generation_messages, parse_generated_skill, SKILL_FORMAT, run_skill_graph
+from .skill_retrieval import SkillRetrieval
 
 
 DEFAULT_DB_STORAGE = Path(os.environ.get("WECHAT_AGENT_DB_STORAGE", "db_storage"))
@@ -700,6 +708,8 @@ def collect_qa_items_for_chat(
     max_items: int | None = None,
     max_text_chars: int | None = 1200,
     check_cancelled: Any = None,
+    strict: bool = False,
+    include_empty: bool = False,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     chat_id = str(rec.get("chat") or rec.get("id") or "")
@@ -713,12 +723,16 @@ def collect_qa_items_for_chat(
         table = shard["table"]
         source_key = (rel_display(db_path, state.decrypted), str(table))
         if not db_path.exists():
+            if strict:
+                raise ValueError('聊天数据库分片缺失，请先同步消息')
             continue
         conn = open_snapshot(db_path)
         conn.row_factory = sqlite3.Row
         try:
             existing = set(table_names(conn))
             if table not in existing:
+                if strict:
+                    raise ValueError('聊天数据表缺失，请先同步消息')
                 continue
             cols = {r["name"] for r in conn.execute(f'PRAGMA table_info("{table}")').fetchall()}
             needed = [
@@ -735,6 +749,8 @@ def collect_qa_items_for_chat(
                 if c in cols
             ]
             if "create_time" not in needed:
+                if strict:
+                    raise ValueError('聊天数据表缺少时间字段')
                 continue
             name2id = load_name2id(conn)
             filters: list[str] = []
@@ -763,7 +779,9 @@ def collect_qa_items_for_chat(
             limit_sql = " LIMIT ?" if max_items is not None else ""
             if max_items is not None:
                 params.append(max(1, int(max_items)))
-            rows = conn.execute(f'SELECT {", ".join(needed)} FROM "{table}"{where} ORDER BY create_time {order}{limit_sql}', params).fetchall()
+            selected = (['rowid AS source_rowid'] if include_empty else []) + needed
+            tie_order = f',rowid {order}' if include_empty else ''
+            rows = conn.execute(f'SELECT {", ".join(selected)} FROM "{table}"{where} ORDER BY create_time {order}{tie_order}{limit_sql}', params).fetchall()
             for row in rows:
                 if check_cancelled:
                     check_cancelled()
@@ -784,12 +802,15 @@ def collect_qa_items_for_chat(
                 content = qa_text_from_raw_message(state, rec, row["create_time"], raw_content, msg_type, voice, voice_cache,
                                                    full_text=max_text_chars is None)
                 if not content:
-                    continue
+                    if not include_empty:
+                        continue
+                    content = '[无文本消息]'
                 sender_name = state.contacts.get(sender_username, sender_username)
                 mine = bool(state.account and sender_username == state.account)
                 person_id, person_name = qa_person_for_fields(state, rec, sender_username, sender_name, mine)
                 items.append(
                     {
+                        **({'source_rowid':row['source_rowid']} if include_empty else {}),
                         "chat_id": rec.get("id") or rec.get("chat") or "",
                         "chat_title": rec.get("title") or rec.get("chat") or "",
                         "chat_type": rec.get("type") or "",
@@ -810,8 +831,59 @@ def collect_qa_items_for_chat(
                 )
         finally:
             conn.close()
-    items.sort(key=lambda item: (item["timestamp"] or 0, item.get("sender_username") or ""))
+    if include_empty:
+        from .skill_retrieval import deduplicate
+        items = deduplicate(items)
+        items.sort(key=lambda item: (item['timestamp'],item.get('source_db') or '',item.get('source_rowid') or 0))
+        if items and max_items:
+            tails = [item for item in items if item['timestamp']==items[-1]['timestamp']]
+            uncertain = len({r['source_db'] for r in tails})>1 and len({r['sender_username'] for r in tails})>1
+            for item in tails: item['order_uncertain']=uncertain
+    else:
+        items.sort(key=lambda item: (item["timestamp"] or 0, item.get("sender_username") or ""))
     return items[-max_items:] if max_items else items
+
+
+def collect_skill_chat_tail(state, rec, since, until, check, voice_cache=None):
+    """Select before filtering: a later outgoing message must suppress an older incoming one."""
+    from .message_pages import quote_identifier
+    candidates = []
+    if not rec.get('shards'):
+        raise ValueError('会话没有可读取的数据库分片')
+    for shard in rec['shards']:
+        check()
+        path = state.decrypted / shard['db']
+        if not path.is_file():
+            raise ValueError('聊天数据库分片缺失，请先同步消息')
+        conn = open_snapshot(path)
+        conn.row_factory = sqlite3.Row
+        try:
+            table = quote_identifier(shard['table'])
+            row = conn.execute(f'SELECT rowid AS source_rowid, * FROM {table} WHERE create_time>=? AND create_time<=? ORDER BY create_time DESC,rowid DESC LIMIT 1', (since, until)).fetchone()
+            if row is None:
+                continue
+            names = load_name2id(conn)
+            sender = names.get(row['real_sender_id'], '') if 'real_sender_id' in row.keys() else ''
+            kind = classify_type(int(row['local_type'] or 0)) if 'local_type' in row.keys() else 'unknown'
+            text = qa_text_from_raw_message(state, rec, row['create_time'], decode_content(row), kind, None, voice_cache, full_text=True)
+            candidates.append({'chat_id': rec['id'], 'chat_title': rec.get('title') or rec['id'], 'chat_type': 'private',
+                'timestamp': int(row['create_time']), 'time': fmt_ts(row['create_time']), 'sender_username': sender,
+                'sender': state.contacts.get(sender, sender), 'mine': sender == state.account,
+                'sender_known': bool(sender), 'text': text or '[无文本消息]', 'type': kind,
+                'source_db': shard['db'], 'source_table': shard['table'],
+                'local_id': row['local_id'] if 'local_id' in row.keys() else row['source_rowid'],
+                'server_id': row['server_id'] if 'server_id' in row.keys() else None})
+        finally:
+            conn.close()
+    if not candidates:
+        return []
+    latest = max(item['timestamp'] for item in candidates)
+    tails = [item for item in candidates if item['timestamp'] == latest]
+    # Separate shards do not have a reliable shared row sequence within one second.
+    item = tails[-1]
+    if len({x['sender_username'] for x in tails}) > 1:
+        item['sender_known'] = False
+    return [item]
 
 
 def cached_qa_items_for_chat(
@@ -2175,13 +2247,13 @@ def build_qa_search_db(state: AppState, progress: Any = None) -> dict[str, Any]:
                     search_text TEXT NOT NULL,
                     UNIQUE(source_db, source_table, local_id, server_id, timestamp, sender_username)
                 );
-                CREATE VIRTUAL TABLE messages_fts USING fts5(search_text, tokenize='unicode61');
                 CREATE INDEX idx_messages_source_time ON messages(source_db, source_table, timestamp DESC);
                 CREATE INDEX idx_messages_person_time ON messages(person_id, timestamp DESC);
                 CREATE INDEX idx_messages_chat_time ON messages(chat_id, timestamp DESC);
                 CREATE INDEX idx_messages_time ON messages(timestamp DESC);
                 """
             )
+            conn.execute(FTS_SCHEMA)
             total_chats = len(state.chats)
             for chat_index, chat in enumerate(state.chats, start=1):
                 if progress:
@@ -2332,7 +2404,7 @@ def remove_excluded_qa_sources(conn: sqlite3.Connection, progress: Any = None) -
         for source in sources:
             ids = [int(row[0]) for row in conn.execute("SELECT id FROM messages WHERE source_db=?", (source,))]
             invalidated += invalidate_semantic_chunks_for_messages(conn, ids)
-            conn.executemany("DELETE FROM messages_fts WHERE rowid=?", ((message_id,) for message_id in ids))
+            delete_fts_rows(conn, ids)
             removed += conn.execute("DELETE FROM messages WHERE source_db=?", (source,)).rowcount
     if removed and progress:
         progress("progress", message=f"已排除数据库副本的 {removed} 条索引记录，待更新语义块 {invalidated} 个",
@@ -2366,8 +2438,8 @@ def refresh_qa_voice_rows(
                 ).fetchone()
                 if row is None or (row["text"], row["search_text"]) == values[-2:]:
                     continue
+                delete_fts_rows(conn, [int(row["id"])])
                 conn.execute("UPDATE messages SET text=?, search_text=? WHERE id=?", (*values[-2:], row["id"]))
-                conn.execute("DELETE FROM messages_fts WHERE rowid=?", (row["id"],))
                 conn.execute("INSERT INTO messages_fts(rowid, search_text) VALUES (?, ?)", (row["id"], values[-1]))
                 changed_ids.append(int(row["id"]))
             # A vector represents a whole chunk. Its unchanged neighboring
@@ -2535,9 +2607,11 @@ def search_qa_search_db(
     limit: int,
     plan: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    # Main retrieval always searches the whole corpus. Person matches are soft signals only.
-    people = []
+    # Only a validated conversational plan may constrain identities. Keyword/name
+    # similarity from ordinary RAG search remains a soft signal.
+    people = people if plan and plan.get("verified_people") else []
     plan = plan or build_qa_search_plan(None, question, people, since_ts)
+    until_ts = plan.get("time_until")
     plan_queries = qa_plan_queries(plan, question)
     status = qa_search_db_status(state)
     related_people = []
@@ -2611,7 +2685,7 @@ def search_qa_search_db(
                 query_text = str(query_row.get("text") or "").strip()
                 if not query_text:
                     continue
-                fts_rows = query_qa_search_fts(conn, query_text, people, since_ts, fts_per_query)
+                fts_rows = query_qa_search_fts(conn, query_text, people, since_ts, fts_per_query, until_ts)
                 diagnostics["fts_count"] += len(fts_rows)
                 for rank, row in enumerate(fts_rows, start=1):
                     item = qa_item_from_search_row(row)
@@ -2623,12 +2697,12 @@ def search_qa_search_db(
                         query_text,
                         item.get("fts_rank"),
                     )
-                like_rows = query_qa_search_like(conn, query_text, people, since_ts, like_per_query)
+                like_rows = query_qa_search_like(conn, query_text, people, since_ts, like_per_query, until_ts)
                 diagnostics["like_count"] += len(like_rows)
                 for rank, row in enumerate(like_rows, start=1):
                     add_retrieval_candidate(candidate_by_key, qa_item_from_search_row(row), "like", rank, query_text)
                 if related_people:
-                    contact_rows = query_qa_search_like(conn, query_text, related_people, since_ts, max(24, like_per_query // 4))
+                    contact_rows = query_qa_search_like(conn, query_text, related_people, since_ts, max(24, like_per_query // 4), until_ts)
                     for rank, row in enumerate(contact_rows, start=1):
                         add_retrieval_candidate(
                             candidate_by_key,
@@ -2657,13 +2731,14 @@ def query_qa_search_fts(
     people: list[dict[str, Any]],
     since_ts: int | None,
     limit: int,
+    until_ts: int | None = None,
 ) -> list[sqlite3.Row]:
     query = build_fts_query(question)
     if not query:
         return []
     filters: list[str] = ["messages_fts MATCH ?"]
     params: list[Any] = [query]
-    add_search_filters(filters, params, people, since_ts)
+    add_search_filters(filters, params, people, since_ts, until_ts)
     sql = (
         "SELECT m.*, bm25(messages_fts) AS fts_rank "
         "FROM messages_fts JOIN messages m ON messages_fts.rowid = m.id "
@@ -2683,11 +2758,12 @@ def query_qa_search_like(
     people: list[dict[str, Any]],
     since_ts: int | None,
     limit: int,
+    until_ts: int | None = None,
 ) -> list[sqlite3.Row]:
     terms = qa_search_terms(question)
     filters: list[str] = []
     params: list[Any] = []
-    add_search_filters(filters, params, people, since_ts)
+    add_search_filters(filters, params, people, since_ts, until_ts)
     if terms:
         term_filters = []
         for term in terms[:QA_SEARCH_TERM_LIMIT]:
@@ -2709,6 +2785,7 @@ def add_search_filters(
     params: list[Any],
     people: list[dict[str, Any]],
     since_ts: int | None,
+    until_ts: int | None = None,
 ) -> None:
     if people:
         ids = [str(person.get("id") or "") for person in people if person.get("id")]
@@ -2718,6 +2795,9 @@ def add_search_filters(
     if since_ts is not None:
         filters.append("timestamp >= ?")
         params.append(int(since_ts))
+    if until_ts is not None:
+        filters.append("timestamp <= ?")
+        params.append(int(until_ts))
 
 
 def build_qa_search_plan(
@@ -3441,7 +3521,7 @@ def insert_semantic_chunk(
             chunk["end_time"],
             json.dumps(chunk["message_ids"], ensure_ascii=False),
             chunk["text"],
-            chunk["search_text"],
+            "",  # Embedding input is transient; keep the legacy column empty.
             chunk["content_hash"],
             model,
             dimensions,
@@ -3457,8 +3537,9 @@ def query_qa_semantic_index(
     question: str,
     people: list[dict[str, Any]],
     since_ts: int | None,
-    limit: int,
+    limit: int | None,
     plan: dict[str, Any] | None = None,
+    query_embedding: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     config = load_llm_config(state.llm_config)
     raw_profile = config["embedding"]
@@ -3487,7 +3568,10 @@ def query_qa_semantic_index(
         diagnostics["error"] = "Embedding API Key 未配置"
         return [], diagnostics
     try:
-        query_vectors, usage = call_embeddings(profile, api_key, query_texts or [question])
+        if query_embedding is not None:
+            query_vectors, usage = query_embedding['vectors'], query_embedding.get('usage', {})
+        else:
+            query_vectors, usage = call_embeddings(profile, api_key, query_texts or [question])
     except RuntimeError as exc:
         diagnostics["error"] = str(exc)
         return [], diagnostics
@@ -3510,7 +3594,7 @@ def query_qa_semantic_index(
     conn = sqlite3.connect(f"file:{state.qa_search_db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     try:
-        rows = select_semantic_candidate_rows(conn, people, since_ts)
+        rows = select_semantic_candidate_rows(conn, people, since_ts, (plan or {}).get("time_until"))
     finally:
         conn.close()
     scored: list[tuple[float, sqlite3.Row, dict[str, Any]]] = []
@@ -3542,6 +3626,7 @@ def select_semantic_candidate_rows(
     conn: sqlite3.Connection,
     people: list[dict[str, Any]],
     since_ts: int | None,
+    until_ts: int | None = None,
 ) -> list[sqlite3.Row]:
     filters = []
     params: list[Any] = []
@@ -3558,6 +3643,9 @@ def select_semantic_candidate_rows(
     if since_ts is not None:
         filters.append("end_ts >= ?")
         params.append(int(since_ts))
+    if until_ts is not None:
+        filters.append("start_ts <= ?")
+        params.append(int(until_ts))
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     return conn.execute(f"SELECT * FROM semantic_chunks {where}", params).fetchall()
 
@@ -3590,6 +3678,7 @@ def qa_item_from_semantic_row(
     }
 
 
+@durable_model_call
 def call_embeddings(
     profile: dict[str, Any],
     api_key: str,
@@ -4365,6 +4454,7 @@ def sanitize_qa_history(history: list[dict[str, Any]]) -> list[dict[str, str]]:
 def format_qa_context_item(index: int, item: dict[str, Any]) -> str:
     return (
         f"[{index}] 会话类型：{qa_source_kind(item)}；聊天：{item.get('chat_title')}\n"
+        f"证据用途：{item.get('evidence_role') or 'primary'}；消息标识：{item.get('evidence_id') or ''}\n"
         f"时间：{item.get('time')}；发送者：{item.get('sender')}；类型：{item.get('type')}\n"
         f"内容：{item.get('text')}"
     )
@@ -4382,6 +4472,11 @@ def call_qa_answer(profile, api_key, question, context, history=None):
         "缺乏证据时用 kind=limitation 说明缺失信息，可用空 source_refs；不得在 limitation 中夹带无依据的事实。"
         "索引汇总可支持统计结论，但不能当作某条实际聊天发言。"
         "建议必须注明是建议，并引用其依据。简洁回答，不复述技术流程。"
+        "严格以本轮已验证人物及时间为准，不能用其他人的发言回答目标人物的问题。"
+        "primary是本轮证据，surrounding是周边其他人的对话，background仅为历史背景，statistics是统计。"
+        "不得把background当成今天的发言，不得把surrounding其他人的观点归给目标人物。"
+        "分析态度时区分原话与推测；未回复线索不等于必须回复，已接通电话不能说成未接来电。"
+        "未完整覆盖时不得断言全部检查或没有遗漏。"
     )
     # A single repair handles invalid references from compatible providers; never
     # silently downgrade an invalid structured answer to uncited prose.
@@ -4411,6 +4506,7 @@ def call_chat_completion(
     return content
 
 
+@durable_model_call
 def call_chat_payload(profile, api_key, messages, timeout=90, tools=None, tool_choice="auto", response_format=None):
     check_job_cancelled()
     base_url = str(profile.get("base_url") or "").rstrip("/")
@@ -5356,31 +5452,78 @@ def make_handler(state: AppState):
     goal_store = GoalStore(state.qa_store.parent / "goals.sqlite3")
 
     def execute_goal(goal, report, cancelled):
+        nonlocal active_requests
         # Keep the next observation window behind the last confirmed sync,
         # so messages imported after this run are not skipped by wall-clock time.
-        try:
-            goal["data_until"] = min(goal["started_at"], datetime.fromisoformat(state.last_synced_at).timestamp())
-        except ValueError:
-            goal["data_until"] = None
-        profile = load_llm_config(state.llm_config)["task"]
-        api_key = resolve_llm_api_key(profile)
-        if not api_key:
+        if not goal.get("resume"):
+            try:
+                goal["data_until"] = min(goal["started_at"], datetime.fromisoformat(state.last_synced_at).timestamp())
+            except ValueError:
+                goal["data_until"] = None
+            if goal.get("run_id"):
+                goal_store.save_snapshot(goal)
+        skill = validate_skill(goal['skill']) if goal.get('skill_version') else None
+        if skill and skill.get('schema_version') == 3:
+            from .code_skill_web import execute_code_goal
+            with activity_lock:
+                active_requests += 1
+            try:
+                return execute_code_goal(state, goal_store, goal, report, cancelled, maintenance_lock)
+            finally:
+                with activity_lock:
+                    active_requests -= 1
+        plan = skill_plan(skill) if skill else {}
+        needs_model = not skill or plan['output']['mode'] == 'model'
+        profile = load_llm_config(state.llm_config)["task"] if needs_model else {}
+        signature_profiles = dict(profile)
+        if plan.get('search'):
+            config = load_llm_config(state.llm_config)
+            embedding_profile = effective_llm_profile(config, 'embedding')
+            embedding_key = resolve_llm_api_key(config['embedding'], config.get('qa'))
+            signature_profiles['embedding'] = {k: v for k, v in embedding_profile.items() if k != 'api_key'}
+        goal["profile_signature"] = hashlib.sha256(json.dumps(
+            {key: value for key, value in signature_profiles.items() if key != "api_key"},
+            sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        api_key = resolve_llm_api_key(profile) if needs_model else ''
+        if needs_model and not api_key:
             raise RuntimeError("请先配置任务助手模型 API Key")
-        chat_tools = GoalChatTools(state, collect_qa_items_for_chat, qa_search_terms, cancelled, load_voice_cache(state.voice_cache))
+        chat_tools = GoalChatTools(state, collect_qa_items_for_chat, qa_search_terms, cancelled, load_voice_cache(state.voice_cache), collect_skill_chat_tail)
+
+        def embed_query(query):
+            if not embedding_key:
+                raise ValueError('请先配置 Embedding API Key')
+            vectors, usage = call_embeddings(embedding_profile, embedding_key, [query])
+            return {'vectors': vectors, 'usage': usage}
+
+        retrieval_tools = SkillRetrieval(state,
+            lambda: (qa_search_db_status(state), qa_embedding_index_status(state)),
+            lambda query, since, until, embedding: query_qa_semantic_index(state, query, [], since, None,
+                {'queries': [{'text': query}], 'time_until': until}, query_embedding=embedding),
+            embed_query, qa_item_from_search_row, collect_qa_items_for_chat, chat_tools.check, chat_tools.voice_cache)
 
         def invoke(name, arguments, since, now):
             nonlocal active_requests
             with activity_lock:
                 active_requests += 1
             try:
+                if name in ('skill_search_prepare', 'skill_embed', 'skill_search', 'skill_context'):
+                    if name == 'skill_embed':
+                        return retrieval_tools(name, arguments, since, now)
+                    if not maintenance_lock.acquire(blocking=False):
+                        raise RuntimeError('索引或转写正在更新，请完成后再执行 Skill')
+                    try:
+                        return retrieval_tools(name, arguments, since, now)
+                    finally:
+                        maintenance_lock.release()
                 return chat_tools(name, arguments, since, now)
             finally:
                 with activity_lock:
                     active_requests -= 1
 
-        return run_goal_agent(goal,
+        runner = run_skill_graph if skill else run_goal_agent
+        return runner(goal,
             lambda messages, tools, choice, response_format: call_chat_payload(profile, api_key, messages, timeout=GOAL_MODEL_TIMEOUT_SECONDS, tools=tools, tool_choice=choice, response_format=response_format),
-            invoke, report, cancelled, str(profile.get("model") or ""))
+            invoke, report, cancelled, str(profile.get("model") or ("本地 Skill + Embedding" if plan.get('search') else "本地 Skill（无模型调用）")))
 
     goal_scheduler = GoalScheduler(goal_store, execute_goal)
     qa_index_lock = threading.Lock()
@@ -5513,7 +5656,7 @@ def make_handler(state: AppState):
 
     def submit_job(kind, payload, operation, run, request_id=None):
         conversation_id = str(payload.get("conversation_id") or "")
-        resource = "maintenance" if operation else "qa:" + conversation_id if kind in ("/api/qa", "/api/qa_stream") else kind
+        resource = "maintenance" if operation else "qa:" + conversation_id if kind in ("/api/qa", "/api/qa_stream", "/api/qa/resume") else kind
 
         def work(job):
             nonlocal active_requests
@@ -5584,10 +5727,15 @@ def make_handler(state: AppState):
                     "server_time": time.time(), "synced_at": state.last_synced_at, "range_units": ["days", "weeks", "months"],
                     "interval_units": ["hours", "days"],
                     "manual_run_supported": True,
+                    "skills_supported": True,
                     "scheduler_running": bool(goal_scheduler.thread and goal_scheduler.thread.is_alive())})
             if parsed.path == "/api/goals/history":
                 goal_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0]
                 return self.json_response({"ok": True, "runs": goal_store.history(goal_id)})
+            if parsed.path == '/api/goals/skills':
+                goal_id = urllib.parse.parse_qs(parsed.query).get('id', [''])[0]
+                return self.json_response({'ok': True, 'versions': goal_store.skill_versions(goal_id),
+                                           'drafts': [d for d in goal_store.skill_drafts() if d['goal_id'] == goal_id]})
             if parsed.path == "/api/voice/status":
                 return self.json_response({"ok": True, **voice_status_payload(state)})
             if parsed.path == "/api/qa/conversations":
@@ -5633,7 +5781,7 @@ def make_handler(state: AppState):
                     return self.json_response({"ok": False, "error": "没有找到该执行"}, status=404)
             if parsed.path == "/api/jobs/start" or parsed.path in self.job_routes():
                 return self.handle_job_request(parsed.path)
-            if parsed.path in {"/api/goals/save", "/api/goals/toggle", "/api/goals/delete", "/api/goals/run", "/api/goals/stop"}:
+            if parsed.path in {"/api/goals/save", "/api/goals/toggle", "/api/goals/delete", "/api/goals/run", "/api/goals/stop", "/api/goals/resume"}:
                 return self.handle_goal_action(parsed.path)
             if parsed.path == "/api/sync":
                 return self.handle_sync()
@@ -5659,6 +5807,9 @@ def make_handler(state: AppState):
                 "/api/rag/prepare": ("检索准备", self.run_rag_preparation),
                 "/api/qa_stream": ("", self.run_qa_stream),
                 "/api/qa": ("", self.run_qa_stream),
+                "/api/qa/resume": ("", self.run_qa_resume),
+                "/api/goals/skill/generate": ("", self.run_skill_generation),
+                "/api/goals/skill/validate": ("", self.run_skill_validation),
                 "/api/rag/search": ("", self.run_rag_search),
             }
 
@@ -5672,6 +5823,8 @@ def make_handler(state: AppState):
                 operation, run = self.job_routes()[kind]
                 if kind in ("/api/qa", "/api/qa_stream") and not str(payload.get("question") or "").strip():
                     raise ValueError("请输入问题")
+                if kind == '/api/qa/resume':
+                    validate_qa_resume(state.qa_store, payload)
                 job = submit_job(kind, payload, operation, run, data.get("request_id"))
             except (TypeError, ValueError) as exc:
                 return self.json_response({"ok": False, "error": str(exc)}, status=409 if isinstance(exc, JobConflict) else 400)
@@ -5709,15 +5862,43 @@ def make_handler(state: AppState):
                 ("语义索引", lambda forward: Handler.run_rag_embedding_rebuild_stream({"full": False}, forward)),
             ], emit)
 
+        def run_skill_generation(self, payload, emit):
+            from .code_skill_packages import generation_messages
+            from .code_skill_service import generate_code_skill
+            prompt = payload.get('prompt')
+            generation_messages(prompt)
+            goal_id = str(payload.get('id') or '')
+            if goal_id and not any(g['id'] == goal_id for g in goal_store.list()):
+                raise ValueError('任务不存在')
+            config = load_llm_config(state.llm_config)['task']
+            key = resolve_llm_api_key(config)
+            if not key:
+                raise ValueError('请先配置任务助手模型')
+            result = generate_code_skill(prompt,
+                lambda messages,format:call_chat_payload(config,key,messages,timeout=GOAL_MODEL_TIMEOUT_SECONDS,response_format=format),
+                goal_store,goal_id,str(config.get('model') or ''),emit)
+            emit('done', **result)
+
+        def run_skill_validation(self, payload, emit):
+            from .code_skill_service import validate_code_skill
+            prompt = str(payload.get('prompt') or '').strip()
+            if not prompt or len(prompt)>3000: raise ValueError('请填写任务内容')
+            emit('progress',message='正在隔离测试代码包')
+            validation = validate_code_skill(payload.get('skill'),prompt,goal_store)
+            emit('done',ok=True,validation=validation)
+
         def handle_goal_action(self, path):
             try:
-                data = self.read_json_body(16 * 1024)
+                data = self.read_json_body(1024 * 1024)
                 if not isinstance(data, dict):
                     raise ValueError("请求格式无效")
                 if path == "/api/goals/save":
                     goal_id = goal_store.save(data)
-                elif path == "/api/goals/run":
-                    goal = goal_scheduler.run_now(str(data.get("id") or ""))
+                elif path in {"/api/goals/run", "/api/goals/resume"}:
+                    if path.endswith("/resume"):
+                        goal = goal_scheduler.resume(str(data.get("id") or ""), str(data.get("run_id") or ""), data.get("confirm_retry", False))
+                    else:
+                        goal = goal_scheduler.run_now(str(data.get("id") or ""))
                     return self.json_response({"ok": True, "id": goal["id"], "run_id": goal["run_id"],
                         "started_at": goal["started_at"], "next_run_at": goal["next_run_at"]}, status=202)
                 elif path == "/api/goals/stop":
@@ -6105,6 +6286,11 @@ def make_handler(state: AppState):
                 return self.json_response({"ok": False, "error": "对话正在后台回答，不能覆盖执行记录"}, status=409)
             messages = payload.get("messages") if isinstance(payload.get("messages"), list) else []
             title = str(payload.get("title") or "")
+            previous = get_qa_conversation(state.qa_store, conversation_id)
+            if previous and any(m.get('turn_id') for m in previous.get('messages', [])):
+                # Existing server-owned runs must not be overwritten by stale tabs.
+                return self.json_response({"ok": True, "conversation": previous,
+                                           "conversations": list_qa_conversations(state.qa_store)})
             conv = save_qa_conversation(state.qa_store, conversation_id, messages, title)
             self.json_response({"ok": True, "conversation": conv, "conversations": list_qa_conversations(state.qa_store)})
 
@@ -6142,34 +6328,59 @@ def make_handler(state: AppState):
                 return
             self.json_response({"ok": True, "conversations": list_qa_conversations(state.qa_store)})
 
-        def run_qa_stream(self, payload, emit) -> None:
+        def run_qa_resume(self, payload, emit) -> None:
+            self.run_qa_stream(payload, emit, resume=True)
+
+        def run_qa_stream(self, payload, emit, resume=False) -> None:
             started_at = time.perf_counter()
+            requested_at = datetime.now().astimezone()
             question = str(payload.get("question") or "").strip()
-            if not question:
+            conversation_id = str(payload.get("conversation_id") or "").strip() or uuid.uuid4().hex
+            turn_id = uuid.uuid4().hex
+            previous_ms = 0
+            latest_retrieval = {}
+            latest_sources = []
+            if resume:
+                message, snapshot = validate_qa_resume(state.qa_store, payload)
+                turn_id = message['turn_id']
+                question = snapshot['question']
+                history = snapshot['history']
+                requested_at = datetime.fromisoformat(snapshot['now'])
+                previous_ms = int(message.get('processing_ms') or 0)
+                latest_retrieval, latest_sources = message.get('retrieval') or {}, message.get('sources') or []
+            elif not question:
                 emit("error", error="请输入问题")
                 return
-            conversation_id = str(payload.get("conversation_id") or "").strip() or uuid.uuid4().hex
-            history = qa_history_from_payload(payload)
-            previous = get_qa_conversation(state.qa_store, conversation_id)
-            if previous:
-                # Keep server-owned citation snapshots through subsequent turns.
-                history = list(previous.get("messages") or [])
-                # Older clients save the new question before starting the job.
-                if history and history[-1].get("role") == "user" and history[-1].get("content") == question:
-                    history.pop()
-            base_messages = [*history, {"role": "user", "content": question}]
+            else:
+                history = qa_history_from_payload(payload)
+                previous = get_qa_conversation(state.qa_store, conversation_id)
+                if previous:
+                    history = list(previous.get("messages") or [])
+                    if history and history[-1].get("role") == "user" and history[-1].get("content") == question:
+                        history.pop()
+                save_qa_conversation(state.qa_store, conversation_id, [*history,
+                    {'role': 'user', 'content': question},
+                    {'role': 'assistant', 'turn_id': turn_id, 'content': '正在后台回答', 'pending': True}])
+
+            path = qa_checkpoint_path(state.qa_store, turn_id)
+
+            def elapsed():
+                return previous_ms + int((time.perf_counter() - started_at) * 1000)
 
             def save_answer(content, **fields):
-                return save_qa_conversation(state.qa_store, conversation_id, [
-                    *base_messages, {"role": "assistant", "content": content, **fields},
-                ])
+                return update_qa_turn(state.qa_store, conversation_id, turn_id,
+                                      {"role": "assistant", "turn_id": turn_id, "content": content, **fields})
 
             def fail(message):
-                save_answer(message, error=message, processing_ms=int((time.perf_counter() - started_at) * 1000))
-                emit("error", error=message)
+                stored = save_answer(message, error=message, retrieval=latest_retrieval, sources=latest_sources,
+                                     processing_ms=elapsed())
+                emit("error", error=message, turn_id=turn_id,
+                     conversation=get_qa_conversation(state.qa_store, stored['id']))
 
             try:
-                save_answer("正在后台回答", pending=True)
+                save_answer("正在后台回答", pending=True, retrieval=latest_retrieval, sources=latest_sources,
+                            processing_ms=previous_ms)
+                emit('progress', message='继续原回答' if resume else '开始回答', turn_id=turn_id)
                 emit("progress", message="检查模型配置")
                 config = load_llm_config(state.llm_config)
                 profile = config["qa"]
@@ -6178,38 +6389,45 @@ def make_handler(state: AppState):
                     fail("请先在「大模型配置」里填写问答模型的 API Key，或设置对应环境变量")
                     return
 
-                emit("progress", message="建立联系人索引")
-                qa_index = get_qa_index()
+                emit("progress", message="读取原始查询快照" if resume else "建立联系人索引")
+                qa_index = {} if resume else get_qa_index()
                 corpus_count = int(qa_index.get("message_count") or len(qa_index.get("corpus") or []))
-                if not corpus_count:
+                if not resume and not corpus_count:
                     fail("没有可用于问答的聊天内容")
                     return
 
                 limit = int(profile.get("max_context_messages") or 40)
-                emit("progress", message=f"检索 {corpus_count} 条聊天文本 · {len(qa_index.get('people_list') or [])} 个联系人")
-                context, retrieval = select_qa_context_with_diagnostics(state, qa_index, question, limit)
-                person_summary = build_person_summary(qa_index, question)
-                if not context and not person_summary:
-                    fail("没有匹配到可用于回答的聊天片段")
-                    return
+                def checkpoint(retrieval, sources):
+                    nonlocal latest_retrieval, latest_sources
+                    latest_retrieval, latest_sources = retrieval, sources
+                    save_answer("正在后台回答", pending=True, retrieval=retrieval, sources=sources,
+                                processing_ms=elapsed())
 
-                context = list(context)
-                if person_summary:
-                    context.append({"chat_type": "index_summary", "chat_title": "联系人索引汇总",
-                                    "type": "索引摘要", "text": person_summary, "sender": "", "time": ""})
-                emit("progress", message=f"选出 {len(context)} 条相关片段，正在调用模型")
-                answer_data = call_qa_answer(
-                    profile, api_key, question, context,
-                    [item for item in history if not item.get("error") and not item.get("pending") and not item.get("stopped")],
+                def hybrid(query, people, since, until, count):
+                    plan = build_qa_search_plan(qa_index, query, people, since)
+                    plan.update(verified_people=True, time_until=until)
+                    return search_qa_search_db(state, query, people, since, count, plan)
+
+                clean_history = [item for item in history if not item.get("error") and not item.get("pending") and not item.get("stopped")]
+                answer_data, context, retrieval = run_conversation_agent(
+                    question, clean_history, qa_index.get("people_list") or [],
+                    ConversationTools(state, hybrid, qa_item_from_search_row, check_job_cancelled),
+                    lambda messages, schema: call_chat_payload(profile, api_key, messages, response_format=schema),
+                    lambda query, sources, prior: call_qa_answer(profile, api_key, query, sources, prior),
+                    emit, checkpoint, check_job_cancelled, limit=limit, now=requested_at,
+                    checkpoint_path=path, resume=resume, confirm_retry=payload.get('confirm_retry') is True,
+                    identity=qa_execution_identity(state, config, conversation_id),
                 )
                 answer = qa_answer_text(answer_data)
                 check_job_cancelled()
-                processing_ms = int((time.perf_counter() - started_at) * 1000)
+                processing_ms = elapsed()
                 stored = save_answer(answer, answer_data=answer_data, sources=context, context_count=len(context),
                                      retrieval=retrieval, processing_ms=processing_ms)
+                discard_qa_checkpoint(state.qa_store, turn_id)
                 emit(
                     "done",
                     ok=True,
+                    turn_id=turn_id,
                     answer=answer,
                     answer_data=answer_data,
                     sources=context,
@@ -6220,10 +6438,12 @@ def make_handler(state: AppState):
                     conversations=list_qa_conversations(state.qa_store),
                 )
             except JobCancelled:
-                save_answer("已停止回答", stopped=True, processing_ms=int((time.perf_counter() - started_at) * 1000))
+                save_answer("已停止回答", stopped=True, retrieval=latest_retrieval, sources=latest_sources,
+                            processing_ms=elapsed())
+                discard_qa_checkpoint(state.qa_store, turn_id)
                 raise
             except Exception as exc:
-                fail(str(exc) if isinstance(exc, RuntimeError) else "问答执行异常，请检查服务日志")
+                fail(str(exc) if isinstance(exc, (RuntimeError, ValueError, TimeoutError)) else "问答执行异常，请检查服务日志")
 
         def run_rag_search(self, payload, emit) -> None:
             question = str(payload.get("question") or "").strip()
@@ -6540,6 +6760,9 @@ def list_qa_conversations(path: Path) -> list[dict[str, Any]]:
 def get_qa_conversation(path: Path, conversation_id: str) -> dict[str, Any] | None:
     for conv in load_qa_store(path)["conversations"]:
         if isinstance(conv, dict) and conv.get("id") == conversation_id:
+            for message in conv.get('messages', []):
+                if message.get('role') == 'assistant':
+                    message.update(qa_recovery_info(path, message))
             return conv
     return None
 
@@ -6555,6 +6778,42 @@ def serialized_qa_write(function):
     return locked
 
 
+def qa_execution_identity(state, config, conversation_id):
+    profiles = {name: {k: v for k, v in config.get(name, {}).items() if k != 'api_key'}
+                for name in ('qa', 'embedding', 'rerank')}
+    return {'conversation_id': conversation_id, 'account': state.account,
+            'source': str(state.db_storage.resolve()), 'since_ts': state.since_ts,
+            'profile_signature': hashlib.sha256(json.dumps(profiles, sort_keys=True).encode()).hexdigest()}
+
+
+def validate_qa_resume(path, payload):
+    conv = get_qa_conversation(path, str(payload.get('conversation_id') or ''))
+    turn = next((m for m in (conv or {}).get('messages', []) if m.get('turn_id') == payload.get('turn_id')), None)
+    if not turn or not turn.get('resumable'):
+        raise ValueError('该回答没有可恢复的检查点，或已完成、已停止')
+    if turn.get('retry_confirmation_required') and payload.get('confirm_retry') is not True:
+        raise ValueError('上次模型请求结果未知，可能已计费；请确认后再继续')
+    snapshot = read_qa_snapshot(qa_checkpoint_path(path, turn['turn_id']))
+    if snapshot['identity']['conversation_id'] != conv['id']:
+        raise ValueError('检查点不属于该对话')
+    return turn, snapshot
+
+
+@serialized_qa_write
+def update_qa_turn(path, conversation_id, turn_id, message):
+    store = load_qa_store(path)
+    for conv in store['conversations']:
+        if conv.get('id') != conversation_id:
+            continue
+        for i, old in enumerate(conv.get('messages', [])):
+            if old.get('turn_id') == turn_id:
+                conv['messages'][i] = sanitize_qa_messages_for_store([message])[0]
+                conv['updated_at'] = datetime.now().isoformat(timespec='seconds')
+                save_qa_store(path, store)
+                return conv
+    raise ValueError('原回答已不存在，未覆盖其他对话')
+
+
 @serialized_qa_write
 def interrupt_pending_qa(path: Path) -> None:
     store = load_qa_store(path)
@@ -6566,6 +6825,11 @@ def interrupt_pending_qa(path: Path) -> None:
                 changed = True
     if changed:
         save_qa_store(path, store)
+    retained = {m.get('turn_id') for c in store['conversations'] for m in c.get('messages', [])
+                if m.get('error') and not m.get('stopped')}
+    for candidate in (path.parent / 'qa_checkpoints').glob('*.sqlite3'):
+        if candidate.stem not in retained:
+            discard_qa_checkpoint(path, candidate.stem)
 
 
 @serialized_qa_write
@@ -6603,8 +6867,11 @@ def save_qa_conversation(path: Path, conversation_id: str, messages: list[dict[s
         store["conversations"].append(found)
     found["title"] = title.strip() or (found.get("title") if found.get("title") != "新对话" else "") or resolved_title
     found["updated_at"] = now
+    old_turns = {m.get('turn_id') for m in found.get('messages', [])}
     found["messages"] = clean_messages[-200:]
     save_qa_store(path, store)
+    for turn_id in old_turns - {m.get('turn_id') for m in found['messages']}:
+        discard_qa_checkpoint(path, turn_id)
     return found
 
 
@@ -6624,6 +6891,7 @@ def rename_qa_conversation(path: Path, conversation_id: str, title: str) -> dict
 @serialized_qa_write
 def delete_qa_conversation(path: Path, conversation_id: str) -> bool:
     store = load_qa_store(path)
+    turns = [m.get('turn_id') for c in store['conversations'] if c.get('id') == conversation_id for m in c.get('messages', [])]
     before = len(store["conversations"])
     store["conversations"] = [
         conv
@@ -6633,6 +6901,8 @@ def delete_qa_conversation(path: Path, conversation_id: str) -> bool:
     if len(store["conversations"]) == before:
         return False
     save_qa_store(path, store)
+    for turn_id in turns:
+        discard_qa_checkpoint(path, turn_id)
     return True
 
 
@@ -6649,6 +6919,8 @@ def sanitize_qa_messages_for_store(messages: list[dict[str, Any]]) -> list[dict[
             continue
         row: dict[str, Any] = {"role": role, "content": content}
         if role == "assistant":
+            if re.fullmatch(r'[0-9a-f]{32}', str(item.get('turn_id') or '')):
+                row['turn_id'] = item['turn_id']
             if item.get("error"):
                 row["error"] = str(item["error"])
             if item.get("pending"):
@@ -6671,7 +6943,8 @@ def sanitize_qa_messages_for_store(messages: list[dict[str, Any]]) -> list[dict[
             if retrieval:
                 row["retrieval"] = {
                     key: retrieval.get(key)
-                    for key in ("mode", "scope", "time_scope", "candidate_count", "scored_count", "context_count", "matched_people", "related_people")
+                    for key in ("mode", "scope", "time_scope", "candidate_count", "scored_count", "context_count", "matched_people", "related_people",
+                                "query_plan", "conversation_state", "trace", "coverage", "usage")
                     if key in retrieval
                 }
         out.append(row)

@@ -150,6 +150,12 @@ class BackgroundHTTPTests(unittest.TestCase):
             mocked = patch.object(web, target, return_value=value)
             mocked.start()
             self.addCleanup(mocked.stop)
+        def agent(question, history, people, tools, complete, generate, emit, checkpoint, check, **kwargs):
+            context = [{"text": "fixture"}]
+            checkpoint({"trace": [{"tool": "timeline"}]}, context)
+            return generate(question, context, history), context, {}
+        mocked = patch.object(web, "run_conversation_agent", side_effect=agent)
+        mocked.start(); self.addCleanup(mocked.stop)
 
     def test_qa_is_saved_without_browser_and_stop_is_persisted(self):
         self.qa_patches()
