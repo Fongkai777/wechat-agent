@@ -169,9 +169,10 @@ class QaRecoveryTests(unittest.TestCase):
 
 class QaRecoveryHTTPTests(unittest.TestCase):
     def setUp(self):
-        # "Today afternoon" must not become a future window when tests run after midnight.
+        # datetime.now() is naive local time; keep this fixture in the local
+        # afternoon even when the handler calls astimezone() on a UTC runner.
         clock = patch.object(web, 'datetime', wraps=datetime)
-        clock.start().now.return_value = NOW
+        clock.start().now.return_value = NOW.replace(tzinfo=None)
         self.addCleanup(clock.stop)
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

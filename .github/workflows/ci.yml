@@ -3,6 +3,12 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        timezone: [UTC, Asia/Singapore]
+    env:
+      TZ: ${{ matrix.timezone }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
