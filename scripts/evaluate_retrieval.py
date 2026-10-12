@@ -51,6 +51,13 @@ class UsageRecorder:
                     return result
                 except Exception as exc:
                     entry.update(status="failed", error_type=type(exc).__name__)
+                    # Preserve useful diagnostics without provider bodies, URLs or credentials.
+                    cause = exc.__cause__ or exc
+                    entry['cause_type'] = type(cause).__name__
+                    if isinstance(getattr(cause, 'code', None), int):
+                        entry['http_status'] = cause.code
+                    if hasattr(cause, 'reason'):
+                        entry['reason_type'] = type(cause.reason).__name__
                     raise
                 finally:
                     entry["elapsed_s"] = round(time.perf_counter() - started, 3)

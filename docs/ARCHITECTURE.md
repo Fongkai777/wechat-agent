@@ -20,14 +20,18 @@ browser, indexer, query planner, background jobs and model configuration.
 
 ## Retrieval Boundaries
 
-`select_qa_context_with_diagnostics` builds a plan and calls `search_qa_search_db`.
-Main retrieval remains global; contact-name matches add soft evidence rather
-than a hard person filter. Semantic and keyword candidates are fused, locally
-ranked, and optionally sent to a chat model for reranking. The answer model sees
-selected messages and saved conversational history.
+New Q&A turns use `qa_agent.py`'s tool-first LangGraph loop. The model receives
+dialogue history and a frozen clock, then chooses searches, identity discovery,
+timeline/context reads or statistics without filling a global slot plan.
+`platform_tools.py` shares this interface with code Skills. Optional per-call
+person, conversation and date filters apply before recall and ranking; they do
+not persist into the next query. Fixed task/data boundaries remain enforced.
 
-Query planning uses rules, token expansion, contact hints and time signals. It
-is **not an LLM query planner**. History does not yet rewrite the retrieval query.
+`search_qa_search_db` fuses semantic and keyword candidates, locally ranks them
+and optionally calls a reranking model. Query reformulation belongs to the tool
+loop. The standalone retrieval debugger retains its legacy query expansion path;
+old Q&A checkpoints retain the planner needed for faithful recovery. See
+[Conversational Search](CONVERSATIONAL_SEARCH.md) for protocols and limits.
 
 ## Answer Provenance
 

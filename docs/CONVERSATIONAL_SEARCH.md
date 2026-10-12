@@ -3,19 +3,18 @@
 The web Q&A path uses a bounded, single-agent LangGraph pipeline:
 
 ```text
-User question + previous user turns + verified conversation state
-  -> structured query plan
-  -> validate identity, conversation scope and time constraints
+User question + conversational history + frozen clock
   -> model emits a native function tool call
-  -> validate arguments, execute locally, return a matching tool_call_id result
+  -> validate per-call arguments and platform boundaries
+  -> execute locally, return a matching tool_call_id result
   -> repeat until the model finishes or a budget is reached
   -> structured answer with server-owned citations
 ```
 
 ## Modules
 
-- `qa_planning.py`: structured plan generation, user-turn provenance, contact alias
-  resolution, ambiguity handling and relative-time normalization.
+- `qa_planning.py`: legacy planner for restoring pre-v4 checkpoints, plus shared
+  schema helpers. New turns do not call its planner or fill global slots.
 - `qa_tools.py`: indexed timeline queries, hybrid search, original-message
   hydration, surrounding context, SQL statistics and unreplied-chat candidates.
 - `qa_agent.py`: orchestration, limits, progress and execution trace.
@@ -33,24 +32,29 @@ tracing even when the environment contains tracing settings.
 
 New turns use Chat Completions native Tool Calling with `tool_choice: required`
 and `parallel_tool_calls: false`: one tool per decision round. Available tools
-are `list_chats`, `shared_windows`, `timeline`, `search`, `surrounding`,
-`statistics`, `unanswered`, `background`, and `finish`. The terminal `finish`
-tool selects existing evidence; planning and the final citation-backed answer
-still use structured JSON output. Models must support both interfaces. Invalid,
+are `find_people`, `list_chats`, `shared_windows`, `timeline`, `search`, `surrounding`,
+`statistics`, `unanswered`, and `finish`. The terminal `finish`
+tool selects existing evidence; the final citation-backed answer uses structured
+JSON output. Models must support both interfaces. Invalid,
 truncated, unknown, duplicate-ID or multiple calls are rejected before execution;
 there is no silent fallback to interpreting free text as executable actions.
 
 ## Constraints And Evidence
 
-The model extracts a plan, not SQL. Names must be grounded in a user turn or the
-server's previously validated state, then resolve to a unique contact ID. A place
-or topic does not become a person filter simply because it appears in a nickname.
-Ambiguous references produce a clarification rather than a global fallback.
+There is no mandatory intent/slot extraction stage. Each tool call independently
+chooses its query and optional filters. `find_people` returns real identity candidates;
+it does not select a namesake or set a global scope. Person/chat IDs must have been
+returned by a tool before being used as filters. Empty arrays add no restriction.
+Models can search directly without first discovering a person or conversation.
 
-Each request freezes the local clock with its UTC offset. Common Chinese relative
-dates are calculated locally; a new `today` overrides prior dates. Less common
-time expressions use model-proposed ISO dates tied to an exact user phrase and
-validated for ordering. Complex temporal expressions remain an evaluation target.
+`filters` is null or contains chat type/title and optional timezone-aware ISO
+message timestamps. These conditions are checked and applied before recall/ranking,
+but are not inherited by the next call. Dates discussed in message content remain
+ordinary search text unless the model deliberately chooses a timestamp filter.
+Each request supplies its frozen clock and recent dialogue to the model. User-stated
+scope must be respected, but semantic interpretation is still a model responsibility,
+not a guarantee supplied by a deterministic slot parser. A fixed Skill task window
+and the platform's data boundary cannot be expanded by a tool call.
 
 Hybrid retrieval enforces verified person/time filters before candidate ranking.
 Semantic chunks are hydrated into original message rows and filtered again: a
@@ -59,7 +63,7 @@ the requested person said all of its text. Surrounding messages keep their actua
 sender. Historical background is separately labeled and cannot substitute for
 an empty current window.
 
-Conversation scope distinguishes groups/private chats and user-grounded title
+Conversation scope distinguishes groups/private chats and per-call title
 keywords. The model can discover matching chats, inspect per-sender counts, then
 select returned chat IDs for message queries. Group queries filter actual sender
 IDs, not the private-conversation owner. Counts do not prove mutual interaction:
@@ -84,8 +88,8 @@ not messages that have not yet been synchronized/indexed.
 
 ## State And Limits
 
-Each completed stage atomically saves the query plan, tool trace, selected source
-snapshots and verified conversation state in the existing local conversation
+Each completed stage atomically saves the platform boundary, tool trace, selected source
+snapshots and execution state in the existing local conversation
 store. Errors and explicit cancellation preserve the latest trace. Browser
 disconnects do not cancel backend jobs. A server restart still marks unfinished
 runs interrupted; automatic paid replay/resume is deliberately not implemented.
@@ -106,8 +110,9 @@ its own timeout. Planning/review token counts are labeled separately and do not
 claim to include answer, embedding or reranking costs. Each decision/execution
 round has a distinct durable receipt scope, so later rounds cannot accidentally
 reuse an earlier model response. Version 1 checkpoints resume through the original
-graph, and version 2 checkpoints retain their JSON-action protocol. New version 3
-turns use native Tool Calling. Assistant tool calls and paired tool results are
+graph, version 2 checkpoints retain their JSON-action protocol, and version 3
+checkpoints retain their planner and native tool contracts. New version 4 turns
+start directly with native Tool Calling. Assistant tool calls and paired tool results are
 checkpointed together with retrieval state; recovery reuses completed receipts
 instead of executing the same tool or paid model request again.
 

@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import sqlite3
+import socket
 from pathlib import Path
 import tempfile
 import threading
@@ -53,6 +54,37 @@ class CodeAPITests(unittest.TestCase):
 
     def test_cannot_expand_scope(self):
         with self.assertRaises(ValueError): self.api.dispatch('messages',{'chat_id':'alice','since':0})
+
+    def test_batch_messages_preserves_reader_and_citations(self):
+        rows = self.api.dispatch('messages_batch', {'chat_ids':['alice','bob','missing']})
+        self.assertEqual(set(rows), {'alice','bob','missing'})
+        self.assertEqual(rows['missing'], [])
+        self.assertEqual(rows['bob'][0]['sender_username'], 'self')
+        self.assertEqual(len(self.api.dispatch('cite', {'messages':rows['alice']})), 1)
+        self.assertEqual([s['tool'] for s in self.api.steps], ['messages_batch','cite'])
+
+    def test_batch_messages_validates_permissions_size_and_scope(self):
+        for args in ({'chat_ids':['alice'], 'since':0}, {'chat_ids':['alice']*2},
+                     {'chat_ids':[str(n) for n in range(101)]}, {'chat_ids':['alice'], 'latest':None},
+                     {'chat_ids':['alice'], 'latest':101}, {'chat_ids':['alice',1]}):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                self.api.dispatch('messages_batch', args)
+        self.api.limits['permissions'] = []
+        with self.assertRaises(ValueError):
+            self.api.dispatch('messages_batch', {'chat_ids':['alice']})
+
+    def test_batch_messages_keeps_ambiguity_and_fails_on_reader_error(self):
+        original = self.api.backends['messages']
+        def read(chat, since, until, latest):
+            if chat == 'broken': raise OSError('read failed')
+            return [{**r, 'order_uncertain':True, 'text':'[无文本消息]'}
+                    for r in original(chat, since, until, latest)]
+        self.api.backends['messages'] = read
+        rows = self.api.dispatch('messages_batch', {'chat_ids':['alice']})
+        self.assertTrue(rows['alice'][0]['order_uncertain'])
+        self.assertEqual(rows['alice'][0]['text'], '[无文本消息]')
+        with self.assertRaises(OSError):
+            self.api.dispatch('messages_batch', {'chat_ids':['alice','broken']})
 
     def test_permissions_and_budgets(self):
         self.api.limits['permissions']=[]
@@ -242,19 +274,21 @@ class CodeSandboxTests(unittest.TestCase):
             self.assertTrue(reader.call_args.kwargs['include_empty'])
 
     def test_real_sandbox_denies_files_network_writes_and_fork(self):
-        with tempfile.TemporaryDirectory() as root:
+        with tempfile.TemporaryDirectory() as root, socket.socket() as listener:
+            # Use a real listening endpoint: connection refusal must not pass as sandbox denial.
+            listener.bind(('127.0.0.1',0)); listener.listen(1)
             secret=Path(root)/'secret'; secret.write_text('private')
             code='''import os, socket
 def run(api):
     results=[]
     for operation in [lambda: open(%r).read(), lambda: open('write.txt','w'),
-                      lambda: socket.create_connection(('127.0.0.1',8787),timeout=1), os.fork]:
+                      lambda: socket.create_connection(('127.0.0.1',%d),timeout=1), os.fork]:
         try:
             operation()
             results.append('ALLOWED')
         except (OSError, PermissionError): results.append('DENIED')
     return results
-''' % str(secret)
+''' % (str(secret),listener.getsockname()[1])
             self.assertEqual(run_package(package(code),{},lambda *args:None),['DENIED']*4)
 
     def test_rpc_and_timeout(self):

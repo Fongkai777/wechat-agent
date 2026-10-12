@@ -60,10 +60,29 @@ class ConversationTools:
             filters.append(column+" IN (" + ",".join("?" for _ in ids) + ")"); params.extend(ids)
         return filters, params
 
-    def item(self, row, role="primary"):
+    def item(self, row, role="primary", plan=None):
         item = self.row_to_item(row)
         item.update(evidence_id=evidence_id(item), evidence_role=role, index_row_id=row["id"])
+        if plan is not None:
+            item['retrieval_bounds'] = {k:plan.get(k) for k in ('since_ts','until_ts')}
         return item
+
+    def find_people(self, plan, query, offset=0, size=20):
+        # Identity discovery returns candidates only; it never sets a search scope.
+        filters, params = self.filters(dict(plan,people=[]))
+        where = ' AND '.join(filters)
+        sql = ('WITH scoped AS (SELECT * FROM messages WHERE '+where+'''), names AS (
+            SELECT sender_username AS id, sender AS name FROM scoped
+            UNION SELECT person_id AS id, person_name AS name FROM scoped
+        ) SELECT DISTINCT id,name FROM names WHERE COALESCE(id,'') != ''
+            AND (instr(lower(id),lower(?)) > 0 OR instr(lower(name),lower(?)) > 0)''')
+        args = [*params, query.strip(), query.strip()]
+        with self.connection() as conn:
+            total = conn.execute('SELECT COUNT(*) FROM ('+sql+')', args).fetchone()[0]
+            rows = conn.execute(sql+' ORDER BY name,id LIMIT ? OFFSET ?', [*args,size,offset]).fetchall()
+        return {'tool':'find_people','items':[], 'people':[dict(r) for r in rows],
+                'matched':total, 'next_offset':offset+len(rows) if offset+len(rows)<total else None,
+                'complete':offset+len(rows)>=total}
 
     def timeline(self, plan, offset=0, size=60):
         # 时间与行 ID 双重排序稳定分页，总数用于计算下一偏移和是否到末页。
@@ -73,7 +92,7 @@ class ConversationTools:
             total = conn.execute("SELECT COUNT(*) FROM messages WHERE " + where, params).fetchone()[0]
             rows = conn.execute("SELECT * FROM messages WHERE " + where + " ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?",
                                 [*params, size, offset]).fetchall()
-        return {"items": [self.item(r) for r in rows], "matched": total,
+        return {"items": [self.item(r, plan=plan) for r in rows], "matched": total,
                 "next_offset": offset + len(rows) if offset + len(rows) < total else None,
                 "complete": offset + len(rows) >= total, "tool": "timeline", "offset": offset}
 
@@ -107,7 +126,7 @@ class ConversationTools:
                                  [*params,page_size,offset]).fetchall()
             ids = list(dict.fromkeys(i for p in pairs for i in (p['previous_id'],p['id'])))
             rows = conn.execute('SELECT * FROM messages WHERE id IN ('+','.join('?' for _ in ids)+')',ids).fetchall() if ids else []
-        by_id = {r['id']:self.item(r) for r in rows}
+        by_id = {r['id']:self.item(r, plan=plan) for r in rows}
         windows = [{'source_ids':[by_id[p['previous_id']]['evidence_id'],by_id[p['id']]['evidence_id']],
                     'gap_seconds':p['timestamp']-p['previous_time']} for p in pairs]
         anchors = [dict(by_id[i],candidate_relation=True) for i in ids]
@@ -123,8 +142,11 @@ class ConversationTools:
         retrieval_plan = dict(plan, query=query or plan["query"])
         filters, params = self.filters(plan, background)
         since = None if background else plan.get("since_ts")
+        if self.state.since_ts is not None:
+            since = max(since, self.state.since_ts) if since is not None else self.state.since_ts
         until = plan["since_ts"] - 1 if background and plan.get("since_ts") is not None else plan["until_ts"]
-        hits, diagnostics = self.hybrid(retrieval_plan["query"], plan.get("people", []), since, until, size)
+        hits, diagnostics = self.hybrid(retrieval_plan["query"], plan.get("people", []), since, until, size,
+                                        scope=plan)
         ids = []
         with self.connection() as conn:
             for hit in hits:
@@ -146,7 +168,8 @@ class ConversationTools:
                 rows = conn.execute("SELECT * FROM messages WHERE " + " AND ".join(filters)
                                     + " AND id IN (" + ",".join("?" for _ in batch) + ")", [*params, *batch]).fetchall()
                 by_id = {r["id"]: r for r in rows}
-                items.extend(self.item(by_id[i], "background" if background else "primary") for i in batch if i in by_id)
+                bounds=dict(plan,since_ts=since,until_ts=until)
+                items.extend(self.item(by_id[i], "background" if background else "primary", bounds) for i in batch if i in by_id)
         note = "相关性检索，不代表穷尽时间范围内全部消息"
         if diagnostics.get('rerank_error'):
             note += '；重排未完成，使用已有排序：'+diagnostics['rerank_error']
@@ -163,12 +186,15 @@ class ConversationTools:
                 self.check()
                 if seed.get("evidence_role") != "primary":
                     continue
+                bounds=seed.get('retrieval_bounds') or {}
+                lower=max(self.state.since_ts or 0, plan.get('since_ts') or 0, bounds.get('since_ts') or 0)
+                upper=min(plan['until_ts'],bounds.get('until_ts') or plan['until_ts'])
                 for direction, order in (("<", "DESC"), (">", "ASC")):
                     rows = conn.execute(
                         f"SELECT * FROM messages WHERE chat_id=? AND timestamp >= ? AND timestamp <= ? "
                         f"AND (timestamp, id) {direction} (?, ?) ORDER BY timestamp {order}, id {order} LIMIT 3",
-                        (seed["chat_id"], max(self.state.since_ts or 0, plan.get("since_ts") or 0, seed["timestamp"] - 1800),
-                         min(plan["until_ts"], seed["timestamp"] + 1800), seed["timestamp"], seed["index_row_id"]),
+                        (seed["chat_id"], max(lower, seed["timestamp"] - 1800),
+                         min(upper, seed["timestamp"] + 1800), seed["timestamp"], seed["index_row_id"]),
                     ).fetchall()
                     for row in rows:
                         item = self.item(row, "surrounding")

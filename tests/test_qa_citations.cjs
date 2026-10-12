@@ -67,7 +67,7 @@ test('query trace remains visible with no sources and escapes model strings', ()
     trace: [{tool: 'timeline', returned: 0, included: 0, matched: 0, elapsed_ms: 1, complete: true}]}});
   assert.match(html, /查询过程/);
   assert.match(html, /请确认人物/);
-  assert.match(html, /人物时间查询/);
+  assert.match(html, /消息时间线/);
   assert.doesNotMatch(html, /<img>/);
 });
 
@@ -75,6 +75,19 @@ test('missing evidence renders without invented citations', () => {
   const msg = message();
   msg.answer_data.paragraphs = [{kind: 'limitation', text: 'No deadline found.', source_refs: []}];
   assert.doesNotMatch(context().renderQaAnswer(msg), /qa-citation/);
+});
+
+test('per-call scope and discovered people are visible and escaped', () => {
+  const html = context().renderQaSearchTrace({query_plan: {tool_first: true, people: []}, trace: [
+    {tool: 'find_people', returned: 2, unit: '个人物', complete: true},
+    {tool: 'search', parameters: {query: '周一', filters: {chat_type: 'group', chat_keyword: '<img>',
+      since: '2026-10-01T00:00:00+08:00', until: null}}},
+  ]});
+  assert.match(html, /查找人物/);
+  assert.match(html, /2 个人物/);
+  assert.match(html, /2026-10-01/);
+  assert.match(html, /&lt;img&gt;/);
+  assert.doesNotMatch(html, /<img>/);
 });
 
 test('trace distinguishes candidate windows from messages and escapes degradation notes', () => {

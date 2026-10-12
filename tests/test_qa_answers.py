@@ -66,7 +66,7 @@ class AnswerContractTests(unittest.TestCase):
         prompt = call.call_args.args[2][-2]["content"]
         self.assertIn("[13] 会话类型：私聊", prompt)
         self.assertIn("[1] 会话类型：群聊", prompt)
-        self.assertIn("不得把候选数或相邻片段数说成独立互动次数", call.call_args.args[2][0]['content'])
+        self.assertIn("结论强度须与证据类型及覆盖范围相符", call.call_args.args[2][0]['content'])
 
     def test_repeated_invalid_output_fails_instead_of_plain_text_fallback(self):
         with patch.object(web, "call_chat_payload", return_value=completion(answer([99]))) as call:

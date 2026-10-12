@@ -1,8 +1,13 @@
 # Answer Quality Checks
 
+**Historical baseline (September 26, 2026).** For the expanded 50-question
+diagnostic set and current keyword/hybrid/native-Agent comparison, see
+[Search Evaluation v2](SEARCH_EVALUATION_V2.md). The scores below do not describe
+the latest Agent or Skill runtime.
+
 This is a small, reproducible synthetic smoke check, not a production accuracy
 claim. It complements the [retrieval checks](../eval/README.md) by running the
-current UI Q&A handler and examining generated answers, not just retrieved IDs.
+UI Q&A handler available at the time and examining generated answers, not just retrieved IDs.
 
 ## Method
 

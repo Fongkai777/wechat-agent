@@ -133,7 +133,7 @@ flowchart LR
     C --> I
     I --> K[Keyword index]
     I --> E[Embedding index]
-    Q[Question + query planning] --> K
+    Q[Question + history + tool-calling agent] --> K
     Q --> E
     K --> R[RRF fusion + optional reranking]
     E --> R
@@ -146,8 +146,9 @@ flowchart LR
     H --> P[Saved findings and suggestions]
 ```
 
-- **Hybrid retrieval:** rule-based query planning, semantic and keyword recall,
-  contact associations as soft signals, RRF fusion and optional LLM reranking.
+- **Adaptive retrieval:** the agent searches, reads context and follows up without
+  mandatory intent slots. Search combines semantic and keyword recall, RRF fusion
+  and optional LLM reranking; query filters apply before ranking.
 - **Evidence-backed answers:** the model returns conclusions and source IDs;
   code validates the references and renders source metadata from retrieved records.
 - **Task execution:** a local scheduler runs a LangGraph tool-calling agent over
@@ -421,7 +422,7 @@ for an interactive session and the [usage guide](docs/USAGE.md) for operational 
 Passing this check does not establish key-extraction compatibility or verify
 your cloud model access.
 
-Optional [answer-quality checks](docs/ANSWER_QUALITY.md) cover correctness,
+Optional [search and answer-quality checks](docs/SEARCH_EVALUATION_V2.md) use 50 fictional-data questions to cover correctness,
 completeness, citation support, latency and cost on fictional conversations.
 They are small model-graded checks, not a production accuracy benchmark.
 

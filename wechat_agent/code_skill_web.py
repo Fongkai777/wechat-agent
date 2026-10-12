@@ -167,9 +167,9 @@ def execute_code_goal(state, store, goal, report, cancelled, maintenance_lock):
     def shared_tool(plan,action,sources):
         from .qa_tools import ConversationTools
         from .platform_tools import execute_action
-        def hybrid(query,people,start,end,count):
+        def hybrid(query,people,start,end,count,scope=None):
             result,diagnostics=app.search_qa_search_db(state,query,people,start,count,
-                {'verified_people':True,'time_until':end,'queries':[{'text':query}]})
+                {**(scope or {}),'verified_people':True,'time_until':end,'queries':[{'text':query}]})
             semantic=diagnostics.get('semantic') or {}
             if semantic.get('error') or diagnostics.get('rerank_error'):
                 raise ValueError('共享检索未完整执行：'+str(semantic.get('error') or diagnostics.get('rerank_error')))

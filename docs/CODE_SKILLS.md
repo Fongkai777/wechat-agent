@@ -47,6 +47,13 @@ do not need regeneration for this platform behavior. Raw message access does not
 require an embedding index. Text indexes
 can omit unrendered messages; raw message reads retain placeholders.
 
+`api.messages_batch(chat_ids, latest=1)` batches raw reads for up to 100 conversations
+per call, preserving the same physical ordering and ambiguity flags as `api.messages`.
+It reduces sandbox RPC overhead without adding task-specific filtering or involving a
+model/index. Each requested ID is returned, including empty conversations; reader failures
+abort the call. Editable examples and synthetic regression tests live in `examples/skills/`.
+These examples are not automatically applied to saved tasks.
+
 The result is structured JSON: summary, items with source references, and an optional
 notice. Citation identifiers must refer to messages actually obtained through the
 data APIs. This checks source identity, not whether a model interpreted it correctly.
@@ -61,6 +68,13 @@ retriever. A Skill can inspect `api.tools()` and call `api.tool(name, arguments)
 The task time window is fixed and background expansion is unavailable. Tool IDs,
 sender IDs and evidence IDs must come from actual returned data. Tool pages expose
 coverage/pagination rather than implying exhaustive retrieval.
+
+No slot extraction or fixed intent router runs before a code Skill's tools.
+Each call can supply independent nullable `filters` (chat type/title and message
+timestamps); omitted filters in existing packages remain supported. `find_people`
+discovers identity candidates when needed, without selecting or persisting a person
+scope. The platform always enforces the task window, including context expansion.
+Generated packages receive this contract. Saved user code is not silently rewritten.
 
 `api.llm(messages, tools=['list_chats', 'timeline', 'finish'])` enables native
 Tool Calling and returns `{message, finish_reason}`. The package appends the

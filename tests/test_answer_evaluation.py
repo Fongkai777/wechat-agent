@@ -44,6 +44,14 @@ class AnswerEvaluationTests(unittest.TestCase):
                 self.assertIsNone(cost["total_usd"])
                 self.assertEqual(cost["unknown_calls"], 1)
 
+    def test_embedding_and_rerank_have_explicit_prices(self):
+        cost = estimate_cost([
+            {'model':'text-embedding-3-small','status':'completed','usage':{'prompt_tokens':1000000}},
+            {'model':'gpt-5-nano','status':'completed','usage':{'prompt_tokens':1000000,'completion_tokens':1000000}},
+        ])
+        self.assertAlmostEqual(cost['total_usd'],.47)
+        self.assertEqual(cost['unknown_calls'],0)
+
     def test_failures_and_unreviewed_answers_remain_visible(self):
         answer = {"paragraphs": [{"text": "No evidence", "source_refs": []}]}
         result = summarize([

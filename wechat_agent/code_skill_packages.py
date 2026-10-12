@@ -27,6 +27,11 @@ WeChat account ID; compare it to api.context['account'] to identify self (or use
 Empty or numeric-only sender_username means unknown identity, not proven other person.
 Unrendered messages are retained as placeholders. order_uncertain=true means same-second
 cross-shard ordering is ambiguous; do not treat that row as a proven last sender.
+api.messages_batch(chat_ids, since=None, until=None, latest=1) -> {chat_id: [raw messages]}.
+Requires messages.read. Accepts up to 100 unique chat IDs and latest=1..100 per chat.
+Uses the SAME raw reader, ordering, placeholders and scope checks as messages(); no index
+or model is used. Every requested ID is present (empty list if no messages). Failures
+abort the whole call, never omit failed chats. Batch larger chat lists in your program.
 api.query(sql, params=[]) -> list of dict rows. Read-only SQLite SELECT/CTE over
 the logical messages and chats views. Requires index.query; the platform automatically
 prepares/updates the text index before querying it when necessary.
@@ -52,7 +57,12 @@ Example: cited = api.cite(messages=rows); refs = [r['reference'] for r in cited]
 source_refs must contain these integer references, NOT the returned message objects.
 api.tools(names=None) -> shared native function definitions, filtered by package permissions.
 api.tool(name, arguments) -> execute the SAME registered tool used by chat Q&A.
-Arguments must exactly match its schema. Discover chat/sender IDs using list_chats first.
+Use api.tools() for current schemas; discover IDs with find_people or list_chats when needed.
+There is no mandatory slot extraction, intent routing, or global query plan.
+Optional filters apply only to that tool call, never to subsequent calls. null means no
+additional filtering. The task's [since, until] boundary always applies. Pass dates as
+timezone-aware ISO timestamps only when filtering message send times is intended.
+Legacy calls may omit filters. Programs decide whether to search directly or discover identities.
 Results contain items with evidence_id and numeric reference, plus pagination/coverage metadata.
 Use returned reference values directly in source_refs; statistics are labeled summaries.
 All tools except finish require index.query. search also requires embedding and llm,
@@ -167,10 +177,10 @@ def generation_messages(prompt):
         raise ValueError('请填写最多 3000 字的任务')
     return [{'role':'system','content': '为用户生成可移植、完整可执行的 Python Skill 包，schema_version=3。'
              '你负责设计全部任务步骤、查询、处理代码及提示词，不使用固定任务模板。'
+             '不要增加前置槽位填充或固定意图路由，查询条件按每次检索需要确定。'
              '代码只通过下面的公共 API 读取平台数据及调用模型。所有业务规则必须在包内可见。'
              '不要偷偷增加用户未要求的筛选门槛或结果条数上限。不要把业务逻辑委托给不存在的专用 API。'
-             '优先只查询任务需要的字段和记录，利用排序、latest、SQL 聚合等减少无用读取。'
-             '需要模型语义处理时提供完整提示词与 JSON Schema；不需要语义判断时用程序完成。'
+             '按任务需要选择程序处理或模型调用；模型调用的提示词与输出结构也应完整保存在包内。'
              '测试用 FakeAPI，不使用真实服务。确保 run 返回规定的结果结构，引用只能来自 api.cite。'
              '只用标准库，完整包含 SKILL.md/manifest.json/workflow.py/test_skill.py。\n'+API_DOC},
             {'role':'user','content': json.dumps({'task':prompt.strip()}, ensure_ascii=False)}]

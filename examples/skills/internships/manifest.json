@@ -1,0 +1,9 @@
+{
+  "api_version": "1",
+  "entrypoint": "workflow.py:run",
+  "permissions": ["messages.read","index.query","embedding","llm"],
+  "timeout_seconds": 900,
+  "max_api_calls": 200,
+  "max_llm_calls": 16,
+  "max_embedding_calls": 8
+}

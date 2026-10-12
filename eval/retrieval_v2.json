@@ -1,0 +1,676 @@
+{
+  "provenance": "Entirely authored fictional fixtures; no private messages. Added to the original 40-message demo only inside isolated evaluation directories.",
+  "now": "2026-09-23T18:00:00+08:00",
+  "contacts": {
+    "eval_alpha@chatroom": "检索实验甲组",
+    "eval_beta@chatroom": "检索实验乙组",
+    "eval_trip@chatroom": "周末出行组",
+    "eval_lin_a": "林晨 · 设计",
+    "eval_lin_b": "林晨 · 算法",
+    "eval_jobs@chatroom": "远程岗位组"
+  },
+  "messages": [
+    [
+      101,
+      "eval_alpha@chatroom",
+      "demo_lin",
+      "2026-09-22 08:00:00",
+      "梧桐索引评审约在周四十点，会议室 A201，记得带召回失败案例。"
+    ],
+    [
+      102,
+      "eval_alpha@chatroom",
+      "demo_yu",
+      "2026-09-22 08:01:00",
+      "梧桐评审材料发到 docs.example.com/wutong，提交截止周三十八点。"
+    ],
+    [
+      103,
+      "eval_beta@chatroom",
+      "demo_lin",
+      "2026-09-22 09:00:00",
+      "梧桐索引评审乙组安排在周五十一点，会议室 B302。"
+    ],
+    [
+      104,
+      "eval_lin_a",
+      "eval_lin_a",
+      "2026-09-21 10:00:00",
+      "我是设计方向的林晨，海棠作品集评审周二两点，带 Figma 原型。"
+    ],
+    [
+      105,
+      "eval_lin_b",
+      "eval_lin_b",
+      "2026-09-21 11:00:00",
+      "我是算法方向的林晨，海棠搜索面试周三四点，准备向量检索评测。"
+    ],
+    [
+      106,
+      "eval_alpha@chatroom",
+      "eval_lin_b",
+      "2026-09-22 10:00:00",
+      "海棠算法面试补充：还需要讲清楚重排的消融实验。"
+    ],
+    [
+      107,
+      "eval_trip@chatroom",
+      "demo_chen",
+      "2026-09-21 08:00:00",
+      "周末登山暂定周六七点在东门集合。"
+    ],
+    [
+      108,
+      "eval_trip@chatroom",
+      "demo_yu",
+      "2026-09-22 08:00:00",
+      "更正登山安排：改为周日八点在西门集合，周六东门那次取消。"
+    ],
+    [
+      109,
+      "eval_trip@chatroom",
+      "demo_lin",
+      "2026-09-22 08:02:00",
+      "周日登山需要自带水和防晒，车费每人 15 元。"
+    ],
+    [
+      110,
+      "eval_jobs@chatroom",
+      "demo_lin",
+      "2026-09-21 09:00:00",
+      "竹海远程检索实习不要求到岗，一周四天，申请截止 10 月 8 日。"
+    ],
+    [
+      111,
+      "eval_jobs@chatroom",
+      "demo_yu",
+      "2026-09-22 09:00:00",
+      "更正竹海实习截止日为 10 月 12 日，10 月 8 日的旧公告作废。"
+    ],
+    [
+      112,
+      "eval_jobs@chatroom",
+      "demo_chen",
+      "2026-09-22 09:02:00",
+      "竹海岗位需 Python、SQL，有图检索经验加分；薪资尚未确定。"
+    ],
+    [
+      113,
+      "eval_jobs@chatroom",
+      "demo_chen",
+      "2026-09-22 09:03:00",
+      "松塔全职也是远程检索，但只招正式员工，没有实习名额。"
+    ],
+    [
+      114,
+      "eval_trip@chatroom",
+      "demo_lin",
+      "2026-09-22 11:00:00",
+      "石桥博物馆学生票 20 元，周三闭馆；预约在 museum.example.com。"
+    ],
+    [
+      115,
+      "eval_trip@chatroom",
+      "demo_yu",
+      "2026-09-22 11:01:00",
+      "石桥博物馆参观必须带学生证，雨天也正常开放。"
+    ],
+    [
+      116,
+      "eval_alpha@chatroom",
+      "demo_chen",
+      "2026-09-22 12:00:00",
+      "甲组压力测试 p95 是 320ms，样本一万条；这不是乙组的结果。"
+    ],
+    [
+      117,
+      "eval_beta@chatroom",
+      "demo_chen",
+      "2026-09-22 12:00:00",
+      "乙组压力测试 p95 是 870ms，样本十万条，不能和甲组直接比快慢。"
+    ],
+    [
+      118,
+      "eval_alpha@chatroom",
+      "demo_yu",
+      "2026-09-22 12:10:00",
+      "向量服务故障切换到关键词检索，数据没有丢，质量可能下降。"
+    ],
+    [
+      119,
+      "eval_alpha@chatroom",
+      "demo_lin",
+      "2026-09-22 12:11:00",
+      "故障原因是向量服务 DNS 解析失败，不是数据库损坏。"
+    ],
+    [
+      120,
+      "eval_lin_b",
+      "demo_me",
+      "2026-09-22 13:00:00",
+      "林晨，消融结果我发过去了，帮我看看。"
+    ],
+    [
+      121,
+      "eval_lin_b",
+      "eval_lin_b",
+      "2026-09-22 13:02:00",
+      "看完了，先补一个多群干扰案例就可以提交。"
+    ],
+    [
+      122,
+      "eval_lin_a",
+      "eval_lin_a",
+      "2026-09-22 13:00:00",
+      "周末海报定稿了吗？可以今晚发给我吗？"
+    ],
+    [
+      123,
+      "eval_lin_a",
+      "demo_me",
+      "2026-09-22 13:01:00",
+      "可以，已经把定稿发给你了。"
+    ],
+    [
+      124,
+      "eval_trip@chatroom",
+      "demo_chen",
+      "2026-09-22 14:00:00",
+      "湖岸露营有人去过吗？我没去过，暂时不能推荐。"
+    ],
+    [
+      125,
+      "eval_trip@chatroom",
+      "demo_yu",
+      "2026-09-22 14:01:00",
+      "露营地有没有插座我也不清楚。"
+    ],
+    [
+      126,
+      "eval_alpha@chatroom",
+      "demo_lin",
+      "2026-09-22 14:10:00",
+      "甲组读书会讲 BM25，由余舟主讲，周四晚上七点。"
+    ],
+    [
+      127,
+      "eval_beta@chatroom",
+      "demo_yu",
+      "2026-09-22 14:10:00",
+      "乙组读书会讲 HNSW，由陈安主讲，周五晚上八点。"
+    ],
+    [
+      128,
+      "eval_jobs@chatroom",
+      "demo_lin",
+      "2026-09-22 15:00:00",
+      "榆木实习在吉隆坡，至少六个月；不是远程岗位。"
+    ],
+    [
+      129,
+      "eval_trip@chatroom",
+      "demo_chen",
+      "2026-09-22 15:00:00",
+      "海棠是公园名，花展本周结束，和海棠面试不是一回事。"
+    ],
+    [
+      130,
+      "eval_alpha@chatroom",
+      "demo_yu",
+      "2026-09-22 16:00:00",
+      "梧桐评审不需要现场写代码，只需讲设计和实验。"
+    ]
+  ],
+  "distractors": {
+    "count": 25,
+    "chat_id": "eval_beta@chatroom",
+    "start_id": 201,
+    "text": "梧桐索引评审乙组材料第 {i} 页已归档，仍是周五十一点 B302。"
+  },
+  "cases": [
+    {
+      "id": "E17",
+      "category": "multi-group interference",
+      "question": "只看检索实验甲组，梧桐索引评审在哪儿、几点？",
+      "evidence": [
+        101
+      ],
+      "facts": [
+        "周四十点",
+        "A201"
+      ]
+    },
+    {
+      "id": "E18",
+      "category": "multi-group interference",
+      "question": "检索实验乙组的梧桐评审安排是什么？",
+      "evidence": [
+        103
+      ],
+      "facts": [
+        "周五十一点",
+        "B302"
+      ]
+    },
+    {
+      "id": "E19",
+      "category": "cross-group comparison",
+      "question": "甲乙两个检索实验组的梧桐评审安排分别是什么？",
+      "evidence": [
+        101,
+        103
+      ],
+      "facts": [
+        "甲组周四十点A201",
+        "乙组周五十一点B302"
+      ]
+    },
+    {
+      "id": "E20",
+      "category": "scoped retrieval",
+      "question": "只看检索实验甲组，评审材料提交到哪里，何时截止？",
+      "evidence": [
+        102
+      ],
+      "facts": [
+        "docs.example.com/wutong",
+        "周三十八点"
+      ]
+    },
+    {
+      "id": "E21",
+      "category": "same-name person",
+      "question": "设计方向的林晨说海棠评审要准备什么？",
+      "evidence": [
+        104
+      ],
+      "facts": [
+        "Figma 原型"
+      ]
+    },
+    {
+      "id": "E22",
+      "category": "same-name person",
+      "question": "算法方向的林晨说海棠面试要准备什么？",
+      "evidence": [
+        105,
+        106
+      ],
+      "facts": [
+        "向量检索评测",
+        "重排消融实验"
+      ]
+    },
+    {
+      "id": "E23",
+      "category": "same-name distinction",
+      "question": "两个林晨的海棠活动时间一样吗？",
+      "evidence": [
+        104,
+        105
+      ],
+      "facts": [
+        "设计周二两点",
+        "算法周三四点"
+      ]
+    },
+    {
+      "id": "E24",
+      "category": "correction",
+      "question": "周末登山最终是哪天几点、哪个门集合？",
+      "evidence": [
+        107,
+        108
+      ],
+      "facts": [
+        "周日八点西门",
+        "周六东门安排取消"
+      ]
+    },
+    {
+      "id": "E25",
+      "category": "neighbor evidence",
+      "question": "周日登山要带什么，车费多少？",
+      "evidence": [
+        109
+      ],
+      "facts": [
+        "水和防晒",
+        "15"
+      ]
+    },
+    {
+      "id": "E26",
+      "category": "correction",
+      "question": "竹海实习现在的截止日期是多少，旧日期还有效吗？",
+      "evidence": [
+        110,
+        111
+      ],
+      "facts": [
+        "10月12日",
+        "10月8日作废"
+      ]
+    },
+    {
+      "id": "E27",
+      "category": "negative constraint",
+      "question": "有哪些远程检索实习？排除全职和必须到岗的。",
+      "evidence": [
+        110,
+        113,
+        128
+      ],
+      "facts": [
+        "竹海",
+        "不包括松塔全职",
+        "不包括榆木"
+      ]
+    },
+    {
+      "id": "E28",
+      "category": "multi-fact",
+      "question": "竹海实习每周几天，需要哪些技能？",
+      "evidence": [
+        110,
+        112
+      ],
+      "facts": [
+        "四天",
+        "Python",
+        "SQL",
+        "图检索加分"
+      ]
+    },
+    {
+      "id": "E29",
+      "category": "unknown value",
+      "question": "竹海实习工资能确定吗？",
+      "evidence": [
+        112
+      ],
+      "facts": [
+        "尚未确定"
+      ]
+    },
+    {
+      "id": "E30",
+      "category": "multi-fact",
+      "question": "石桥博物馆学生怎么预约，多少钱，需带什么？",
+      "evidence": [
+        114,
+        115
+      ],
+      "facts": [
+        "museum.example.com",
+        "20",
+        "学生证"
+      ]
+    },
+    {
+      "id": "E31",
+      "category": "negation",
+      "question": "下雨能去石桥博物馆吗？星期三呢？",
+      "evidence": [
+        114,
+        115
+      ],
+      "facts": [
+        "雨天正常",
+        "周三闭馆"
+      ]
+    },
+    {
+      "id": "E32",
+      "category": "scope attribution",
+      "question": "只看检索实验甲组，压力测试的 p95 和样本量是多少？",
+      "evidence": [
+        116
+      ],
+      "facts": [
+        "320ms",
+        "一万条"
+      ]
+    },
+    {
+      "id": "E33",
+      "category": "scope attribution",
+      "question": "只看检索实验乙组，压力测试的 p95 和样本量是多少？",
+      "evidence": [
+        117
+      ],
+      "facts": [
+        "870ms",
+        "十万条"
+      ]
+    },
+    {
+      "id": "E34",
+      "category": "comparison caveat",
+      "question": "甲组和乙组压测能直接比快慢吗？",
+      "evidence": [
+        116,
+        117
+      ],
+      "facts": [
+        "样本量不同",
+        "不能直接比较"
+      ]
+    },
+    {
+      "id": "E35",
+      "category": "cause and effect",
+      "question": "甲组为什么降级到关键词检索，数据丢了吗？",
+      "evidence": [
+        118,
+        119
+      ],
+      "facts": [
+        "DNS解析失败",
+        "未丢数据",
+        "质量可能下降"
+      ]
+    },
+    {
+      "id": "E36",
+      "category": "actionable reply",
+      "question": "算法林晨看了消融结果后建议我补什么？",
+      "evidence": [
+        120,
+        121
+      ],
+      "facts": [
+        "多群干扰案例"
+      ]
+    },
+    {
+      "id": "E37",
+      "category": "answered conversation",
+      "question": "设计林晨要海报定稿，我回复并发送了吗？",
+      "evidence": [
+        122,
+        123
+      ],
+      "facts": [
+        "已回复",
+        "已发定稿"
+      ]
+    },
+    {
+      "id": "E38",
+      "category": "not a recommendation",
+      "question": "湖岸露营是陈安亲自体验后推荐的吗？",
+      "evidence": [
+        124
+      ],
+      "facts": [
+        "没有去过",
+        "不是推荐"
+      ]
+    },
+    {
+      "id": "E39",
+      "category": "unknown value",
+      "question": "露营地有没有插座？",
+      "evidence": [
+        125
+      ],
+      "facts": [
+        "不清楚"
+      ]
+    },
+    {
+      "id": "E40",
+      "category": "group distinction",
+      "question": "甲乙组读书会主题、主讲和时间分别是什么？",
+      "evidence": [
+        126,
+        127
+      ],
+      "facts": [
+        "甲组BM25余舟周四七点",
+        "乙组HNSW陈安周五八点"
+      ]
+    },
+    {
+      "id": "E41",
+      "category": "location constraint",
+      "question": "榆木实习能远程吗，在什么城市，至少多久？",
+      "evidence": [
+        128
+      ],
+      "facts": [
+        "非远程",
+        "吉隆坡",
+        "六个月"
+      ]
+    },
+    {
+      "id": "E42",
+      "category": "homonym topic",
+      "question": "周末出行组提到的海棠是面试吗？",
+      "evidence": [
+        129
+      ],
+      "facts": [
+        "公园花展",
+        "不是面试"
+      ]
+    },
+    {
+      "id": "E43",
+      "category": "scoped negative fact",
+      "question": "甲组的梧桐评审需要现场写代码吗？",
+      "evidence": [
+        130
+      ],
+      "facts": [
+        "不需要",
+        "讲设计和实验"
+      ]
+    },
+    {
+      "id": "E44",
+      "category": "cross-chat",
+      "question": "林晓给的星桥面试准备建议和群里的申请要求分别是什么？",
+      "evidence": [
+        1,
+        8,
+        9,
+        28
+      ],
+      "facts": [
+        "Python信息检索RAG",
+        "召回重排",
+        "失败案例",
+        "Demo",
+        "融合"
+      ]
+    },
+    {
+      "id": "E45",
+      "category": "no evidence",
+      "question": "石桥博物馆有没有免费停车场？",
+      "evidence": [],
+      "facts": [
+        "没有证据"
+      ],
+      "unanswerable": true
+    },
+    {
+      "id": "E46",
+      "category": "no evidence",
+      "question": "梧桐评审会报销交通费吗？",
+      "evidence": [],
+      "facts": [
+        "没有证据"
+      ],
+      "unanswerable": true
+    },
+    {
+      "id": "E47",
+      "category": "no evidence",
+      "question": "设计林晨的电话号码是多少？",
+      "evidence": [],
+      "facts": [
+        "没有证据"
+      ],
+      "unanswerable": true
+    },
+    {
+      "id": "E48",
+      "category": "no evidence",
+      "question": "远帆实习已经给我发 offer 了吗？",
+      "evidence": [],
+      "facts": [
+        "没有证据"
+      ],
+      "unanswerable": true
+    },
+    {
+      "id": "E49",
+      "category": "multi-turn correction",
+      "question": "那旧的日期还算数吗？",
+      "evidence": [
+        110,
+        111
+      ],
+      "facts": [
+        "10月8日作废",
+        "10月12日"
+      ],
+      "history": [
+        {
+          "role": "user",
+          "content": "竹海实习截止日改了吗？"
+        },
+        {
+          "role": "assistant",
+          "content": "公告后来更正了截止日。"
+        }
+      ]
+    },
+    {
+      "id": "E50",
+      "category": "multi-turn scope",
+      "question": "另一组呢？",
+      "evidence": [
+        117
+      ],
+      "facts": [
+        "乙组870ms",
+        "十万条"
+      ],
+      "history": [
+        {
+          "role": "user",
+          "content": "检索实验甲组的压测 p95 和样本量是多少？"
+        },
+        {
+          "role": "assistant",
+          "content": "甲组 p95 为 320ms，样本一万条。"
+        }
+      ]
+    }
+  ]
+}

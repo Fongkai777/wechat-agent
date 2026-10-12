@@ -30,8 +30,9 @@ class QaRecoveryTests(unittest.TestCase):
         self.path = checkpoint_path(self.store, self.turn)
         self.identity = {'conversation_id': 'one', 'profile_signature': 'fixture'}
         self.tools = Mock()
+        self.tools.state.since_ts = None
         self.tools.timeline.return_value = {'items': [{'evidence_id': 'one', 'text': 'original', 'sender': 'alice'}], 'complete': True}
-        self.complete = Mock(side_effect=[completion(raw(need_context=False, time_user_turn=0)), decision('timeline'),decision('finish')])
+        self.complete = Mock(side_effect=[decision('timeline'),decision('finish')])
         self.answer = Mock(return_value={'paragraphs': [{'kind': 'answer', 'text': 'Supported', 'source_refs': [1]}]})
         web.save_qa_conversation(self.store, 'one', [
             {'role': 'user', 'content': '小林今天下午说什么'},
@@ -126,6 +127,21 @@ class QaRecoveryTests(unittest.TestCase):
         self.assertTrue(all(not call.kwargs for call in self.complete.call_args_list))
         self.assertEqual(read_snapshot(self.path)['agent_version'],2)
 
+    def test_v3_checkpoint_keeps_planner_and_old_native_schema(self):
+        from wechat_agent import qa_agent
+        from wechat_agent.platform_tools import LEGACY_FUNCTION_TOOLS
+        original=qa_agent.frozen_input
+        def legacy(conn,value,resume):
+            return original(conn,{**value,'agent_version':3},resume)
+        self.complete.side_effect=[completion(raw(time_user_turn=0)),decision('timeline'),decision('finish')]
+        self.tools.timeline.side_effect=ProcessExit()
+        with patch.object(qa_agent,'frozen_input',side_effect=legacy),self.assertRaises(ProcessExit):
+            self.run_agent()
+        self.tools.timeline.side_effect=None
+        self.run_agent(resume=True)
+        self.assertEqual(read_snapshot(self.path)['agent_version'],3)
+        self.assertEqual(self.complete.call_args.kwargs['tools'],LEGACY_FUNCTION_TOOLS)
+
     def test_native_completed_tool_receipt_restores_matching_result_once(self):
         def interrupt(diag,sources):
             if diag['trace']:
@@ -144,7 +160,7 @@ class QaRecoveryTests(unittest.TestCase):
         self.assertEqual(json.loads(outputs[0]['content'])['items'][0]['text'],'original')
 
     def test_tool_results_reused_when_later_tool_in_same_node_is_interrupted(self):
-        self.complete.side_effect = [completion(raw(need_context=True, time_user_turn=0)),decision('timeline'),
+        self.complete.side_effect = [decision('timeline'),
             decision('surrounding',source_ids=['one']),decision('finish')]
         self.tools.surrounding.side_effect = ProcessExit()
         with self.assertRaises(ProcessExit):
@@ -234,8 +250,9 @@ class QaRecoveryHTTPTests(unittest.TestCase):
         self.handler = self.cls.__new__(self.cls)
         self.handler.json_response = Mock()
         tools = Mock()
+        tools.state.since_ts = None
         tools.timeline.return_value = {'items': [{'evidence_id': 'one', 'text': 'fixture'}], 'complete': True}
-        self.api = Mock(side_effect=[completion(raw(need_context=False, time_user_turn=0)),decision('timeline'),decision('finish')])
+        self.api = Mock(side_effect=[decision('timeline'),decision('finish')])
         self.answer = Mock(side_effect=TimeoutError('unknown'))
         for target, value in (
             ('load_llm_config', Mock(return_value={'qa': {'model': 'fixture', 'base_url': 'https://example.test', 'api_key': 'fixture'}})),

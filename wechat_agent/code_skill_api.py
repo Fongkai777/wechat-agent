@@ -63,7 +63,7 @@ class CodeAPI:
 
     def dispatch(self, method, arguments):
         # 子进程调用统一从这里进入；白名单同时限制可调用方法和所需声明权限。
-        permissions = {'chats':'messages.read','messages':'messages.read','query':'index.query',
+        permissions = {'chats':'messages.read','messages':'messages.read','messages_batch':'messages.read','query':'index.query',
                        'semantic_search':'embedding','surrounding':'messages.read','llm':'llm',
                        'state_get':'state.read','state_set':'state.write','cite':None,'log':None}
         permissions.update(tools=None,tool=None)
@@ -91,6 +91,17 @@ class CodeAPI:
             raise ValueError('不能扩大任务时间范围')
         if latest is not None and (type(latest) is not int or not 1 <= latest <= 100000): raise ValueError('latest 无效')
         return self.remember(self.backends['messages'](chat_id,since,until,latest))
+
+    def api_messages_batch(self, chat_ids, since=None, until=None, latest=1):
+        # Batch transport only: preserve raw-message ordering, scope and evidence checks.
+        # Keep per-call work bounded; packages can iterate without a per-conversation RPC.
+        if (not isinstance(chat_ids, list) or len(chat_ids) > 100 or
+                any(not isinstance(chat, str) or not chat or len(chat) > 200 for chat in chat_ids) or
+                len(set(chat_ids)) != len(chat_ids)):
+            raise ValueError('chat_ids 必须为最多 100 个不重复的会话 ID')
+        if type(latest) is not int or not 1 <= latest <= 100:
+            raise ValueError('批量 latest 必须为 1 到 100')
+        return {chat: self.api_messages(chat, since, until, latest) for chat in chat_ids}
 
     def api_query(self, sql, params=None):
         if not isinstance(sql,str) or len(sql)>30000 or not isinstance(params or [],list): raise ValueError('SQL 参数无效')
@@ -166,12 +177,8 @@ class CodeAPI:
         return copy.deepcopy(definitions)
 
     def tool_plan(self):
-        # 任务不能扩大时间窗；人物只能来自平台实际返回过的身份，不接受任意模型猜测。
-        people={r.get('sender_username') for r in self.tool_sources if r.get('sender_username')}
-        for observation in self.tool_observations:
-            for chat in observation.get('chats',[]):
-                people.update(s['sender_username'] for s in chat.get('senders',[]) if s.get('sender_username'))
-        return {'people':[{'id':p,'name':p} for p in sorted(people)],'query':self.context['task'],
+        # Only the user's task window is permanent; tool observations carry identities.
+        return {'tool_first':True,'people':[],'query':self.context['task'],
                 'since_ts':self.context['since'],'until_ts':self.context['until'],
                 'chat_scope':{'type':'all','keyword':''},'background_query':''}
 
@@ -179,8 +186,7 @@ class CodeAPI:
         self.api_tools([name])
         plan=self.tool_plan()
         action=action_from_arguments(name,arguments,self.tool_sources,self.tool_observations,plan)
-        # 空人物列表表示整个任务范围；只有明确传入的已知人物才成为检索约束。
-        plan['people']=[p for p in plan['people'] if p['id'] in action['person_ids']]
+        # Per-call filters do not mutate the task's immutable time boundary.
         chats={c['chat_id']:c.get('chat_type') for o in self.tool_observations for c in o.get('chats',[])}
         chats.update({s.get('chat_id'):s.get('chat_type') for s in self.tool_sources if s.get('chat_id')})
         kinds={chats.get(c) for c in action['chat_ids']}

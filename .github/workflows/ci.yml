@@ -1,5 +1,7 @@
 name: Tests and publication safety
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,3 +25,25 @@ jobs:
       - run: python scripts/smoke_test.py
       - run: python scripts/privacy_check.py
       - run: python scripts/evaluate_retrieval.py --output artifacts/eval
+      - run: python scripts/evaluate_search_v2.py --output artifacts/search-v2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-search-${{ strategy.job-index }}
+          path: artifacts/search-v2/
+  skill-sandbox:
+    runs-on: macos-14
+    timeout-minutes: 10
+    env:
+      TEST_CODE_SKILL_SANDBOX: '1'
+      TZ: Asia/Singapore
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - name: Require macOS isolation support
+        run: test -x /usr/bin/sandbox-exec
+      - name: Sandbox restrictions and paid-call recovery
+        run: python -m unittest tests.test_code_skills tests.test_shared_tools tests.test_example_code_skills -v

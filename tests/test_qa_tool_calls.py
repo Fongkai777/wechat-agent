@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 from wechat_agent import web
 from wechat_agent.qa_actions import FUNCTION_FIELDS, FUNCTION_TOOLS, parse_tool_call
+from wechat_agent.platform_tools import FILTER_TOOLS
 from wechat_agent.qa_agent import run_conversation_agent
 from tests.test_qa_agent import NOW, PEOPLE, raw, completion, decision
 
@@ -17,7 +18,8 @@ class NativeToolTests(unittest.TestCase):
             schema = function['parameters']
             self.assertTrue(function['strict'])
             self.assertFalse(schema['additionalProperties'])
-            self.assertEqual(set(schema['required']),set(FUNCTION_FIELDS[function['name']]))
+            expected=set(FUNCTION_FIELDS[function['name']]) | ({'filters'} if function['name'] in FILTER_TOOLS else set())
+            self.assertEqual(set(schema['required']),expected)
             self.assertEqual(set(schema['properties']),set(schema['required']))
         finish = next(t['function'] for t in FUNCTION_TOOLS if t['function']['name']=='finish')
         self.assertEqual(finish['parameters']['required'],['source_ids'])
@@ -63,15 +65,16 @@ class NativeToolTests(unittest.TestCase):
     def test_tool_result_is_paired_with_call_before_next_decision(self):
         call=decision('timeline')
         call_id=call['choices'][0]['message']['tool_calls'][0]['id']
-        api=Mock(side_effect=[completion(raw(time_user_turn=0)),call,decision('finish',source_ids=['one'])])
+        api=Mock(side_effect=[call,decision('finish',source_ids=['one'])])
         tools=Mock()
+        tools.state.since_ts=None
         tools.timeline.return_value={'tool':'timeline','items':[{'evidence_id':'one','text':'original'}],'complete':True}
         _,sources,diag=run_conversation_agent('小林今天下午说什么',[],PEOPLE,tools,api,
             Mock(return_value={'paragraphs':[]}),Mock(),Mock(),lambda:None,now=NOW)
-        selection=api.call_args_list[1]
+        selection=api.call_args_list[0]
         self.assertIsNone(selection.args[1])
-        self.assertEqual(selection.kwargs,{'tools':FUNCTION_TOOLS,'tool_choice':'required'})
-        messages=api.call_args_list[2].args[0]
+        self.assertEqual(selection.kwargs,{'tools':[t for t in FUNCTION_TOOLS if t['function']['name']!='background'],'tool_choice':'required'})
+        messages=api.call_args_list[1].args[0]
         assistant=next(i for i,m in enumerate(messages) if m.get('tool_calls'))
         self.assertEqual(messages[assistant]['tool_calls'][0]['id'],call_id)
         self.assertEqual(messages[assistant+1]['role'],'tool')

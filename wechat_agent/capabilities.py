@@ -12,7 +12,7 @@ def capability_catalog():
     catalog={f'tool.{name}':{'description':FUNCTION_DESCRIPTIONS[name],
                            'permissions':sorted(TOOL_PERMISSIONS[name])} for name in SKILL_TOOL_NAMES}
     for name,description in {
-        'messages.read':'api.chats()枚举任务窗内会话；api.messages(chat_id, latest=1)取最后物理消息，latest=None读取全部。返回sender_username、mine、order_uncertain；保留未渲染消息占位。音视频仅有元信息及已有语音转写。',
+        'messages.read':'api.chats()枚举任务窗内会话；api.messages(chat_id, latest=1)取最后物理消息，latest=None读取全部；api.messages_batch(chat_ids, latest=1)每批读取最多100个会话，保留相同原始顺序。返回sender_username、mine、order_uncertain；保留未渲染消息占位。音视频仅有元信息及已有语音转写。',
         'index.query':'在任务时间窗的只读消息快照上执行 SELECT/CTE、聚合、窗口函数。',
         'embedding':'对已同步聊天做语义搜索；阈值和相关性搜索不能保证穷尽全部相关消息。',
         'llm':'用任务模型多轮分析文字或原生 Tool Calling；模型不能直接读取电脑。',

@@ -39,6 +39,8 @@ def action(tool, **changes):
 def decision(tool, **changes):
     values = action(tool,**changes)
     args = {k:values[k] for k in FUNCTION_FIELDS[tool]}
+    if 'filters' in changes:
+        args['filters'] = changes['filters']
     return {'choices':[{'finish_reason':'tool_calls','message':{'content':None,'tool_calls':[
         {'id':f'call_{next(CALL_IDS)}','type':'function','function':{'name':tool,'arguments':json.dumps(args)}}]}}]}
 
@@ -82,6 +84,31 @@ class PlanningTests(unittest.TestCase):
 
     def test_today_is_recomputed_across_days(self):
         self.assertNotEqual(calendar_window("今天下午", NOW)[0], calendar_window("今天下午", NOW + timedelta(days=1))[0])
+
+    def test_content_dates_do_not_create_message_timestamp_filters(self):
+        for question in ('青叶食堂周一开门吗？','今天餐厅营业吗？','项目去年收入是多少？'):
+            with self.subTest(question=question):
+                p=validate_plan(raw(people=[],time_expression='',since='',until=''),[question],PEOPLE,{},NOW)
+                self.assertIsNone(p['since_ts'])
+                self.assertEqual(p['until_ts'],int(NOW.timestamp()))
+
+    def test_only_extracted_message_date_is_converted_locally(self):
+        p=validate_plan(raw(people=[],time_expression='昨天',time_user_turn=0),
+                        ['查昨天发来的关于今天开门的消息'],PEOPLE,{},NOW)
+        self.assertEqual(p['since_ts'],int((NOW-timedelta(days=1)).replace(hour=0,minute=0,second=0,microsecond=0).timestamp()))
+
+    def test_nullable_message_time_filter_is_distinct_from_content_dates(self):
+        data=raw(people=[])
+        for key in ('time_expression','time_user_turn','since','until'): data.pop(key)
+        data['message_time_filter']=None
+        plan=validate_plan(data,['今天餐厅开门吗'],PEOPLE,{},NOW)
+        self.assertIsNone(plan['since_ts'])
+        data['message_time_filter']={'expression':'昨天','user_turn':0,'since':'','until':''}
+        plan=validate_plan(data,['昨天的消息'],PEOPLE,{},NOW)
+        self.assertEqual(plan['since_ts'],int((NOW-timedelta(days=1)).replace(hour=0,minute=0,second=0,microsecond=0).timestamp()))
+        data['since']='2000-01-01'
+        with self.assertRaisesRegex(ValueError,'混用'):
+            validate_plan(data,['昨天的消息'],PEOPLE,{},NOW)
 
     def test_yesterday_has_upper_bound(self):
         start, end = calendar_window("昨天下午", NOW)
@@ -148,10 +175,10 @@ class ToolTests(unittest.TestCase):
         def choose(messages,schema,**options):
             calls.append(json.loads(messages[-1]['content']))
             turn=len(calls)
-            if turn==1: return completion(proposed)
-            if turn==2: return decision('statistics')
-            if turn==3: return decision('list_chats')
-            if turn==4:
+            filters={'chat_type':'group','chat_keyword':'NTU','since':None,'until':None}
+            if turn==1: return decision('statistics',filters=filters)
+            if turn==2: return decision('list_chats',filters=filters)
+            if turn==3:
                 self.assertEqual(calls[-1]['observations'][-1]['chats'][0]['chat_id'],'NTU@chatroom')
                 return decision('timeline',chat_ids=['NTU@chatroom'])
             return decision('finish')
@@ -159,12 +186,12 @@ class ToolTests(unittest.TestCase):
         result,sources,diag=run_conversation_agent(question,[],PEOPLE,self.tools,choose,answer,Mock(),Mock(),lambda:None,now=NOW)
         self.assertEqual([t['tool'] for t in diag['trace']],['statistics','list_chats','timeline'])
         self.assertEqual({s['chat_id'] for s in sources if s.get('chat_id')},{'NTU@chatroom'})
-        self.assertEqual(len(calls),5)
+        self.assertEqual(len(calls),4)
 
     def test_empty_search_can_be_followed_by_timeline(self):
         self.insert(1)
         answer=Mock(return_value={'paragraphs':[]})
-        complete=Mock(side_effect=[completion(raw(time_user_turn=0)),decision('search',query='no match'),
+        complete=Mock(side_effect=[decision('search',query='no match'),
                                    decision('timeline'),decision('finish')])
         _,sources,diag=run_conversation_agent('小林今天下午说什么',[],PEOPLE,self.tools,complete,answer,
                                               Mock(),Mock(),lambda:None,now=NOW)
@@ -190,7 +217,7 @@ class ToolTests(unittest.TestCase):
     def test_answer_context_limit_does_not_end_search_after_first_page(self):
         for i in range(12): self.insert(i)
         answer=Mock(return_value={'paragraphs':[]})
-        complete=Mock(side_effect=[completion(raw(time_user_turn=0)),decision('timeline',size=10),
+        complete=Mock(side_effect=[decision('timeline',size=10),
                                    decision('timeline',size=10,offset=10),decision('finish')])
         _,sources,diag=run_conversation_agent('小林今天下午说什么',[],PEOPLE,self.tools,complete,answer,
                                               Mock(),Mock(),lambda:None,now=NOW,limit=10)
@@ -200,7 +227,7 @@ class ToolTests(unittest.TestCase):
 
     def test_repeated_call_stops_without_infinite_retrieval(self):
         self.insert(1)
-        complete=Mock(side_effect=[completion(raw(time_user_turn=0)),decision('timeline'),decision('timeline')])
+        complete=Mock(side_effect=[decision('timeline'),decision('timeline')])
         answer=Mock(return_value={'paragraphs':[]})
         _,_,diag=run_conversation_agent('小林今天下午说什么',[],PEOPLE,self.tools,complete,answer,
                                       Mock(),Mock(),lambda:None,now=NOW)
@@ -241,15 +268,15 @@ class ToolTests(unittest.TestCase):
         inputs=[]
         def choose(messages,schema,**options):
             inputs.append(json.loads(messages[-1]['content']))
-            if len(inputs)==1: return completion(proposed)
-            if len(inputs)==2: return decision('shared_windows')
+            if len(inputs)==1: return decision('list_chats')
+            if len(inputs)==2: return decision('shared_windows',person_ids=['alice','bob'])
             if len(inputs)==3:
                 window=inputs[-1]['observations'][-1]['windows'][0]
                 return decision('surrounding',source_ids=window['source_ids'])
-            return decision('finish',source_ids=inputs[-1]['observations'][0]['windows'][0]['source_ids'])
+            return decision('finish',source_ids=inputs[-1]['observations'][1]['windows'][0]['source_ids'])
         _,sources,diag=run_conversation_agent('小林和小王今天下午的对话',[],PEOPLE,self.tools,choose,
             Mock(return_value={'paragraphs':[]}),Mock(),Mock(),lambda:None,now=NOW)
-        self.assertEqual([t['tool'] for t in diag['trace']],['shared_windows','surrounding'])
+        self.assertEqual([t['tool'] for t in diag['trace']],['list_chats','shared_windows','surrounding'])
         self.assertEqual({s['sender_username'] for s in sources},{'alice','bob','third'})
 
     def test_semantic_chunk_is_rehydrated_and_clipped(self):
@@ -284,13 +311,15 @@ class ToolTests(unittest.TestCase):
     def test_graph_saves_plan_trace_and_only_current_evidence(self):
         self.insert(1); self.insert(2, person="bob"); self.insert(3, days=400)
         seed=self.tools.timeline(self.plan)['items'][0]['evidence_id']
-        complete = Mock(side_effect=[completion(raw()),decision('timeline'),
+        complete = Mock(side_effect=[decision('timeline',filters={'chat_type':'all','chat_keyword':'',
+            'since':NOW.replace(hour=12,minute=0).isoformat(),'until':None}),
             decision('surrounding',source_ids=[seed]),decision('finish')])
         answer = Mock(return_value={"paragraphs": [{"kind": "answer", "text": "在讨论实习", "source_refs": [1]}]})
         checkpoint = Mock()
         result, sources, diag = run_conversation_agent("她今天下午什么态度", [{"role": "user", "content": "小林想找实习吗"}],
             PEOPLE, self.tools, complete, answer, Mock(), checkpoint, lambda: None, now=NOW)
-        self.assertEqual(diag["conversation_state"]["people"][0]["id"], "alice")
+        self.assertEqual(diag["conversation_state"]["people"], [])
+        self.assertIn('小林想找实习吗', str(complete.call_args_list[0].args))
         self.assertGreaterEqual(checkpoint.call_count, 3)
         self.assertEqual({s["local_id"] for s in sources}, {"1", "2"})
         self.assertNotIn("2025", answer.call_args.args[0])
@@ -299,7 +328,8 @@ class ToolTests(unittest.TestCase):
     def test_graph_no_evidence_never_calls_answer_or_hybrid(self):
         answer = Mock()
         result, sources, diag = run_conversation_agent("她今天下午什么态度", [{"role": "user", "content": "小林想找实习吗"}],
-            PEOPLE, self.tools, Mock(side_effect=[completion(raw()),decision('timeline'),decision('finish')]), answer, Mock(), Mock(), lambda: None, now=NOW)
+            PEOPLE, self.tools, Mock(side_effect=[decision('timeline',filters={'chat_type':'all','chat_keyword':'',
+                'since':NOW.replace(hour=12,minute=0).isoformat(),'until':None}),decision('finish')]), answer, Mock(), Mock(), lambda: None, now=NOW)
         self.assertFalse(sources); answer.assert_not_called(); self.hybrid.assert_not_called()
         self.assertEqual(result["paragraphs"][0]["kind"], "limitation")
 

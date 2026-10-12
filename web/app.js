@@ -2063,11 +2063,17 @@ function renderQaSearchTrace(retrieval) {
   const plan = retrieval.query_plan;
   if (!plan) return "";
   const people = (plan.people || []).map(p => p.name).join("、") || "全库";
-  const tools = {list_chats: "查找会话", shared_windows: "共同发言时间窗", timeline: "人物时间查询", search: "混合搜索", hybrid_search: "混合搜索", surrounding: "展开前后文", background: "历史背景补查", statistics: "会话统计", unanswered: "未回复线索"};
+  const tools = {find_people: "查找人物", list_chats: "查找会话", shared_windows: "共同发言时间窗", timeline: "消息时间线", search: "混合搜索", hybrid_search: "混合搜索", surrounding: "展开前后文", background: "历史背景补查", statistics: "会话统计", unanswered: "未回复线索"};
   const rows = (retrieval.trace || []).map(t => `<div class="qa-source">
     <div class="qa-source-meta">${escapeHtml(tools[t.tool] || t.tool)} · ${Number(t.elapsed_ms || 0)} ms</div>
-    <div>返回 ${Number(t.returned || 0)} ${t.unit === "个会话" ? "个会话" : "条"} · 纳入 ${Number(t.included || 0)} 条证据${t.matched == null ? "" : ` · 匹配 ${Number(t.matched)} ${t.tool === "shared_windows" ? "个候选时间窗" : t.unit === "个会话" ? "个会话" : "条"}`}${t.complete ? "" : " · 部分覆盖"}</div>
+    <div>返回 ${Number(t.returned || 0)} ${t.unit === "个人物" ? "个人物" : t.unit === "个会话" ? "个会话" : "条"} · 纳入 ${Number(t.included || 0)} 条证据${t.matched == null ? "" : ` · 匹配 ${Number(t.matched)} ${t.tool === "shared_windows" ? "个候选时间窗" : t.unit === "个人物" ? "个人物" : t.unit === "个会话" ? "个会话" : "条"}`}${t.complete ? "" : " · 部分覆盖"}</div>
     ${t.parameters?.query ? `<div class="qa-source-text">${escapeHtml(t.parameters.query)}</div>` : ""}
+    ${t.parameters?.filters ? `<div class="qa-source-meta">${escapeHtml([
+      ({group: "群聊", private: "私聊"})[t.parameters.filters.chat_type],
+      t.parameters.filters.chat_keyword && `会话名：${t.parameters.filters.chat_keyword}`,
+      t.parameters.filters.since && `自 ${t.parameters.filters.since}`,
+      t.parameters.filters.until && `至 ${t.parameters.filters.until}`,
+    ].filter(Boolean).join(" · "))}</div>` : ""}
     ${t.note ? `<div class="qa-source-text">${escapeHtml(t.note)}</div>` : ""}
   </div>`).join("");
   return `<details class="qa-sources qa-search-trace"><summary>查询过程</summary>

@@ -1,8 +1,37 @@
 # Retrieval and Answer Checks
 
-The repository includes 16 labeled questions and 40 fictional messages for
-repeatable retrieval checks. This is a small synthetic fixture, not a production
-accuracy benchmark. No private conversations are needed.
+The current diagnostic set has **50 authored questions and 95 fictional messages**.
+It covers multi-group interference, namesakes, corrections, multi-turn references,
+cross-chat evidence and missing answers. It is not a production accuracy benchmark.
+The original 16-question / 40-message fixture remains for backwards comparisons.
+No private conversations are needed.
+
+## Current Comparison
+
+```bash
+# No cloud calls. All 50 questions, keyword retrieval only.
+python scripts/evaluate_search_v2.py --output artifacts/search-v2
+
+# Paid opt-in: keyword + answer, hybrid + answer, production native-tool Agent.
+python scripts/evaluate_search_v2.py --live-config .demo/showcase/models.json \
+  --modes keyword,hybrid,agent --output artifacts/search-v2-live
+```
+
+Use `--cases E08,E17,E22,E24,E35,E45,E49,E50` for the diagnostic subset or
+`--judge-model` for another judge supported by the configured provider.
+All modes use the same final raw-message cap (default 20). Agent exploration can
+consume more messages/calls; this is not an equal-token-budget comparison.
+Gold evidence is used **only for scoring**, never query construction or routing.
+
+The report records final-context recall, structured answer correctness, expected
+fact completeness, citation support, end-to-end latency, tokens and estimated
+costs (indexing, answering and judging separately). Failed calls and unreviewed
+answers stay visible. Unknown usage/cost is not treated as zero. Offline runs
+do not claim answer-quality scores. API diagnostics record error classes and
+HTTP status only, never provider response bodies or credentials.
+
+See [the current findings and limitations](../docs/SEARCH_EVALUATION_V2.md).
+Manual-review fields are intentionally blank until a person reviews them.
 
 ## Offline Run
 
@@ -29,7 +58,7 @@ Answer completeness and citation support require separate semantic review.
 
 ## Current Answer Quality
 
-The [answer quality check](../docs/ANSWER_QUALITY.md) runs the current structured
+The [legacy answer quality check](../docs/ANSWER_QUALITY.md) runs the structured
 Q&A handler and grades correctness, completeness and citation support. It also
 records end-to-end latency and estimated API cost. Its small synthetic results
 are explicitly model-graded, not a production accuracy benchmark.

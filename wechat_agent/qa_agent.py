@@ -1,4 +1,4 @@
-"""A bounded LangGraph search agent with server-owned plans and evidence.
+"""A bounded tool-first LangGraph agent with server-owned evidence.
 
 SQLite checkpoints and call receipts allow explicit recovery without replaying
 completed stages. Restarting a process never automatically retries model calls.
@@ -14,7 +14,7 @@ from typing import TypedDict
 from .qa_planning import make_plan, object_schema, parse_json_completion, STRING
 from .goal_checkpoints import checkpoint_session
 from .qa_recovery import CallReceipts, frozen_input, recorded_call
-from .platform_tools import (STEP_FORMAT, INSTRUCTIONS, FUNCTION_TOOLS, validate_action,
+from .platform_tools import (STEP_FORMAT, INSTRUCTIONS, LEGACY_INSTRUCTIONS, FUNCTION_TOOLS, LEGACY_FUNCTION_TOOLS, validate_action,
                          execute_action, parse_tool_call, tool_result_message)
 
 
@@ -53,7 +53,7 @@ def run_conversation_agent(question, history, people, tools, complete, answer, e
         inputs = frozen_input(receipts.conn, {
             'question': question, 'history': history, 'people': people, 'limit': limit,
             'now': now.isoformat(), 'identity': identity,
-            'agent_version': 3,
+            'agent_version': 4,
         }, resume)
         return _run_agent(inputs, tools, complete, answer, emit, checkpoint, check,
                           saver, CallReceipts(receipts.conn, confirm_retry), resume)
@@ -69,11 +69,12 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
     # 旧快照无版本视为 v1 固定流程；v2 循环输出 JSON 动作，v3 才使用原生工具协议。
     iterative = inputs.get('agent_version',1)>=2
     native_tools = inputs.get('agent_version',1)>=3
+    tool_first = inputs.get('agent_version',1)>=4
     # 检索工作集可大于最终回答证据集，给后续工具保留探索空间。
     retrieval_limit = min(800,limit*4) if iterative else limit
     started = time.monotonic()
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0,
-             "scope": "planning_and_review_only"}
+             "scope": "tool_decisions_only" if tool_first else "planning_and_review_only"}
 
     def model(messages, schema=None, tool_definitions=None):
         check()
@@ -94,7 +95,7 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         time_scope = ""
         if since is not None:
             time_scope = f"{datetime.fromtimestamp(since).isoformat(sep=' ', timespec='seconds')} 至 {datetime.fromtimestamp(until).isoformat(sep=' ', timespec='seconds')}"
-        scope = '、'.join(p['name'] for p in plan.get('people',[])) or '全库'
+        scope = '按各步工具条件检索' if tool_first else ('、'.join(p['name'] for p in plan.get('people',[])) or '全库')
         chat_scope=plan.get('chat_scope') or {}
         if chat_scope.get('type') in ('group','private'):
             scope += ' · '+('群聊' if chat_scope['type']=='group' else '私聊')
@@ -126,8 +127,8 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         additions = [item for item in result["items"] if item["evidence_id"] not in seen]
         available = max(0, retrieval_limit - len(s.get("sources", [])))
         s["sources"] = [*s.get("sources", []), *additions[:available]]
-        event = {"tool": name, "parameters": parameters or {}, "returned": len(result.get('chats',result["items"])),
-                 'unit':'个会话' if 'chats' in result else '条',
+        event = {"tool": name, "parameters": parameters or {}, "returned": len(result.get('people',result.get('chats',result["items"]))),
+                 'unit':'个人物' if 'people' in result else '个会话' if 'chats' in result else '条',
                  "included": min(len(additions), available), "matched": result.get("matched"),
                  "complete": bool(result.get("complete")) and len(additions) <= available,
                  "next_offset": result.get("next_offset"), "note": result.get("note", ""),
@@ -143,6 +144,12 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         return result
 
     def plan_node(s):
+        if tool_first:
+            # This is an execution boundary, not a model-extracted query plan.
+            boundary = {'tool_first':True,'people':[],'query':question,'since_ts':tools.state.since_ts,
+                        'until_ts':int(now.timestamp()),'chat_scope':{'type':'all','keyword':''},
+                        'requested_at':now.isoformat(),'clarification':'','background_query':''}
+            return save(dict(s,plan=boundary,sources=[],trace=[]), '开始按需检索')
         emit("progress", message="结合前文解析人物、时间和查询方式")
         s = dict(s, plan=make_plan(question, history, people, now, model), sources=[], trace=[])
         return save(s, "查询计划已验证")
@@ -166,20 +173,32 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
             remaining-=len(excerpt)
             previews.append({k:source.get(k) for k in ('evidence_id','chat_id','chat_title','chat_type','sender','time','evidence_role')}
                             | {'text':excerpt,'preview_truncated':len(excerpt)<len(text)})
-        messages=[{'role':'system','content':INSTRUCTIONS},{'role':'user','content':json.dumps({
-            'question':question,'plan':s['plan'],'observations':s.get('observations',[]),
+        request = {
+            'question':question,'observations':s.get('observations',[]),
             'trace':s.get('trace',[]),'evidence':previews,'calls_remaining':8-s.get('rounds',0),
             'evidence_slots_remaining':retrieval_limit-len(s.get('sources',[])),
             'answer_evidence_limit':limit,
             'source_catalog':[{'evidence_id':x['evidence_id'],'chat_title':x.get('chat_title'),
-                               'sender':x.get('sender'),'time':x.get('time')} for x in s.get('sources',[])]},ensure_ascii=False)}]
+                               'sender':x.get('sender'),'time':x.get('time')} for x in s.get('sources',[])]}
+        if tool_first:
+            request.update(current_time=now.isoformat(), platform_boundary={
+                'since_ts':s['plan']['since_ts'],'until_ts':s['plan']['until_ts']},
+                conversation_history=[{'role':m.get('role'),'content':str(m.get('content') or '')[:8000]}
+                    for m in history[-20:] if m.get('role') in ('user','assistant') and not any(m.get(k) for k in ('error','pending','stopped'))])
+        else:
+            request['plan'] = s['plan']
+        messages=[{'role':'system','content':INSTRUCTIONS if native_tools else LEGACY_INSTRUCTIONS},
+                  {'role':'user','content':json.dumps(request,ensure_ascii=False)}]
         emit('progress',message=f"模型决定第 {s.get('rounds',0)+1} 步检索")
         if native_tools:
             # v3 串接 assistant/tool 消息并配对调用 ID；finish 也必须补齐工具回执。
             messages[0]['content'] += '使用声明的原生函数工具，每轮调用一个，不要在普通文本中模拟JSON动作；只填写该工具声明的参数。结束时调用finish。'
             messages = [messages[0],{'role':'user','content':question},*s.get('tool_messages',[]),messages[1]]
-            action, assistant = parse_tool_call(model(messages,tool_definitions=FUNCTION_TOOLS),
+            definitions = [t for t in FUNCTION_TOOLS if t['function']['name']!='background'] if tool_first else LEGACY_FUNCTION_TOOLS
+            action, assistant = parse_tool_call(model(messages,tool_definitions=definitions),
                 s.get('sources',[]),s.get('observations',[]),s['plan'],s.get('tool_messages',[]))
+            if action['tool'] not in {t['function']['name'] for t in definitions}:
+                raise ValueError('本轮未提供此工具')
             s['tool_messages'] = [*s.get('tool_messages',[]),assistant]
             s['tool_call_id'] = assistant['tool_calls'][0]['id']
             if action['tool']=='finish':
@@ -205,7 +224,7 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         action=s['action']
         # 执行结果分别进入证据工作集、结构化观察和原生工具回执，再回到决策节点。
         result=run_tool(s,action['tool'],lambda:execute_action(tools,s['plan'],action,s['sources']),action)
-        observation={k:result[k] for k in ('tool','matched','next_offset','complete','note','chats','windows','window_seconds') if k in result}
+        observation={k:result[k] for k in ('tool','matched','next_offset','complete','note','chats','people','windows','window_seconds') if k in result}
         s['observations']=[*s.get('observations',[]),observation]
         if native_tools:
             s['tool_messages']=[*s['tool_messages'],tool_result_message(s['tool_call_id'],result)]
@@ -274,7 +293,7 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         if plan["clarification"]:
             s["answer_data"] = limitation(plan["clarification"])
         elif not s["sources"]:
-            s["answer_data"] = limitation("本轮未取得可引用的消息原文，尚不能回答这个问题；这不代表相关对话不存在。未改用其他人的消息或扩大日期。")
+            s["answer_data"] = limitation("本轮未取得可引用的消息原文，尚不能回答这个问题；这不代表相关对话不存在。")
         else:
             save(s, "根据已核实的消息生成回答")
             context, remaining_chars, trimmed = [], 60000, len(s['sources'])>limit
@@ -298,8 +317,8 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
             s["sources"] = context
             if trimmed:
                 s["coverage"] = dict(s.get("coverage", {}), exhaustive=False, text_truncated=True, included=len(context))
-            grounded_question = question + "\n\n本轮已验证查询计划与覆盖范围（系统生成）：\n" + json.dumps({
-                "plan": plan, "coverage": s.get("coverage"), "trace": s["trace"],
+            grounded_question = question + "\n\n本轮工具执行记录与覆盖范围（查询条件不代表用户意图已经核实）：\n" + json.dumps({
+                "platform_boundary" if tool_first else "plan": plan, "coverage": s.get("coverage"), "trace": s["trace"],
                 'stop_reason':s.get('stop_reason','')}, ensure_ascii=False)
             s["answer_data"] = recorded_call('answer', lambda: answer(grounded_question, context, history), True)
             # 回答引用对应最终 context 顺序；非穷尽结果再附服务端限制说明。
@@ -314,7 +333,8 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
             nonlocal usage
             check()
             usage = dict(s.get('usage') or {"prompt_tokens": 0, "completion_tokens": 0,
-                "total_tokens": 0, "calls": 0, "scope": "planning_and_review_only"})
+                "total_tokens": 0, "calls": 0,
+                "scope": "tool_decisions_only" if tool_first else "planning_and_review_only"})
             # 回执按节点和轮次隔离；深拷贝后执行，节点成功返回才交付新的图状态。
             scope = f"{name}:{s.get('rounds',0)}" if iterative and name in ('decide','execute') else name
             with receipts.scope(scope):

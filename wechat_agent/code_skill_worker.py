@@ -27,6 +27,7 @@ class API:
     def __getattr__(self, method):
         def call(*args, **kwargs):
             parameters = {'chats':(), 'messages':('chat_id','since','until','latest'),
+                          'messages_batch':('chat_ids','since','until','latest'),
                           'query':('sql','params'), 'semantic_search':('query','min_similarity'),
                           'surrounding':('messages','before','after','max_gap_minutes'),
                           'cite':('messages',), 'llm':('messages','schema','tools','tool_choice'),

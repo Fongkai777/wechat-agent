@@ -117,7 +117,7 @@ def synthetic_api(package, empty=False):
             finally:
                 conn.close()
             shared=ConversationTools(SimpleNamespace(qa_search_db=path,since_ts=100,account='self'),
-                lambda *args:(rows,{}),qa_item_from_search_row,lambda:None)
+                lambda *args,**kwargs:(rows,{}),qa_item_from_search_row,lambda:None)
             return execute_action(shared,plan,action,sources)
     def llm(messages,schema,**options):
         value=schema_example(schema) if schema else '模拟结果'

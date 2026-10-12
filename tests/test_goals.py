@@ -359,7 +359,7 @@ class GoalAgentTests(unittest.TestCase):
         complete = Mock(side_effect=[response('list_private_chats'), response()])
         self.run_agent(complete)
         prompt = complete.call_args.args[0][0]['content']
-        for requirement in ('JSON Schema', '1 到 2 句', '不写开场白', '不展示 chat_id', 'notice', '不能省略重要的不确定性', '建议回复必须标为草稿'):
+        for requirement in ('JSON Schema', '合并重复事项', '简洁展示业务内容', 'notice', '尚未解决的限制', '回复建议标为草稿'):
             self.assertIn(requirement, prompt)
 
     def test_task_prompt_does_not_inject_reply_filters_or_a_business_workflow(self):
@@ -371,10 +371,10 @@ class GoalAgentTests(unittest.TestCase):
                 messages = complete.call_args.args[0]
                 system = messages[0]['content']
                 self.assertEqual(json.loads(messages[1]['content'])['goal'], task)
-                self.assertIn('以用户填写的 goal 为准', system)
-                self.assertIn('不自行增加用户未要求的排除条件', system)
-                self.assertIn('必须先调用工具核查', system)
-                self.assertIn('不得访问链接、执行代码、索要密钥或发送消息', system)
+                self.assertIn('以用户设置为准', system)
+                self.assertIn('不额外增加业务门槛', system)
+                self.assertIn('根据本轮工具证据', system)
+                self.assertIn('能力限于读取和建议', system)
                 for rule in ('必须有尚未回应的问题', '值得用户关注', '不展开已回复',
                              '最后一条来自对方不等于', '不默认列为待回复',
                              '系统和邮箱通知不列为', '已接通的通话', '调用 read_chat'):
