@@ -2459,3 +2459,9 @@ input, textarea, select { accent-color: var(--accent); }
 .skill-file-toolbar select { flex: 1 1 170px; min-width: 0; max-width: 100%; min-height: 34px; border: 1px solid #d9dfe3; border-radius: 6px; padding: 6px 9px; font: inherit; font-size: 13px; color: #404b54; background: #fff; }
 .skill-file-toolbar button { font-size: 13px; min-height: 32px; padding: 5px 9px; }
 .goal-skill-editor .goal-note { overflow-wrap: anywhere; }
+/* 能力检查在 Skill 编辑区内展开，不遮挡任务或代码，也不使用嵌套卡片。 */
+.goal-capability-report { padding: 12px 0; border-block: 1px solid #dce2e5; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.goal-capability-report p { margin: 6px 0; }
+.goal-capability-report ul { margin: 8px 0; padding-left: 20px; }
+.goal-capability-report li { margin: 6px 0; }
+.goal-capability-report li span { display: block; color: #59636c; }

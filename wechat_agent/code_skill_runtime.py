@@ -14,6 +14,7 @@ from .code_skill_packages import manifest, validate_package
 
 
 def run_package(package, context, dispatch, mode='run', cancelled=lambda: False, preparation_time=lambda: 0):
+    # 隔离执行入口：依赖 macOS 系统沙箱，缺少隔离能力时直接拒绝运行包内代码。
     package = validate_package(package)
     limits = manifest(package)
     if sys.platform != 'darwin' or not Path('/usr/bin/sandbox-exec').exists():
@@ -28,6 +29,7 @@ def run_package(package, context, dispatch, mode='run', cancelled=lambda: False,
         worker.write_bytes(Path(__file__).with_name('code_skill_worker.py').read_bytes())
         python = Path(sys._base_executable).resolve()
         runtime = Path(sys.base_prefix).resolve()
+        # 沙箱默认拒绝，只开放运行所需读取；子进程环境也不继承宿主密钥等环境变量。
         profile = '''(version 1)(deny default)
         (allow process-exec)(allow process-info*)(allow signal (target self))
         (allow file-read-metadata)(allow sysctl-read)
@@ -45,6 +47,7 @@ def run_package(package, context, dispatch, mode='run', cancelled=lambda: False,
             if len(data) > 32*1024*1024:
                 raise ValueError('接口结果超过 32 MB 安全预算；请在 Skill 内分批查询，未静默截断')
             # Nonblocking writes keep cancellation and deadlines effective even if user code stops reading.
+            # 分块非阻塞发送期间仍检查取消和超时，避免子进程停止读取后卡住宿主。
             offset = 0
             while offset < len(data):
                 check()
@@ -56,6 +59,7 @@ def run_package(package, context, dispatch, mode='run', cancelled=lambda: False,
             nonlocal last_memory_check
             if cancelled(): raise RuntimeError('任务已停止')
             # Only trusted host-side index preparation can pause the code budget.
+            # 仅宿主统计的准备耗时可延长截止时间，包内工作流不能自行暂停执行预算。
             if time.monotonic() > deadline + preparation_time(): raise TimeoutError('代码 Skill 超过执行时间预算')
             if time.monotonic()-last_memory_check > .5 and process.poll() is None:
                 last_memory_check = time.monotonic()
@@ -85,6 +89,7 @@ def run_package(package, context, dispatch, mode='run', cancelled=lambda: False,
                     buffers['out'] += chunk
                     if len(buffers['out']) > 8*1024*1024: raise ValueError('Skill 输出超过安全预算')
                     while b'\n' in buffers['out']:
+                        # 逐行 JSON 协议区分结果、错误和接口请求；包内测试模式禁止请求宿主接口。
                         line, buffers['out'] = buffers['out'].split(b'\n',1)
                         event = json.loads(line)
                         if event.get('type') == 'result': return event.get('value')
@@ -94,11 +99,13 @@ def run_package(package, context, dispatch, mode='run', cancelled=lambda: False,
                         if calls > limits['max_api_calls']: raise ValueError('Skill 超过接口调用预算，未保存成功结果')
                         check()
                         # Exceptions terminate the run, rather than allowing a program to hide incomplete retrieval.
+                        # 接口失败直接终止执行，避免包吞掉检索异常后把不完整结果当作成功。
                         value = dispatch(event.get('method'), event.get('arguments'))
                         check()
                         write({'ok':True,'value':value})
             raise RuntimeError('Skill 子进程未返回结果：'+buffers['err'].decode(errors='replace')[-1500:])
         finally:
+            # 成功、失败或取消均回收子进程及管道，随后由临时目录上下文清理包文件。
             if process.poll() is None: process.kill()
             process.wait(timeout=5)
             selector.close()

@@ -130,6 +130,7 @@ def search_range(data):
 
 
 def observation_window(goal):
+    # 每次执行以启动时间计算完整检索窗口；手动触发也遵循此规则，不默认裁成“上次执行以来”。
     kind, value, unit = search_range(goal)
     until = goal["started_at"]
     if kind == "today":
@@ -399,6 +400,7 @@ class GoalStore:
         self.prune_checkpoints()
 
     def recover(self, now=None):
+        # 服务重启只把遗留 running 标成中断，不自动重放可能已经计费的模型调用。
         now = time.time() if now is None else now
         with self.connect() as conn:
             conn.execute("UPDATE goal_runs SET status='interrupted', finished_at=?, progress='', error='上次执行因服务退出而中断' WHERE status='running'", (now,))
@@ -413,6 +415,8 @@ class GoalStore:
         return self._claim(goal_id=goal_id, now=now)
 
     def _claim(self, goal_id=None, now=None):
+        # 先在写事务中领取执行权并冻结本次窗口/任务，再启动工作线程，避免手动和定时重复领取。
+        # 当前任务助手全局串行执行；这不是多个 worker 的分布式队列。
         now = time.time() if now is None else now
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -493,6 +497,7 @@ class GoalStore:
             ))
 
     def finish(self, goal, status, result="", error="", now=None):
+        # 只收尾仍在运行的记录；成功报告和 Skill 持久状态一起提交，失败不推进业务状态。
         now = time.time() if now is None else now
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -518,6 +523,7 @@ class GoalStore:
 
 
 class GoalScheduler:
+    # 调度只负责“何时执行”和结果落库；实际采用代码 Skill 还是兼容工具循环由注入的 execute 决定。
     def __init__(self, store, execute):
         self.store, self.execute = store, execute
         self.stop_event = threading.Event()
@@ -555,6 +561,7 @@ class GoalScheduler:
         return goal
 
     def _execute(self, goal):
+        # 区分服务退出与用户主动停止：前者保留可恢复状态，后者不再自动启动后续请求。
         def cancelled():
             return self.stop_event.is_set() or self.store.run_cancelled(goal)
 

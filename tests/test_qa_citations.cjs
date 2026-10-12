@@ -77,6 +77,19 @@ test('missing evidence renders without invented citations', () => {
   assert.doesNotMatch(context().renderQaAnswer(msg), /qa-citation/);
 });
 
+test('trace distinguishes candidate windows from messages and escapes degradation notes', () => {
+  const html = context().renderQaSearchTrace({query_plan: {people: []}, scope: '群聊 · NTU', trace: [
+    {tool: 'shared_windows', returned: 18, included: 18, matched: 19, complete: false,
+      note: '候选不是互动次数 <img>'},
+    {tool: 'search', returned: 2, note: '重排未完成，使用已有排序'},
+  ]});
+  assert.match(html, /19 个候选时间窗/);
+  assert.match(html, /群聊 · NTU/);
+  assert.match(html, /重排未完成/);
+  assert.match(html, /&lt;img&gt;/);
+  assert.doesNotMatch(html, /<img>/);
+});
+
 test('done event retains structured content before any history reload', () => {
   const ctx = context();
   Object.assign(ctx, {state: {}, renderQaMessages() {}, setQaProgress() {}});

@@ -6,8 +6,12 @@ v1/v2 Skills and tool-calling tasks still work until explicitly replaced.
 ## Lifecycle
 
 1. Enter a task, interval and lookback window.
-2. The configured task model receives the task and public platform contract, not
-   private chats, database paths or API keys. It generates complete source files.
+2. The configured task model first assesses each requirement against the platform
+   capability catalog. Partial/unsupported tasks show their gaps without replacing
+   an existing draft or generating a reduced-scope task. For supported tasks, the
+   model receives the public contract and generates complete source files, without
+   private chats, database paths or API keys. The assessment is advisory, not a
+   proof of feasibility, data completeness or answer correctness.
 3. The platform checks the package, runs its tests, then runs empty and nonempty
    synthetic integrations with simulated model responses. Generation may make two
    repair requests. Failed drafts are not automatically published.
@@ -17,7 +21,7 @@ v1/v2 Skills and tool-calling tasks still work until explicitly replaced.
    Business rules live in the source package, not platform task-category branches.
 
 The file picker shows `SKILL.md`, `manifest.json`, `workflow.py`, `test_skill.py`,
-`PLATFORM_API.md` and any additional generated modules. Export/import uses one JSON
+`PLATFORM_API.md`, `CAPABILITIES.json` (for newly generated packages) and any additional generated modules. Export/import uses one JSON
 file containing every source file. An imported package is only a draft until tested
 and saved. Never include credentials or real chats in exported packages.
 
@@ -48,6 +52,32 @@ notice. Citation identifiers must refer to messages actually obtained through th
 data APIs. This checks source identity, not whether a model interpreted it correctly.
 
 ## Execution and Recovery
+
+### Shared Tools and Multi-Turn Models
+
+`platform_tools.py` owns the same function schemas, argument checks and execution
+dispatch used by Q&A and Skills; both execute the `ConversationTools` read-only
+retriever. A Skill can inspect `api.tools()` and call `api.tool(name, arguments)`.
+The task time window is fixed and background expansion is unavailable. Tool IDs,
+sender IDs and evidence IDs must come from actual returned data. Tool pages expose
+coverage/pagination rather than implying exhaustive retrieval.
+
+`api.llm(messages, tools=['list_chats', 'timeline', 'finish'])` enables native
+Tool Calling and returns `{message, finish_reason}`. The package appends the
+assistant message, executes the requested tool, appends a matching `tool_call_id`
+result and submits the next model request. It owns the loop and stopping policy;
+the platform enforces permissions, message pairing and budgets. `api.llm` without
+`tools` keeps its existing text/JSON return contract. Raw reads, custom SQL and
+task-local state remain Skill-specific extensions, not Q&A model tools.
+
+Shared `search` uses the configured hybrid recall/reranking pipeline and reserves
+one embedding and one rerank call from the package budgets; it requires
+`index.query`, `embedding`, and `llm`. Its query-embedding usage is recorded;
+rerank token usage is not yet included, so totals are not complete billing figures.
+The lower-level `api.semantic_search` remains available for custom threshold-based
+recall. Existing packages are not rewritten or automatically switched to tool loops.
+
+### Checkpoints
 
 Each run has a frozen package, task window and model-profile signature. LangGraph
 stores the run checkpoint; a local receipt journal records API observations and
@@ -82,3 +112,8 @@ Review prompts, recall thresholds, model budgets and coverage notices before
 enabling a task. Exported `PLATFORM_API.md` is documentation; editing it does not
 change platform permissions. The platform does not execute OS commands or send
 WeChat replies on behalf of a Skill.
+
+Capability checks run before generation, not before every scheduled execution.
+Missing APIs, permissions, invalid arguments and execution budgets still fail
+closed at runtime. A capability check does not add new connectors or automatically
+grant a package permissions, and editing `CAPABILITIES.json` does not add abilities.

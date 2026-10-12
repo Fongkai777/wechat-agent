@@ -15,6 +15,7 @@
   const resultCache = new Map();
   let skillsSupported = false, skillText = '', skillPrompt = '', skillBusy = false;
   let skillFile = 'workflow.py';
+  let capabilityReport = null;
 
   async function request(path, data) {
     const response = await fetch(path, data ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)} : {});
@@ -201,6 +202,7 @@
     $('goalPrompt').value = goal?.prompt || '';
     skillText = goal?.skill_version ? JSON.stringify(goal.skill, null, 2) : '';
     skillPrompt = goal?.prompt || '';
+    capabilityReport = null;
     renderSkillEditor();
     $('goalIntervalValue').value = goal?.interval_value ?? 1;
     $('goalIntervalUnit').value = goal?.interval_unit || (goal?.cadence === 'daily' ? 'days' : 'hours');
@@ -269,7 +271,24 @@
       let permissions=[];
       try { permissions=JSON.parse(skill.files.find(f=>f.path==='manifest.json').content).permissions; } catch {}
       $('goalSkillSummary').textContent=`${skill.name} · ${skill.files.length} 个文件 · ${permissions.join(' / ')}`;
+      if (!capabilityReport) {
+        try { capabilityReport=JSON.parse(skill.files.find(f=>f.path==='CAPABILITIES.json')?.content || 'null'); } catch {}
+      }
     }
+    renderCapabilities();
+  }
+
+  function renderCapabilities() {
+    const panel=$('goalCapabilityReport');
+    if (!panel) return;
+    const report=capabilityReport;
+    panel.hidden=!report;
+    if (!report) { panel.innerHTML=''; return; }
+    const labels={supported:'可实现',partial:'只能部分实现',unsupported:'当前无法实现'};
+    const stale=report.task!==$('goalPrompt').value.trim();
+    panel.innerHTML=`<strong>${stale?'任务已修改，需重新检查':labels[report.status] || '能力待核实'}</strong>
+      <p>${escape(report.summary)}</p><ul>${(report.requirements || []).map(row=>`<li><b>${escape(row.need)}</b><span>${escape(labels[row.status] || '待核实')} · ${escape(row.reason)}</span></li>`).join('')}</ul>
+      <p class="goal-note">${escape(report.notice || '能力评估不代表执行成功或回答质量保证。')}${report.status!=='supported'?' 请调整任务需求或补齐平台能力后重新生成，原 Skill 未改变。':''}</p>`;
   }
 
   async function generateSkill() {
@@ -283,6 +302,12 @@
       const data=await window.WechatJobs.run('/api/goals/skill/generate',{id:editing?.id || '',prompt}, {
         onEvent:event=>{if(event.event==='progress') $('goalSkillStatus').textContent=event.message || '正在生成 Skill';}
       });
+      capabilityReport=data.capability_report || null;
+      if (!data.skill) {
+        renderCapabilities();
+        $('goalSkillStatus').textContent='能力检查未通过 · 未生成或替换 Skill';
+        return;
+      }
       skillText=JSON.stringify(data.skill,null,2); skillPrompt=data.prompt;
       renderSkillEditor();
       $('goalSkillStatus').textContent=`草稿已生成${data.validation?.passed?' · 隔离测试通过':data.validation?' · 测试未通过，需修改':''} · ${Number(data.usage?.total_tokens || 0)} tokens`;
@@ -318,6 +343,7 @@
       if (file.size>1024*1024) throw new Error('代码包不能超过 1 MB');
       const skill=JSON.parse(await file.text());
       if (skill.schema_version!==3 || !Array.isArray(skill.files) || !skill.files.length || skill.files.some(f=>typeof f.path!=='string' || typeof f.content!=='string')) throw new Error('请选择有效的完整代码 Skill 包');
+      capabilityReport=null;
       skillText=JSON.stringify(skill,null,2); skillPrompt=$('goalPrompt').value.trim(); renderSkillEditor();
       $('goalSkillStatus').textContent='已导入草稿 · 尚未执行或保存';
     } catch(e) {error($('goalFormError'),e.message);}
@@ -336,7 +362,7 @@
     catch(e) {error($('goalFormError'),e.message); $('goalSkillStatus').textContent='测试未通过';}
     finally {busy(false);}
   });
-  $('goalPrompt').addEventListener('input',()=>{ if(skillsSupported) $('goalSaveBtn').textContent=skillText && skillPrompt===$('goalPrompt').value.trim()?'确认保存':'生成 Skill'; });
+  $('goalPrompt').addEventListener('input',()=>{ if(skillsSupported) $('goalSaveBtn').textContent=skillText && skillPrompt===$('goalPrompt').value.trim()?'确认保存':'生成 Skill'; renderCapabilities(); });
 
   async function loadHistory(id) {
     const data = await request(`/api/goals/history?id=${encodeURIComponent(id)}`);

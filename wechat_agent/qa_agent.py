@@ -14,6 +14,8 @@ from typing import TypedDict
 from .qa_planning import make_plan, object_schema, parse_json_completion, STRING
 from .goal_checkpoints import checkpoint_session
 from .qa_recovery import CallReceipts, frozen_input, recorded_call
+from .platform_tools import (STEP_FORMAT, INSTRUCTIONS, FUNCTION_TOOLS, validate_action,
+                         execute_action, parse_tool_call, tool_result_message)
 
 
 REVIEW_FORMAT = {"type": "json_schema", "json_schema": {
@@ -22,6 +24,7 @@ REVIEW_FORMAT = {"type": "json_schema", "json_schema": {
 }}
 
 
+# 图内共享计划、证据和覆盖率；原生调用消息与调用 ID 一并保存，供恢复后续接。
 class AgentState(TypedDict, total=False):
     plan: dict
     sources: list
@@ -29,6 +32,12 @@ class AgentState(TypedDict, total=False):
     coverage: dict
     answer_data: dict
     usage: dict
+    action: dict
+    rounds: int
+    observations: list
+    stop_reason: str
+    tool_messages: list
+    tool_call_id: str
 
 
 def limitation(text):
@@ -40,9 +49,11 @@ def run_conversation_agent(question, history, people, tools, complete, answer, e
                            confirm_retry=False, identity=None):
     now = now or datetime.now().astimezone()
     with checkpoint_session(checkpoint_path) as (saver, receipts):
+        # 入口冻结问题、历史、时钟和版本；恢复读取原快照，并核对模型与数据来源标识。
         inputs = frozen_input(receipts.conn, {
             'question': question, 'history': history, 'people': people, 'limit': limit,
             'now': now.isoformat(), 'identity': identity,
+            'agent_version': 3,
         }, resume)
         return _run_agent(inputs, tools, complete, answer, emit, checkpoint, check,
                           saver, CallReceipts(receipts.conn, confirm_retry), resume)
@@ -55,15 +66,22 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
     question, history, people = inputs['question'], inputs['history'], inputs['people']
     now = datetime.fromisoformat(inputs['now'])
     limit = max(10, min(int(inputs['limit']), 200))
+    # 旧快照无版本视为 v1 固定流程；v2 循环输出 JSON 动作，v3 才使用原生工具协议。
+    iterative = inputs.get('agent_version',1)>=2
+    native_tools = inputs.get('agent_version',1)>=3
+    # 检索工作集可大于最终回答证据集，给后续工具保留探索空间。
+    retrieval_limit = min(800,limit*4) if iterative else limit
     started = time.monotonic()
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0,
              "scope": "planning_and_review_only"}
 
-    def model(messages, schema):
+    def model(messages, schema=None, tool_definitions=None):
         check()
         if time.monotonic() - started > 240:
             raise TimeoutError("本轮检索达到 240 秒预算，已保存执行过程，请重试")
-        result = recorded_call('complete', lambda: complete(messages, schema), True)
+        # 回执复用已完成请求；结果未知的计费请求由恢复层要求明确确认后重试。
+        result = recorded_call('complete', lambda: complete(messages, schema,tools=tool_definitions,tool_choice='required')
+                               if tool_definitions is not None else complete(messages,schema), True)
         usage["calls"] += 1
         for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
             usage[key] += int((result.get("usage") or {}).get(key) or 0)
@@ -76,13 +94,21 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         time_scope = ""
         if since is not None:
             time_scope = f"{datetime.fromtimestamp(since).isoformat(sep=' ', timespec='seconds')} 至 {datetime.fromtimestamp(until).isoformat(sep=' ', timespec='seconds')}"
-        return {"mode": "有状态工具检索", "scope": "、".join(p["name"] for p in plan.get("people", [])) or "全库",
+        scope = '、'.join(p['name'] for p in plan.get('people',[])) or '全库'
+        chat_scope=plan.get('chat_scope') or {}
+        if chat_scope.get('type') in ('group','private'):
+            scope += ' · '+('群聊' if chat_scope['type']=='group' else '私聊')
+        if chat_scope.get('keyword'):
+            scope += ' · 会话名包含 '+chat_scope['keyword']
+        return {"mode": "原生工具调用检索" if native_tools else "多步工具检索" if iterative else "有状态工具检索", "scope": scope,
                 "time_scope": time_scope, "query_plan": plan, "trace": s.get("trace", []),
                 "coverage": s.get("coverage", {}), "usage": dict(s.get('usage') or usage), "context_count": len(s.get("sources", [])),
                 "conversation_state": {"people": plan.get("people", []), "query": plan.get("query", ""),
+                                       'chat_scope':plan.get('chat_scope',{}),
                                        "requested_at": plan.get("requested_at", ""), "time_expression": plan.get("time_expression", "")}}
 
     def save(s, stage):
+        # 对外发布诊断与证据快照；图节点的持久化另由 LangGraph 检查点负责。
         check()
         emit("progress", message=stage)
         checkpoint(diagnostics(s), s.get("sources", []))
@@ -90,21 +116,26 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
 
     def run_tool(s, name, call, parameters=None):
         check()
-        if len(s.get("trace", [])) >= 5 or time.monotonic() - started > 240:
+        if len(s.get("trace", [])) >= (8 if iterative else 5) or time.monotonic() - started > 240:
             raise TimeoutError("检索预算已用完，未继续扩大查询")
         tick = time.monotonic()
         result = recorded_call(name, call)
         check()
+        # 按稳定证据 ID 排除已收录消息，再应用总预算；工具分页信息保留在轨迹中。
         seen = {item["evidence_id"] for item in s.get("sources", [])}
         additions = [item for item in result["items"] if item["evidence_id"] not in seen]
-        available = max(0, limit - len(s.get("sources", [])))
+        available = max(0, retrieval_limit - len(s.get("sources", [])))
         s["sources"] = [*s.get("sources", []), *additions[:available]]
-        event = {"tool": name, "parameters": parameters or {}, "returned": len(result["items"]),
+        event = {"tool": name, "parameters": parameters or {}, "returned": len(result.get('chats',result["items"])),
+                 'unit':'个会话' if 'chats' in result else '条',
                  "included": min(len(additions), available), "matched": result.get("matched"),
                  "complete": bool(result.get("complete")) and len(additions) <= available,
                  "next_offset": result.get("next_offset"), "note": result.get("note", ""),
                  "elapsed_ms": round((time.monotonic() - tick) * 1000)}
+        if native_tools:
+            event['tool_call_id'] = s['tool_call_id']
         s["trace"] = [*s.get("trace", []), event]
+        # 任一工具未完整返回或证据被预算截断，均不能标为穷尽覆盖。
         s["coverage"] = {"exhaustive": all(t["complete"] for t in s["trace"]),
                          "context_limit": limit, "included": len(s["sources"]),
                          "note": "仅覆盖本地索引；相关性检索和上下文预算不代表遍历全部消息"}
@@ -116,7 +147,73 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         s = dict(s, plan=make_plan(question, history, people, now, model), sources=[], trace=[])
         return save(s, "查询计划已验证")
 
+    def decide_node(s):
+        s=dict(s)
+        # 澄清需求直接进入回答；轮次或工作集耗尽时停止检索并降级覆盖声明。
+        if s['plan']['clarification']:
+            return dict(s,action={'tool':'finish'})
+        if s.get('rounds',0)>=8 or len(s.get('sources',[]))>=retrieval_limit:
+            reason='达到工具调用或上下文预算，未声称完整检索'
+            s['coverage']=dict(s.get('coverage',{}),exhaustive=False,note=reason)
+            return dict(s,action={'tool':'finish'},stop_reason=reason)
+        previews=[]
+        remaining=30000
+        # 优先展示最近取得的原文预览，同时另传全量证据目录供模型选择引用对象。
+        for source in reversed(s.get('sources',[])):
+            if remaining<=0: break
+            text=str(source.get('text',''))
+            excerpt=text[:min(1500,remaining)]
+            remaining-=len(excerpt)
+            previews.append({k:source.get(k) for k in ('evidence_id','chat_id','chat_title','chat_type','sender','time','evidence_role')}
+                            | {'text':excerpt,'preview_truncated':len(excerpt)<len(text)})
+        messages=[{'role':'system','content':INSTRUCTIONS},{'role':'user','content':json.dumps({
+            'question':question,'plan':s['plan'],'observations':s.get('observations',[]),
+            'trace':s.get('trace',[]),'evidence':previews,'calls_remaining':8-s.get('rounds',0),
+            'evidence_slots_remaining':retrieval_limit-len(s.get('sources',[])),
+            'answer_evidence_limit':limit,
+            'source_catalog':[{'evidence_id':x['evidence_id'],'chat_title':x.get('chat_title'),
+                               'sender':x.get('sender'),'time':x.get('time')} for x in s.get('sources',[])]},ensure_ascii=False)}]
+        emit('progress',message=f"模型决定第 {s.get('rounds',0)+1} 步检索")
+        if native_tools:
+            # v3 串接 assistant/tool 消息并配对调用 ID；finish 也必须补齐工具回执。
+            messages[0]['content'] += '使用声明的原生函数工具，每轮调用一个，不要在普通文本中模拟JSON动作；只填写该工具声明的参数。结束时调用finish。'
+            messages = [messages[0],{'role':'user','content':question},*s.get('tool_messages',[]),messages[1]]
+            action, assistant = parse_tool_call(model(messages,tool_definitions=FUNCTION_TOOLS),
+                s.get('sources',[]),s.get('observations',[]),s['plan'],s.get('tool_messages',[]))
+            s['tool_messages'] = [*s.get('tool_messages',[]),assistant]
+            s['tool_call_id'] = assistant['tool_calls'][0]['id']
+            if action['tool']=='finish':
+                s['tool_messages'].append(tool_result_message(s['tool_call_id'],{'tool':'finish','note':'已结束检索，进入引用回答阶段。'}))
+        else:
+            # v2 继续解析统一 JSON 动作，避免旧检查点恢复时切换消息协议。
+            action=validate_action(parse_json_completion(model(messages,STEP_FORMAT)),s.get('sources',[]),s.get('observations',[]),s['plan'])
+        if action['tool']=='finish' and action['source_ids']:
+            # 选择原文时连带保留关联上下文，避免丢失支持接话判断的其他发送者消息。
+            selected=set(action['source_ids'])
+            s['sources']=[x for x in s['sources'] if x['evidence_id'] in selected or selected.intersection(x.get('context_for',[]))]
+            s['coverage']=dict(s.get('coverage',{}),exhaustive=False,included=len(s['sources']))
+        # 相同动作不再次执行，防止模型在相同查询上循环消耗预算。
+        if any(t.get('parameters')==action for t in s.get('trace',[])):
+            s['coverage']=dict(s.get('coverage',{}),exhaustive=False)
+            if native_tools:
+                s['tool_messages'].append(tool_result_message(s['tool_call_id'],{'tool':action['tool'],'note':'重复请求未执行，已停止检索。'}))
+            return dict(s,action={'tool':'finish'},stop_reason='模型重复相同工具调用，已停止重复检索')
+        return dict(s,action=action)
+
+    def execute_node(s):
+        s=dict(s)
+        action=s['action']
+        # 执行结果分别进入证据工作集、结构化观察和原生工具回执，再回到决策节点。
+        result=run_tool(s,action['tool'],lambda:execute_action(tools,s['plan'],action,s['sources']),action)
+        observation={k:result[k] for k in ('tool','matched','next_offset','complete','note','chats','windows','window_seconds') if k in result}
+        s['observations']=[*s.get('observations',[]),observation]
+        if native_tools:
+            s['tool_messages']=[*s['tool_messages'],tool_result_message(s['tool_call_id'],result)]
+        s['rounds']=s.get('rounds',0)+1
+        return s
+
     def retrieve_node(s):
+        # v1 兼容路径按意图选主工具，并预留上下文与历史背景的证据额度。
         s = dict(s)
         plan = s["plan"]
         if plan["clarification"]:
@@ -139,6 +236,7 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         return s
 
     def review_node(s):
+        # v1 最多补查一次；无当前证据时不拿历史背景替代本轮结果。
         s = dict(s)
         plan = s["plan"]
         # Do not manufacture an answer from historical evidence when the requested
@@ -172,14 +270,19 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
     def answer_node(s):
         s = dict(s)
         plan = s["plan"]
+        # 有歧义或没有可引用原文时只返回限制说明，不调用回答模型补造结论。
         if plan["clarification"]:
             s["answer_data"] = limitation(plan["clarification"])
         elif not s["sources"]:
-            s["answer_data"] = limitation("没有在本地索引的指定人物、时间范围内找到对应消息；未改用其他人的消息或扩大日期。请确认消息已同步并更新索引。")
+            s["answer_data"] = limitation("本轮未取得可引用的消息原文，尚不能回答这个问题；这不代表相关对话不存在。未改用其他人的消息或扩大日期。")
         else:
             save(s, "根据已核实的消息生成回答")
-            context, remaining_chars, trimmed = [], 60000, False
-            for source in s["sources"]:
+            context, remaining_chars, trimmed = [], 60000, len(s['sources'])>limit
+            # Keep a bounded retrieval working set; the answer budget must not
+            # prematurely stop the model from inspecting another tool's result.
+            selected=s['sources'][-limit:] if iterative else s['sources']
+            # 回答另受条数、单条文本和总字符预算限制；任何截断都要下调覆盖率。
+            for source in selected:
                 if remaining_chars <= 0:
                     trimmed = True
                     break
@@ -196,8 +299,10 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
             if trimmed:
                 s["coverage"] = dict(s.get("coverage", {}), exhaustive=False, text_truncated=True, included=len(context))
             grounded_question = question + "\n\n本轮已验证查询计划与覆盖范围（系统生成）：\n" + json.dumps({
-                "plan": plan, "coverage": s.get("coverage"), "trace": s["trace"]}, ensure_ascii=False)
+                "plan": plan, "coverage": s.get("coverage"), "trace": s["trace"],
+                'stop_reason':s.get('stop_reason','')}, ensure_ascii=False)
             s["answer_data"] = recorded_call('answer', lambda: answer(grounded_question, context, history), True)
+            # 回答引用对应最终 context 顺序；非穷尽结果再附服务端限制说明。
             if not s.get("coverage", {}).get("exhaustive", False):
                 s["answer_data"]["paragraphs"].append({"kind": "limitation", "text": f"本轮纳入 {len(context)} 条证据，属于选取的相关片段，不代表完整检查了范围内全部消息。", "source_refs": []})
         check()
@@ -210,22 +315,33 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
             check()
             usage = dict(s.get('usage') or {"prompt_tokens": 0, "completion_tokens": 0,
                 "total_tokens": 0, "calls": 0, "scope": "planning_and_review_only"})
-            with receipts.scope(name):
+            # 回执按节点和轮次隔离；深拷贝后执行，节点成功返回才交付新的图状态。
+            scope = f"{name}:{s.get('rounds',0)}" if iterative and name in ('decide','execute') else name
+            with receipts.scope(scope):
                 result = node(deepcopy(s))
             result['usage'] = dict(usage)
             return result
         return run
-    for name, node in (("plan", plan_node), ("retrieve", retrieve_node), ("review", review_node), ("answer", answer_node)):
+    # 新版走 plan -> decide <-> execute -> answer；旧版保留 retrieve -> review 的节点名称。
+    nodes=(("plan",plan_node),("decide",decide_node),("execute",execute_node),("answer",answer_node)) if iterative else (
+        ("plan", plan_node), ("retrieve", retrieve_node), ("review", review_node), ("answer", answer_node))
+    for name, node in nodes:
         graph.add_node(name, durable_node(name, node))
-    for a, b in ((START, "plan"), ("plan", "retrieve"), ("retrieve", "review"), ("review", "answer"), ("answer", END)):
+    edges=((START,'plan'),('plan','decide'),('execute','decide'),('answer',END)) if iterative else (
+        (START, "plan"), ("plan", "retrieve"), ("retrieve", "review"), ("review", "answer"), ("answer", END))
+    for a,b in edges:
         graph.add_edge(a, b)
+    if iterative:
+        graph.add_conditional_edges('decide',lambda s:'answer' if s['action']['tool']=='finish' else 'execute')
     # Never upload local conversations via environment-enabled LangSmith tracing.
+    # 显式关闭外部追踪，避免本地聊天内容随环境配置上传。
     with tracing_context(enabled=False):
         compiled = graph.compile(checkpointer=saver)
-        config = {'configurable': {'thread_id': 'qa'}, 'recursion_limit': 8}
+        config = {'configurable': {'thread_id': 'qa'}, 'recursion_limit': 24 if iterative else 8}
         if resume and not compiled.get_state(config).values:
             # The first input checkpoint can be empty if planning was interrupted.
             if not saver.get_tuple(config):
                 raise ValueError('没有可恢复的问答检查点')
+        # 恢复用 None 续跑已存图状态；同步落盘配合调用回执，避免重放已完成请求。
         result = compiled.invoke(None if resume else {}, config, durability='sync')
     return result["answer_data"], result["sources"], diagnostics(result)

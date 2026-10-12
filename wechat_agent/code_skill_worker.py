@@ -29,7 +29,8 @@ class API:
             parameters = {'chats':(), 'messages':('chat_id','since','until','latest'),
                           'query':('sql','params'), 'semantic_search':('query','min_similarity'),
                           'surrounding':('messages','before','after','max_gap_minutes'),
-                          'cite':('messages',), 'llm':('messages','schema'), 'state_get':(),
+                          'cite':('messages',), 'llm':('messages','schema','tools','tool_choice'),
+                          'tools':('names',), 'tool':('name','arguments'), 'state_get':(),
                           'state_set':('value',), 'log':('message',)}
             names = parameters.get(method)
             if names is None or len(args)>len(names): raise TypeError('未知方法或参数过多')

@@ -127,14 +127,16 @@ class SkillIntegrationTests(unittest.TestCase):
         self.assertEqual(len(json.loads(result)['items']), 1)
 
     def test_generation_persists_only_draft_and_uses_task_profile(self):
-        from test_code_skills import package
+        from tests.test_code_skills import package
         generated = package()
         payload = {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(generated)}}],
                    'usage': {'total_tokens': 10}}
+        assessment={'choices':[{'finish_reason':'stop','message':{'content':json.dumps({'summary':'可实现','requirements':[
+            {'need':'检查待回','status':'supported','capabilities':['messages.read','python.compute'],'reason':'本地判断'}]})}}]}
         emit = Mock()
         with patch.object(web, 'load_llm_config', return_value={'task': {'model': 'task-model'}}), \
              patch.object(web, 'resolve_llm_api_key', return_value='fixture'), \
-             patch.object(web, 'call_chat_payload', return_value=payload) as call, \
+             patch.object(web, 'call_chat_payload', side_effect=[assessment,payload]) as call, \
              patch('wechat_agent.code_skill_service.validate_code_skill',return_value={'passed':True}):
             self.handler.run_skill_generation({'prompt': '待回'}, emit)
         store = self.handler_class.goal_scheduler.store
@@ -143,7 +145,8 @@ class SkillIntegrationTests(unittest.TestCase):
         self.assertEqual(stored['schema_version'],3)
         self.assertTrue(any(f['path']=='workflow.py' for f in stored['files']))
         self.assertEqual(call.call_args.args[0]['model'], 'task-model')
-        self.assertEqual(json.loads(call.call_args.args[2][-1]['content']), {'task': '待回'})
+        self.assertIn({'task': '待回'},[json.loads(m['content']) for m in call.call_args.args[2] if m['content'].startswith('{')])
+        self.assertEqual(call.call_count,2)
         self.assertEqual(emit.call_args.args[0], 'done')
 
 

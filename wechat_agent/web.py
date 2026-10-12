@@ -4,7 +4,9 @@ import argparse
 import array
 import functools
 import hashlib
+import http.client
 import json
+import logging
 import math
 import mimetypes
 import os
@@ -37,6 +39,7 @@ from .message_pages import select_message_page, encode_cursor, target_filter
 from .qa_answers import QA_ANSWER_FORMAT, parse_qa_answer, validate_qa_answer, qa_answer_text, qa_source_kind
 from .qa_agent import run_conversation_agent
 from .qa_tools import ConversationTools
+from .goal_checkpoints import GoalResumeRequired
 from .qa_recovery import (checkpoint_path as qa_checkpoint_path, recovery_info as qa_recovery_info,
                           read_snapshot as read_qa_snapshot, discard_checkpoint as discard_qa_checkpoint,
                           durable_model_call)
@@ -2307,6 +2310,8 @@ def build_qa_search_db(state: AppState, progress: Any = None) -> dict[str, Any]:
 
 
 def update_qa_search_db_incremental(state: AppState, progress: Any = None) -> dict[str, Any]:
+    # 全文索引更新入口：先判断结构/来源是否兼容，再按各消息分片的水位补写。
+    # “增量”不意味着永不重建；结构版本或数据来源不兼容时不能直接复用旧索引。
     status = qa_search_db_status(state)
     if not status.get("exists") or not status.get("schema_ok") or str(status.get("version") or "") != str(QA_SEARCH_DB_VERSION):
         if progress:
@@ -2330,6 +2335,7 @@ def update_qa_search_db_incremental(state: AppState, progress: Any = None) -> di
             return full_status
 
         voices_changed = voice_fingerprint_changed(stored, fingerprint)
+        # 语音转写可能改变旧消息正文，时间戳却不变，因此必须独立于新消息水位处理。
         voice_cache = voice_cache_snapshot_for_index(state) if voices_changed else None
         cleanup = remove_excluded_qa_sources(conn, progress)
         since_by_source = qa_search_high_watermarks(conn)
@@ -2361,6 +2367,7 @@ def update_qa_search_db_incremental(state: AppState, progress: Any = None) -> di
         voice_updates = {"updated_voices": 0, "invalidated_chunks": 0}
         if voices_changed:
             voice_updates = refresh_qa_voice_rows(state, conn, voice_cache, progress)
+        # 数据处理完成后才更新指纹；中途失败不能把未完成的索引标记成最新。
         with conn:
             conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", ("fingerprint", json.dumps(fingerprint, sort_keys=True, ensure_ascii=False)))
             conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", ("updated_at", datetime.now().isoformat(timespec="seconds")))
@@ -2418,6 +2425,7 @@ def refresh_qa_voice_rows(
     voice_cache: dict[str, Any],
     progress: Any = None,
 ) -> dict[str, int]:
+    # 只核对语音行；修改正文时同步维护 FTS，并让包含该消息的向量块重新进入待更新集合。
     chat_ids = {str(row[0]) for row in conn.execute("SELECT DISTINCT chat_id FROM messages WHERE type = 'voice'")}
     chats = [chat for chat in state.chats if str(chat.get("id") or chat.get("chat") or "") in chat_ids]
     updated = 0
@@ -2607,6 +2615,8 @@ def search_qa_search_db(
     limit: int,
     plan: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    # 混合召回主线：向量召回 + FTS/LIKE 补漏 -> 按消息身份合并 -> 粗排 -> 可选模型重排。
+    # 此函数负责“怎么找”，问答 Agent 负责“下一步找什么”；不要在这里写任务类别路由。
     # Only a validated conversational plan may constrain identities. Keyword/name
     # similarity from ordinary RAG search remains a soft signal.
     people = people if plan and plan.get("verified_people") else []
@@ -2668,6 +2678,7 @@ def search_qa_search_db(
         )
 
     semantic_primary = bool(semantic_items)
+    # 向量有结果时缩小本地补漏预算；没有结果时扩大关键词候选，而不是直接认定无相关消息。
     if status.get("usable"):
         conn = sqlite3.connect(f"file:{state.qa_search_db}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
@@ -2715,6 +2726,7 @@ def search_qa_search_db(
             conn.close()
 
     candidates = list(candidate_by_key.values())
+    # 各路原始分数不可直接比较；候选保留召回来源/名次，供后续 RRF 与本地排序使用。
     diagnostics["primary"] = "embedding" if semantic_primary else "local"
     diagnostics["candidate_count"] = len(candidates)
     diagnostics["branches"] = retrieval_branch_summary(candidates)
@@ -2987,6 +2999,7 @@ def add_retrieval_candidate(
     query: str,
     raw_score: Any = None,
 ) -> dict[str, Any]:
+    # 同一来源身份合并为一个候选，累计不同召回分支的名次贡献，保留信号供页面诊断。
     key = source_identity(item)
     current = pool.get(key)
     if current is None:
@@ -2997,6 +3010,7 @@ def add_retrieval_candidate(
         pool[key] = current
     weight = float(QA_RETRIEVAL_SOURCE_WEIGHTS.get(source, 1.0))
     rank_value = max(1, int(rank or 1))
+    # 加权 RRF 只用排名：避免把 BM25、余弦相似度等不同量纲的原始分数直接相加。
     contribution = weight / (QA_RRF_K + rank_value)
     signal: dict[str, Any] = {
         "source": source,
@@ -3273,6 +3287,7 @@ def build_or_update_qa_semantic_index(
     full: bool = False,
     progress: Any = None,
 ) -> dict[str, Any]:
+    # 语义索引依赖全文消息表：先补齐文本，再只为未映射的消息分块、请求向量并保存映射。
     config = load_llm_config(state.llm_config)
     raw_profile = config["embedding"]
     if not raw_profile.get("enabled"):
@@ -3300,6 +3315,7 @@ def build_or_update_qa_semantic_index(
         ensure_semantic_schema(conn)
         model = str(profile.get("model") or "").strip()
         desired_dimensions = expected_embedding_dimensions(profile)
+        # 不同模型或维度的向量不在同一个可比较空间，不能混在旧索引里继续追加。
         if full or semantic_index_has_incompatible_rows(conn, model, desired_dimensions):
             with conn:
                 conn.execute("DELETE FROM semantic_message_map")
@@ -3346,6 +3362,7 @@ def build_or_update_qa_semantic_index(
                 )
             vectors, usage = call_embeddings(profile, api_key, [chunk["search_text"] for chunk in batch], progress=progress)
             usage_seen = merge_usage_totals(usage_totals, usage) or usage_seen
+            # 每批向量与消息映射一起提交；后续批失败时，已提交批次可被下一次增量更新复用。
             with conn:
                 for chunk, vector in zip(batch, vectors):
                     chunk_id = insert_semantic_chunk(conn, chunk, vector, model)
@@ -3389,6 +3406,7 @@ def semantic_index_has_incompatible_rows(conn: sqlite3.Connection, model: str, d
 
 
 def semantic_pending_message_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    # 映射表就是待处理判据：新消息、或因语音文本变化而失效的块中消息，都没有有效映射。
     return conn.execute(
         """
         SELECT m.*
@@ -3401,6 +3419,8 @@ def semantic_pending_message_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]
 
 
 def semantic_chunks_from_rows(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    # 将相邻短消息合为检索块；换会话、超过消息/字符阈值或间隔超过六小时就切块。
+    # 块只是召回单位，不代表其中每句话都满足最终问题的人物和时间条件。
     chunks: list[dict[str, Any]] = []
     current: list[sqlite3.Row] = []
     current_key = ""
@@ -3541,6 +3561,7 @@ def query_qa_semantic_index(
     plan: dict[str, Any] | None = None,
     query_embedding: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    # API 只生成查询向量；已有聊天向量存于本地 SQLite，相似度在本进程计算，不由远端读数据库。
     config = load_llm_config(state.llm_config)
     raw_profile = config["embedding"]
     profile = effective_llm_profile(config, "embedding")
@@ -3598,6 +3619,7 @@ def query_qa_semantic_index(
     finally:
         conn.close()
     scored: list[tuple[float, sqlite3.Row, dict[str, Any]]] = []
+    # 当前实现逐个计算候选块的余弦相似度，并非 ANN 向量数据库；命中块还需回到原始消息核验。
     for row in rows:
         vector = unpack_float_vector(row["embedding"])
         best_weighted_score = -1.0
@@ -3805,6 +3827,7 @@ def rerank_qa_items_with_config(
     items: list[dict[str, Any]],
     limit: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    # 重排是可选的质量增强：网络失败保留原顺序，但“上次可能已计费”的恢复异常必须交给用户确认。
     config = load_llm_config(state.llm_config)
     raw_profile = config["rerank"]
     diagnostics: dict[str, Any] = {
@@ -3827,7 +3850,9 @@ def rerank_qa_items_with_config(
     try:
         response = call_chat_completion(profile, api_key, build_rerank_messages(question, candidates), timeout=90)
         reranked = apply_rerank_response(response, candidates, items, limit)
-    except RuntimeError as exc:
+    except GoalResumeRequired:
+        raise
+    except (RuntimeError, TimeoutError) as exc:
         diagnostics["rerank_error"] = str(exc)
         return items[:limit], diagnostics
     diagnostics["rerank_used"] = True
@@ -4095,6 +4120,7 @@ def select_qa_context_with_diagnostics(
 
 
 def rank_qa_items(items: list[dict[str, Any]], question: str, limit: int) -> list[dict[str, Any]]:
+    # 本地粗排融合启发式相关分、语义加分和 RRF；同分时优先新消息，再交给可选 API 重排。
     scored: list[tuple[int, int, dict[str, Any]]] = []
     for item in items:
         ranked_item = dict(item)
@@ -4455,6 +4481,8 @@ def format_qa_context_item(index: int, item: dict[str, Any]) -> str:
     return (
         f"[{index}] 会话类型：{qa_source_kind(item)}；聊天：{item.get('chat_title')}\n"
         f"证据用途：{item.get('evidence_role') or 'primary'}；消息标识：{item.get('evidence_id') or ''}\n"
+        + ("关系证据：仅为相邻发言候选，不能单凭本条认定互相回复或累计互动次数。\n" if item.get('candidate_relation') else "")
+        +
         f"时间：{item.get('time')}；发送者：{item.get('sender')}；类型：{item.get('type')}\n"
         f"内容：{item.get('text')}"
     )
@@ -4476,6 +4504,9 @@ def call_qa_answer(profile, api_key, question, context, history=None):
         "primary是本轮证据，surrounding是周边其他人的对话，background仅为历史背景，statistics是统计。"
         "不得把background当成今天的发言，不得把surrounding其他人的观点归给目标人物。"
         "分析态度时区分原话与推测；未回复线索不等于必须回复，已接通电话不能说成未接来电。"
+        "群内共同出现、相邻发言和候选时间窗不等于直接互动；不得把候选数或相邻片段数说成独立互动次数。"
+        "只有明确的引用对象、@或上下文内容承接才能支持回应判断，其他情况只能说可能在共同讨论。"
+        "优先用具体问答原文举例；若没有完整且去重的互动统计，不给总体频率或亲密程度的确定结论。"
         "未完整覆盖时不得断言全部检查或没有遗漏。"
     )
     # A single repair handles invalid references from compatible providers; never
@@ -4538,7 +4569,7 @@ def call_chat_payload(profile, api_key, messages, timeout=90, tools=None, tool_c
     except urllib.error.HTTPError as exc:
         if tools is not None:
             support = "工具调用与 Structured Outputs（JSON Schema）支持" if response_format is not None else "工具调用支持"
-            raise RuntimeError(f"任务模型请求失败：HTTP {exc.code}；请检查模型{support}、额度或网络配置") from exc
+            raise RuntimeError(f"模型工具调用请求失败：HTTP {exc.code}；请检查模型{support}、额度或网络配置") from exc
         detail = exc.read().decode("utf-8", "ignore")[:500]
         raise RuntimeError(f"模型请求失败：HTTP {exc.code} {detail}") from exc
     except urllib.error.URLError as exc:
@@ -4547,6 +4578,8 @@ def call_chat_payload(profile, api_key, messages, timeout=90, tools=None, tool_c
         raise RuntimeError(f"模型请求失败：{exc.reason}") from exc
     except (TimeoutError, socket.timeout) as exc:
         raise TimeoutError(f"模型响应读取超时（等待上限 {timeout} 秒）") from exc
+    except (OSError, http.client.HTTPException) as exc:
+        raise RuntimeError(f"模型服务连接中断（{type(exc).__name__}），未自动重试") from exc
     return payload
 
 
@@ -5453,6 +5486,7 @@ def make_handler(state: AppState):
 
     def execute_goal(goal, report, cancelled):
         nonlocal active_requests
+        # 任务执行入口：schema-v3 运行自定义代码包；下方旧声明式 Skill/工具循环仅用于兼容。
         # Keep the next observation window behind the last confirmed sync,
         # so messages imported after this run are not skipped by wall-clock time.
         if not goal.get("resume"):
@@ -5870,13 +5904,17 @@ def make_handler(state: AppState):
             goal_id = str(payload.get('id') or '')
             if goal_id and not any(g['id'] == goal_id for g in goal_store.list()):
                 raise ValueError('任务不存在')
-            config = load_llm_config(state.llm_config)['task']
+            profiles = load_llm_config(state.llm_config)
+            config = profiles['task']
             key = resolve_llm_api_key(config)
             if not key:
                 raise ValueError('请先配置任务助手模型')
+            availability={}
+            if not profiles.get('embedding',{}).get('enabled') or not resolve_llm_api_key(profiles.get('embedding',{}),profiles.get('qa')):
+                availability.update(embedding='Embedding 未启用或未配置密钥', **{'tool.search':'混合检索需要可用的 Embedding 配置'})
             result = generate_code_skill(prompt,
                 lambda messages,format:call_chat_payload(config,key,messages,timeout=GOAL_MODEL_TIMEOUT_SECONDS,response_format=format),
-                goal_store,goal_id,str(config.get('model') or ''),emit)
+                goal_store,goal_id,str(config.get('model') or ''),emit,availability=availability)
             emit('done', **result)
 
         def run_skill_validation(self, payload, emit):
@@ -6332,6 +6370,8 @@ def make_handler(state: AppState):
             self.run_qa_stream(payload, emit, resume=True)
 
         def run_qa_stream(self, payload, emit, resume=False) -> None:
+            # Web 适配入口：后台作业负责执行，HTTP/页面只观察进度；先保存用户问题和待完成回答。
+            # 恢复时使用原问题/时间快照，并按 turn_id 更新原回答，不能覆盖后来新增的对话。
             started_at = time.perf_counter()
             requested_at = datetime.now().astimezone()
             question = str(payload.get("question") or "").strip()
@@ -6404,15 +6444,17 @@ def make_handler(state: AppState):
                                 processing_ms=elapsed())
 
                 def hybrid(query, people, since, until, count):
+                    # 将 Agent 已核验的人物/时间交给底层 RAG；工具层还会核对群聊范围和消息发送者。
                     plan = build_qa_search_plan(qa_index, query, people, since)
                     plan.update(verified_people=True, time_until=until)
                     return search_qa_search_db(state, query, people, since, count, plan)
 
                 clean_history = [item for item in history if not item.get("error") and not item.get("pending") and not item.get("stopped")]
+                # 注入检索、模型和持久化能力；Agent 本身不依赖 HTTP 连接，也不持有全局 API 密钥。
                 answer_data, context, retrieval = run_conversation_agent(
                     question, clean_history, qa_index.get("people_list") or [],
                     ConversationTools(state, hybrid, qa_item_from_search_row, check_job_cancelled),
-                    lambda messages, schema: call_chat_payload(profile, api_key, messages, response_format=schema),
+                    lambda messages, schema=None, **options: call_chat_payload(profile, api_key, messages, response_format=schema, **options),
                     lambda query, sources, prior: call_qa_answer(profile, api_key, query, sources, prior),
                     emit, checkpoint, check_job_cancelled, limit=limit, now=requested_at,
                     checkpoint_path=path, resume=resume, confirm_retry=payload.get('confirm_retry') is True,
@@ -6443,7 +6485,8 @@ def make_handler(state: AppState):
                 discard_qa_checkpoint(state.qa_store, turn_id)
                 raise
             except Exception as exc:
-                fail(str(exc) if isinstance(exc, (RuntimeError, ValueError, TimeoutError)) else "问答执行异常，请检查服务日志")
+                logging.getLogger(__name__).error("Q&A turn %s failed: %s", turn_id, type(exc).__name__)
+                fail(str(exc) if isinstance(exc, (RuntimeError, ValueError, TimeoutError)) else f"问答执行异常（{type(exc).__name__}），执行记录已保留")
 
         def run_rag_search(self, payload, emit) -> None:
             question = str(payload.get("question") or "").strip()

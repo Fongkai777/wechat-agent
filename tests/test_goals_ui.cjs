@@ -9,6 +9,7 @@ function setup(initialGoals = [], rangeUnits = ['days','weeks','months'], manual
   let goals = initialGoals;
   let failure = '';
   let confirmed = true;
+  let generationResponse = null;
   const histories = new Map();
   let readHistory = id => histories.get(id) || [];
   let generated = {schema_version:1,name:'待回检查',description:'列出末条来自对方的私聊',source:'private_latest',filters:{sender:'other',keywords:[],keyword_match:'any'},output:{mode:'list',instruction:''}};
@@ -42,9 +43,9 @@ function setup(initialGoals = [], rangeUnits = ['days','weeks','months'], manual
     return {ok:true,json:async()=>({ok:true,goals,scheduler_running:true,runs:[],range_units:rangeUnits,interval_units:['hours','days'],manual_run_supported:manualSupported,skills_supported:skillsSupported,...runData})};
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../web/goals.js'),'utf8'),{
-    document,fetch,window:{WechatJobs:{run:async(kind,payload)=>{requests.push({url:kind,data:payload}); if(failure) throw new Error(failure);return {skill:generated,prompt:payload.prompt,usage:{total_tokens:100},validation:{passed:true}};}}},setInterval:fn=>intervals.push(fn),Date,console,confirm:message=>{confirmations.push(message);return confirmed;},CustomEvent:class {constructor(type,init){this.type=type;this.detail=init.detail;}}
+    document,fetch,window:{WechatJobs:{run:async(kind,payload)=>{requests.push({url:kind,data:payload}); if(failure) throw new Error(failure);return generationResponse || {skill:generated,prompt:payload.prompt,usage:{total_tokens:100},validation:{passed:true}};}}},setInterval:fn=>intervals.push(fn),Date,console,confirm:message=>{confirmations.push(message);return confirmed;},CustomEvent:class {constructor(type,init){this.type=type;this.detail=init.detail;}}
   });
-  return {element,requests,document,intervals,histories,confirmations,get goals(){return goals;},generate(value){generated=value;},fail(message){failure=message;},confirm(value){confirmed=value;},onHistory(fn){readHistory=fn;},
+  return {element,requests,document,intervals,histories,confirmations,get goals(){return goals;},generationResult(value){generationResponse=value;},generate(value){generated=value;},fail(message){failure=message;},confirm(value){confirmed=value;},onHistory(fn){readHistory=fn;},
     async load(){documentEvents.get('viewchange')({detail:'goals'});await new Promise(resolve=>setImmediate(resolve));},
     async emit(id,name,event={}) {await element(id).events.get(name)({preventDefault(){},...event});},
   };
@@ -66,6 +67,24 @@ test('resuming a saved run keeps its ID and requires confirmation for unknown mo
   const request=app.requests.find(r=>r.url==='/api/goals/resume');
   assert.deepEqual(request.data,{id:'one',run_id:'old-run',confirm_retry:true});
   assert.ok(!app.requests.some(r=>r.url==='/api/goals/run'));
+});
+
+test('capability gap is visible and cannot replace draft or create a task',async()=>{
+  const app=setup([],undefined,true,true); await app.load(); await app.emit('goalNewBtn','click');
+  app.element('goalPrompt').value='检查私聊'; await app.emit('goalSkillGenerate','click');
+  const original=app.element('goalSkillText').value;
+  app.element('goalPrompt').value='检查并发送';
+  app.generationResult({ok:true,prompt:'检查并发送',capability_report:{task:'检查并发送',status:'partial',summary:'部分可做',
+    requirements:[{need:'<script>send()</script>',status:'unsupported',reason:'缺少发送接口'}]}});
+  await app.emit('goalSkillGenerate','click');
+  assert.equal(app.element('goalSkillText').value,original);
+  assert.equal(app.element('goalCapabilityReport').hidden,false);
+  assert.match(app.element('goalCapabilityReport').innerHTML,/缺少发送接口/);
+  assert.ok(!app.element('goalCapabilityReport').innerHTML.includes('<script>'));
+  assert.match(app.element('goalSkillStatus').textContent,/未生成或替换/);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/save'||r.url==='/api/goals/run'));
+  app.element('goalPrompt').value='只检查'; await app.emit('goalPrompt','input');
+  assert.match(app.element('goalCapabilityReport').innerHTML,/任务已修改/);
 });
 
 test('older runs without checkpoints do not expose a resume action',async()=>{

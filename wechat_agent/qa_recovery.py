@@ -55,6 +55,7 @@ def read_snapshot(path):
 
 
 def frozen_input(conn, value, resume):
+    # 固定最初的问题、历史、时间和协议版本；恢复不能把“今天”重新解释为恢复当天。
     with conn:
         conn.execute('CREATE TABLE IF NOT EXISTS qa_input(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
         if not resume:
@@ -69,6 +70,7 @@ def frozen_input(conn, value, resume):
 
 
 class CallReceipts:
+    # 图检查点保存执行位置，调用回执保存工具/API 结果，两者配合缩小崩溃后重复执行的窗口。
     def __init__(self, conn, allow_retry=False):
         self.conn = conn
         with conn:
@@ -79,6 +81,7 @@ class CallReceipts:
 
     @contextmanager
     def scope(self, name):
+        # 为每轮节点及其嵌套调用分配独立命名空间，避免下一轮误用上一轮的结果。
         token = _scope.set([self, name, 0])
         try:
             yield
@@ -86,6 +89,7 @@ class CallReceipts:
             _scope.reset(token)
 
     def call(self, key, invoke, billable):
+        # done 可直接复用；pending 只能说明请求已开始，不能证明远端没有执行或计费。
         row = self.conn.execute('SELECT status,payload,uncertain_attempts FROM qa_calls WHERE id=?', (key,)).fetchone()
         if row and row[0] == 'done':
             return json.loads(row[1])
@@ -93,6 +97,7 @@ class CallReceipts:
             raise GoalResumeRequired('上次模型请求结果未知，可能已计费；请确认后重试该请求')
         unknown = int(row[2]) + int(billable) if row else 0
         self.approved.discard(key)
+        # 先落 pending 再发请求，收到结果先落 done 再推进图；远端 exactly-once 无法由本地保证。
         with self.conn:
             self.conn.execute("INSERT OR REPLACE INTO qa_calls VALUES(?, 'pending', '', ?, ?)", (key, int(billable), unknown))
         with self.scope(key):
@@ -120,6 +125,7 @@ def durable_model_call(function):
         if _scope.get() is None:
             return function(*args, **kwargs)
         values = signature.bind(*args, **kwargs).arguments
+        # 用参数摘要识别嵌套请求（如答案修复/重排），密钥和回调不进入摘要输入。
         values = {k: v for k, v in values.items() if k not in ('api_key', 'progress')}
         if 'profile' in values:
             values['profile'] = {k: v for k, v in values['profile'].items() if k != 'api_key'}

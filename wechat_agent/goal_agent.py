@@ -12,6 +12,7 @@ from .goals import (GoalCancelled, GoalCoverageError, GoalReferenceError,
                     GOAL_RESULT_FORMAT, TOOLS, observation_window, search_range, validate_goal_result)
 from .goal_checkpoints import checkpoint_session
 
+# 兼容未配置 Skill 的任务：模型逐轮选择工具；schema-v3 代码包走 code_skill_service，而不是本图。
 
 def initial_messages(goal):
     now = datetime.fromtimestamp(goal["started_at"]).astimezone()
@@ -57,6 +58,7 @@ def run_goal_graph(goal, completion, invoke, report, cancelled, model):
                 "sources": s["sources"], "model": model})
 
     def model_node(s):
+        # 每轮先记录付费调用回执，再处理响应；读取超时不代表远端没执行，不能静默重试。
         check()
         progress(s, "模型正在检查任务")
         turn = s["turn"] + 1
@@ -108,6 +110,7 @@ def run_goal_graph(goal, completion, invoke, report, cancelled, model):
         return s
 
     def tool_node(s):
+        # 参数校验后执行本地只读工具，并为本次运行统一分配引用编号，再按 call_id 回传结果。
         check()
         call = s["pending_calls"][s["tool_index"]]
         name = (call.get("function") or {}).get("name", "")
@@ -152,6 +155,7 @@ def run_goal_graph(goal, completion, invoke, report, cancelled, model):
         return s
 
     def validate_node(s):
+        # 最终结果必须引用本次实际取回的证据；编号错误可有限次修复，不能直接保存成成功报告。
         check()
         choice = (s["payload"].get("choices") or [{}])[0]
         content = str((choice.get("message") or {}).get("content") or "").strip()

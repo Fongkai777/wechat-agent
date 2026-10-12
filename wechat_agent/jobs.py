@@ -74,11 +74,13 @@ class Job:
 
 
 class JobRegistry:
+    # 作业属于服务进程而非浏览器连接：切换页面可以继续，服务退出则需要各业务自己的持久化恢复。
     def __init__(self):
         self.lock = threading.RLock()
         self.jobs = {}
 
     def start(self, kind, payload, resource, work, request_id=None, on_finished=None):
+        # 同一请求编号可幂等重取；资源锁防止同一会话或索引被两个作业同时修改。
         job_id = str(request_id or uuid.uuid4().hex)
         if not job_id or len(job_id) > 100:
             raise ValueError("无效的执行编号")
@@ -103,6 +105,7 @@ class JobRegistry:
 
     @staticmethod
     def _run(job, work, on_finished=None):
+        # 用线程本地变量让底层模型/索引函数也能检查停止信号；取消是协作式，并非强杀网络请求。
         _current.job = job
         try:
             work(job)
@@ -149,6 +152,7 @@ class JobRegistry:
 def run_preparation(stages, emit):
     """Keep stage sequencing on the server even when there is no browser observer."""
     voice_failures = 0
+    # 一键准备按传入阶段串行执行（转写 -> 全文 -> 语义）；阶段失败不继续发布下游成功状态。
     for index, (label, run) in enumerate(stages, 1):
         check_job_cancelled()
         emit("stage", stage=index, message=label)

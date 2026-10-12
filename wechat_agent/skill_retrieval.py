@@ -23,6 +23,7 @@ def deduplicate(items):
 
 
 class SkillRetrieval:
+    # 任务检索适配器，由旧声明式 Skill 和新代码包共同复用，不在这里决定任务业务流程。
     def __init__(self, state, status, semantic, embed, row_to_item, reader, check, voice_cache):
         self.state, self.status, self.semantic, self.embed = state, status, semantic, embed
         self.row_to_item, self.reader, self.check, self.voice_cache = row_to_item, reader, check, voice_cache
@@ -38,6 +39,7 @@ class SkillRetrieval:
             conn.close()
 
     def prepare(self):
+        # 这里只检查依赖；代码包入口会先按需更新索引，旧 Skill 则直接收到未就绪错误。
         self.check()
         text, semantic = self.status()
         if not text.get('ready') or text.get('soft_stale'):
@@ -54,6 +56,7 @@ class SkillRetrieval:
                 'sender_known': bool(self.state.account and sender and not sender.isdigit())}
 
     def search(self, step, embedding, since, until):
+        # 先按语义阈值选块，再还原为窗口内的原始消息；关键词是并集补漏，不是二次 AND 筛选。
         self.prepare()
         since = max(since, self.state.since_ts or 0)
         hits, diagnostics = self.semantic(step['query'], since, until, embedding)
@@ -96,6 +99,7 @@ class SkillRetrieval:
                 'query': step['query'], 'warning': '语义与关键词召回不保证穷尽主题相关消息；相似度门槛为 ' + str(step['min_similarity'])}
 
     def context(self, seeds, step, since, until):
+        # 上下文只在同一会话、任务窗口和最大时间间隔内扩展，并标记 context，不能当独立命中计数。
         since = max(since, self.state.since_ts or 0)
         gap = step['max_gap_minutes'] * 60
         contexts = []

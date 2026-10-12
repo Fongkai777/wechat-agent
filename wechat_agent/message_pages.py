@@ -22,6 +22,7 @@ def quote_identifier(value: str) -> str:
 
 
 def row_key(row: dict[str, Any]) -> tuple:
+    # 同一秒可能有多条消息，复合排序键加入分片/表/行号，保证翻页边界稳定。
     return (row["create_time"], row["source_db"], row["source_table"], row["source_rowid"])
 
 
@@ -46,6 +47,8 @@ def decode_cursor(value: str, chat_id: str) -> tuple:
 
 def select_message_page(root: Path, rec: dict[str, Any], since_ts: int | None,
                         limit: int = 100, before: str = "", after: str = "") -> dict[str, Any]:
+    # 游标分页：各分片最多读取一页再合并，不为打开聊天一次性加载整段历史。
+    # before 读取更早消息，after 读取新增消息；多取一条用于判断是否还有下一页。
     if before and after:
         raise ValueError("before and after are mutually exclusive")
     if not 1 <= limit <= 200:
@@ -95,6 +98,7 @@ def select_message_page(root: Path, rec: dict[str, Any], since_ts: int | None,
         finally:
             conn.close()
     candidates.sort(key=row_key, reverse=not ascending)
+    # 先按请求方向选出最近的一页，再转为时间正序给页面展示；不能先正序截断。
     more = len(candidates) > limit
     rows = sorted(candidates[:limit], key=row_key)
     return {

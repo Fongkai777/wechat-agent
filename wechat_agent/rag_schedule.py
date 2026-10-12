@@ -11,6 +11,7 @@ from .jobs import JobConflict
 
 
 class RagScheduler:
+    # 保存的是单机调度状态，不是分布式任务队列；真正更新索引由既有后台作业执行。
     def __init__(self, path, submit, get_job, clock=time.time):
         self.path, self.submit, self.get_job, self.clock = path, submit, get_job, clock
         self.lock = threading.RLock()
@@ -67,6 +68,7 @@ class RagScheduler:
                     "scheduler_running": bool(self.thread and self.thread.is_alive()), "job": job}
 
     def record_result(self, job):
+        # 手动和定时更新共用“最新结果”，避免手动成功后页面仍显示更早的定时失败。
         result = job.snapshot()
         if result["kind"] != "/api/rag/prepare" or result["status"] == "running" or not result["finished_at"]:
             return
@@ -106,6 +108,7 @@ class RagScheduler:
             return self.snapshot()
 
     def tick(self):
+        # 先收尾已启动作业，再判断是否到期；不会在一次 tick 中补跑多个错过的周期。
         with self.lock:
             row = self._read()
             now = self.clock()
