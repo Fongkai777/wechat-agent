@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -38,9 +40,27 @@ class SearchEvaluationTests(unittest.TestCase):
             summary=report['summaries']['keyword']
             self.assertEqual(summary['reviewed'],0)
             self.assertEqual(summary['generation_failures'],0)
+            self.assertEqual(summary['retrieval_failures'],0)
+            self.assertTrue(all(not r.get('error_type') for r in report['results']))
+            self.assertTrue(all(r['all_evidence_found'] for r in report['results'] if r['expected_message_ids']))
+            for row in report['results']:
+                self.assertLessEqual(len(row['sources']),args.top_k)
+                self.assertTrue(all(s.get('evidence_id') for s in row['sources']))
             self.assertIsNone(summary['answer_correctness']['rate'])
             self.assertEqual(report['summaries']['agent']['status'],'not_run')
             self.assertEqual(json.loads((args.output/'api_usage.json').read_text()) if (args.output/'api_usage.json').exists() else [],[])
+
+    def test_offline_cli_exits_successfully_with_nonempty_keyword_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(__file__).resolve().parents[1]
+            output = Path(directory)/'report'
+            result = subprocess.run([sys.executable,'-B',str(root/'scripts/evaluate_search_v2.py'),
+                '--cases','E01,E08','--output',str(output)],cwd=root,
+                capture_output=True,text=True,timeout=60)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            report = json.loads((output/'results.json').read_text())
+            self.assertEqual(len(report['results']),2)
+            self.assertTrue(all(r['all_evidence_found'] for r in report['results']))
 
     def test_paid_modes_cannot_silently_be_replaced_with_offline_search(self):
         with self.assertRaisesRegex(ValueError,'require explicit'):

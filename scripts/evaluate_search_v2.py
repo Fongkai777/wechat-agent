@@ -20,7 +20,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from wechat_agent import demo, web
 from wechat_agent.qa_agent import run_conversation_agent
-from wechat_agent.qa_tools import ConversationTools
+from wechat_agent.qa_tools import ConversationTools, evidence_id
 from wechat_agent.evidence_context import select_evidence
 from wechat_agent.platform_runtime import create_platform_runtime, PlatformToolSession, QA_LIMITS
 import threading
@@ -67,7 +67,12 @@ def keyword(state, query, size, until):
                 pool[row['id']] = row
                 scores[row['id']] = scores.get(row['id'], 0) + 1 / (60 + rank)
         order = sorted(pool, key=lambda mid: (scores[mid], pool[mid]['timestamp']), reverse=True)
-        return [web.qa_item_from_search_row(pool[mid]) for mid in order[:size]]
+        items = []
+        for mid in order[:size]:
+            item = web.qa_item_from_search_row(pool[mid])
+            item.update(evidence_id=evidence_id(item), evidence_role='primary', index_row_id=mid)
+            items.append(item)
+        return items
 
 
 def write_report(output, cases, results, calls, config, corpus, live, top_k):
@@ -220,7 +225,7 @@ def evaluate(args):
                 row['all_evidence_found'] = expected <= set(row['retrieved_message_ids']) if expected else None
                 results.append(row)
                 report = write_report(args.output,cases,results,usage.calls,config,corpus,live,args.top_k)
-                print(f"{mode} {case['id']}: recall={row['evidence_recall']} answer={bool(row.get('answer'))} latency={row['latency_s']}s",flush=True)
+                print(f"{mode} {case['id']}: recall={row['evidence_recall']} answer={bool(row.get('answer'))} latency={row['latency_s']}s error={row.get('error_type') or row.get('judge_error_type') or 'none'}",flush=True)
     return report
 
 
