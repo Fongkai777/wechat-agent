@@ -1,5 +1,5 @@
 {
-  "provenance": "Entirely fictional, authored for this repository. Not derived from private conversations.",
+  "provenance": "Entirely fictional, authored for this repository. Frozen evaluation corpus; not derived from private conversations.",
   "account": "demo_me",
   "contacts": {"demo_me": "我", "demo_lin": "林晓 · 示例", "demo_chen": "陈安 · 示例", "demo_yu": "余舟 · 示例", "demo_career@chatroom": "AI 实习交流 · 示例", "demo_food@chatroom": "周末食光 · 示例", "demo_project@chatroom": "检索项目组 · 示例"},
   "messages": [

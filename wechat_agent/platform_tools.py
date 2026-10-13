@@ -30,7 +30,7 @@ FUNCTION_DESCRIPTIONS = {
     'list_chats': '查找会话，可按会话名称和类型筛选，返回群名、会话ID、发送者发言数及分页信息；不证明互动。',
     'shared_windows': '定位同一群内指定人物的共同发言候选时间窗，至少两人；返回双方原文和周边消息，候选数不是互动次数。',
     'timeline': '按本次提供的人物、时间和会话条件读取原始消息，按时间倒序分页。',
-    'search': '用query做关键词与语义混合检索，可直接搜索，无需先查人物或会话；不代表穷尽所有消息。',
+    'search': '用query做关键词与语义混合检索，可直接搜索；size限制命中数，另附同会话30分钟内前后各3条起、补齐边界同人连续发言（最多各12条）的原文和context_ids关联。相邻不代表同一话题；不代表穷尽所有消息。',
     'surrounding': '根据已取得的证据ID展开前后文，保留其他发送者的真实身份。',
     'statistics': '用本地索引统计范围内消息数，不是两人相互回复次数。',
     'unanswered': '查找指定时间窗内最后消息来自对方的私聊候选；不代表必须回复。',
@@ -183,10 +183,10 @@ def parse_tool_call(payload, sources, observations, plan, previous_messages):
 
 def tool_result_message(call_id, result):
     # 回执携带分页元信息与有界原文预览，完整证据仍由服务端工作集管理。
-    observation = {k:result[k] for k in ('tool','matched','next_offset','complete','note','chats','people','windows','window_seconds') if k in result}
+    observation = {k:result[k] for k in ('tool','matched','next_offset','complete','note','chats','people','windows','window_seconds','anchor_count','context_count') if k in result}
     items, budget = [], 1500
     for source in result.get('items',[]):
-        item = {k:source.get(k) for k in ('evidence_id','chat_id','sender','time','evidence_role')}
+        item = {k:source.get(k) for k in ('evidence_id','chat_id','chat_title','chat_type','sender','time','evidence_role','context_ids','context_for')}
         text = str(source.get('text',''))
         excerpt = text[:min(500,budget)]
         budget -= len(excerpt)

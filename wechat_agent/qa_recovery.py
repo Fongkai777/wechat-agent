@@ -15,7 +15,7 @@ from .goal_checkpoints import GoalResumeRequired, checkpoint_info, remove_checkp
 
 
 _scope = ContextVar('qa_receipts', default=None)
-AGENT_VERSION = 6
+AGENT_VERSION = 8
 
 
 def checkpoint_path(store, turn_id):

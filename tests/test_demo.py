@@ -8,7 +8,7 @@ class DemoTests(unittest.TestCase):
     def test_isolated_idempotent_import_and_incremental_index(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            self.assertEqual(demo.initialize(root), 30)
+            self.assertEqual(demo.initialize(root, dataset='evaluation'), 30)
             self.assertEqual(demo.initialize(root), 0)
             state = demo.demo_state(root)
             self.assertEqual(len(state.chats), 6)

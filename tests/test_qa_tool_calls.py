@@ -8,10 +8,13 @@ from wechat_agent import web
 from wechat_agent.platform_tools import FUNCTION_FIELDS, FUNCTION_TOOLS, parse_tool_call
 from wechat_agent.platform_tools import FILTER_TOOLS
 from wechat_agent.qa_agent import run_conversation_agent
-from tests.test_qa_agent import NOW, PEOPLE, completion, decision
+from tests.test_qa_agent import NOW, PEOPLE, completion, decision, accept_reviews
 
 
 class NativeToolTests(unittest.TestCase):
+    def setUp(self):
+        accept_reviews(self)
+
     def test_schemas_have_only_tool_specific_required_parameters(self):
         for tool in FUNCTION_TOOLS:
             function = tool['function']

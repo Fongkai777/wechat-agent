@@ -143,7 +143,7 @@ def evaluate(args):
     with tempfile.TemporaryDirectory(prefix='wechat-search-v2-') as directory, UsageRecorder(args.output) as usage:
         root = Path(directory)
         with patch.object(demo, 'fixture', return_value=copy.deepcopy(corpus)):
-            demo.initialize(root)
+            demo.initialize(root, dataset='evaluation')
         demo.import_messages(root, corpus['increment'])
         state = demo.demo_state(root)
         if live: state.llm_config = args.live_config.resolve()

@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from tests.test_code_skills import package
-from tests.test_qa_agent import decision
+from tests.test_qa_agent import decision, completion, accept_reviews
 from wechat_agent import web
 from wechat_agent.code_skill_service import synthetic_api
 from wechat_agent.platform_api import PlatformAPI
@@ -157,6 +157,9 @@ class UnifiedAPITests(unittest.TestCase):
 
 
 class UnifiedAgentRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        accept_reviews(self)
+
     def test_graph_uses_data_tools_and_restores_paid_receipt_and_ledger(self):
         class Interrupted(BaseException): pass
         with tempfile.TemporaryDirectory() as directory:
@@ -199,7 +202,10 @@ class SharedRuntimeTests(unittest.TestCase):
             responses=[decision('query_messages',**native_args('query_messages',sql='SELECT * FROM messages WHERE chat_id=?',params=['alice'])),
                        decision('finish'),
                        {'choices':[{'finish_reason':'stop','message':{'content':json.dumps({'paragraphs':[
-                           {'kind':'answer','text':'Alice asked about the schedule.','source_refs':[1]}]})}}]}]
+                           {'kind':'answer','text':'Alice asked about the schedule.','source_refs':[1]}]})}}]},
+                       completion({'checks':[{'paragraph_index':1,'status':'supported',
+                           'reason':'Matches original message','source_refs':[1]}],
+                           'coverage':{'status':'covered','reason':'Question answered'}})]
             with patch.object(web,'load_llm_config',return_value=config), \
                  patch.object(web,'load_or_build_qa_index',return_value={'message_count':5}), \
                  patch.object(web,'qa_search_db_status',return_value={'ready':True}), \
@@ -213,11 +219,12 @@ class SharedRuntimeTests(unittest.TestCase):
                 handler.run_qa_stream({'question':'What did Alice ask?','conversation_id':'fixture'},
                                      lambda event,**data:events.append((event,data)))
             self.assertEqual(events[-1][0],'done',events[-1])
-            self.assertEqual(paid.call_count,3)
+            self.assertEqual(paid.call_count,4)
             stored=web.get_qa_conversation(state.qa_store,'fixture')['messages'][-1]
             self.assertEqual(stored['sources'][0]['chat_id'],'alice')
             self.assertEqual(stored['sources'][0]['evidence_role'],'primary')
             self.assertEqual(stored['retrieval']['trace'][0]['parameters']['tool'],'query_messages')
+            self.assertEqual(stored['retrieval']['quality_status'],'reviewed')
 
     def test_same_factory_handles_qa_and_task_raw_reads_without_models(self):
         with tempfile.TemporaryDirectory() as directory:

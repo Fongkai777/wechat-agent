@@ -9,6 +9,26 @@ import json
 import sqlite3
 from contextlib import contextmanager
 
+from .evidence_context import merge_evidence
+
+CONTEXT_BASE_ROWS = 3
+CONTEXT_MAX_ROWS = 12
+CONTEXT_TURN_GAP_SECONDS = 120
+
+
+def context_turn(rows):
+    # Preserve the boundary speaker's burst of short posts, not an inferred
+    # topic. A pause, sender change or hard cap ends the extension.
+    selected = list(rows[:CONTEXT_BASE_ROWS])
+    for row in rows[CONTEXT_BASE_ROWS:]:
+        previous = selected[-1]
+        if (len(selected) >= CONTEXT_MAX_ROWS or not row['sender_username'] or
+                row['sender_username'] != previous['sender_username'] or
+                abs(row['timestamp']-previous['timestamp']) > CONTEXT_TURN_GAP_SECONDS):
+            break
+        selected.append(row)
+    return selected
+
 
 def evidence_id(item):
     # 以原始消息定位字段生成稳定 ID，便于跨工具去重及绑定上下文。
@@ -170,31 +190,48 @@ class ConversationTools:
         note = "相关性检索，不代表穷尽时间范围内全部消息"
         if diagnostics.get('rerank_error'):
             note += '；重排未完成，使用已有排序：'+diagnostics['rerank_error']
-        return {"items": items[:size], "matched": len(items), "complete": False, "tool": "hybrid_search",
-                "note": note, "diagnostics": diagnostics}
+        anchors = items[:size]
+        # size counts search hits, not their neighbours. Enrich after ranking so
+        # short replies retain their subject without spending another model turn.
+        nearby = self.surrounding(plan, anchors, max(1, len(anchors)*CONTEXT_MAX_ROWS*2))
+        enriched = merge_evidence(anchors, nearby['items'])
+        by_id = {s['evidence_id']: s for s in enriched}
+        for anchor in anchors:
+            key = anchor['evidence_id']
+            by_id[key]['context_ids'] = nearby.get('context_links', {}).get(key, [])
+        return {"items": enriched, "matched": len(items), "complete": False, "tool": "hybrid_search",
+                "anchor_count": len(anchors), "context_count": len(enriched)-len(anchors),
+                "note": note+'；附带同会话30分钟内的前后文，各3条起并补齐边界同人连续发言，最多各12条；相邻不代表同一话题或直接回复',
+                "diagnostics": diagnostics}
 
     def surrounding(self, plan, seeds, size=60):
-        # 仅展开主证据所在会话的前后半小时，各方向最多三条，并遵守计划日期边界。
+        # 展开主证据前后半小时，各方向三条起，并补齐边界同人连续发言，最多十二条。
         # 上下文允许其他发送者出现以核实接话，保留真实身份并标为 surrounding。
         items, seen = [], {s["evidence_id"] for s in seeds}
+        links = {}
         by_id = {}
         with self.connection() as conn:
             for seed in seeds:
                 self.check()
                 if seed.get("evidence_role") != "primary":
                     continue
+                anchor = conn.execute('SELECT * FROM messages WHERE id=?', (seed['index_row_id'],)).fetchone()
+                if anchor is None or self.item(anchor)['evidence_id'] != seed['evidence_id']:
+                    raise ValueError('检索后索引发生变化，无法确认上下文锚点，请重新检索')
+                links[seed['evidence_id']] = []
                 bounds=seed.get('retrieval_bounds') or {}
                 lower=max(self.state.since_ts or 0, plan.get('since_ts') or 0, bounds.get('since_ts') or 0)
                 upper=min(plan['until_ts'],bounds.get('until_ts') or plan['until_ts'])
                 for direction, order in (("<", "DESC"), (">", "ASC")):
                     rows = conn.execute(
                         f"SELECT * FROM messages WHERE chat_id=? AND timestamp >= ? AND timestamp <= ? "
-                        f"AND (timestamp, id) {direction} (?, ?) ORDER BY timestamp {order}, id {order} LIMIT 3",
+                        f"AND (timestamp, id) {direction} (?, ?) ORDER BY timestamp {order}, id {order} LIMIT ?",
                         (seed["chat_id"], max(lower, seed["timestamp"] - 1800),
-                         min(upper, seed["timestamp"] + 1800), seed["timestamp"], seed["index_row_id"]),
+                         min(upper, seed["timestamp"] + 1800), seed["timestamp"], seed["index_row_id"], CONTEXT_MAX_ROWS),
                     ).fetchall()
-                    for row in rows:
+                    for row in context_turn(rows):
                         item = self.item(row, "surrounding")
+                        links[seed['evidence_id']].append(item['evidence_id'])
                         # 同一邻接消息只收录一次，但记录它支持的多个种子证据。
                         if item['evidence_id'] in by_id:
                             by_id[item['evidence_id']]['context_for'].append(seed['evidence_id'])
@@ -203,8 +240,8 @@ class ConversationTools:
                             by_id[item['evidence_id']] = item
                             seen.add(item["evidence_id"]); items.append(item)
                             if len(items) >= size:
-                                return {"items": items, "complete": False, "tool": "surrounding"}
-        return {"items": items, "complete": True, "tool": "surrounding"}
+                                return {"items": items, "complete": False, "tool": "surrounding", "context_links": links}
+        return {"items": items, "complete": True, "tool": "surrounding", "context_links": links}
 
     def statistics(self, plan):
         # SQL 聚合整个匹配范围，输出可引用索引摘要；消息总数不代表相互回复次数。

@@ -41,9 +41,9 @@ cd wechat-agent
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m wechat_agent.demo init --root .demo/quick
-python -m wechat_agent.demo index --root .demo/quick
-python -m wechat_agent.demo serve --root .demo/quick
+python -m wechat_agent.demo init --root .demo/story
+python -m wechat_agent.demo index --root .demo/story
+python -m wechat_agent.demo serve --root .demo/story
 ```
 
 Open [localhost:8787](http://127.0.0.1:8787). To generate new Q&A answers or task
@@ -51,6 +51,14 @@ results, configure your own model credentials in the demo's **Model Settings**;
 those calls may incur charges. The video can be watched without any setup.
 If 8787 is already in use, stop your existing instance first rather than
 starting a duplicate. The demo never falls back to private account data.
+
+The current demo contains **343 authored messages across 12 conversations**:
+314 initial messages, then 21 job updates and 8 follow-up replies. It includes
+cross-chat references, duplicate forwards, deadline corrections and everyday
+conversation. Dates align to the time you create the workspace and stay frozen.
+In another terminal, run `python -m wechat_agent.demo append --root .demo/story --phase updates`, then repeat with `--phase replies` to see a pending
+reply resolved. The running demo detects new messages; update indexes from the
+RAG tab. Existing demo directories are preserved, not silently replaced.
 
 [Demo details and recording notes](docs/DEMO.md) ·
 [Connect your own WeChat history](#installation-and-configuration)

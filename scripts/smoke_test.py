@@ -24,13 +24,16 @@ def main():
     with tempfile.TemporaryDirectory(prefix="wechat-smoke-") as directory, \
             patch("urllib.request.urlopen", side_effect=AssertionError("Unexpected external request")):
         root = Path(directory)
-        check(demo.initialize(root) == 30, "Initial import failed")
+        initial = demo.initialize(root)
+        corpus = demo.workspace_manifest(root)['corpus']
+        check(initial == len(corpus['messages']), "Initial import failed")
         state = demo.demo_state(root)
         web.update_qa_search_db_incremental(state)
-        check(demo.import_messages(root, demo.fixture()["increment"]) == 10, "Append failed")
+        added = demo.append_phase(root, 'updates')['inserted']
+        check(added == len(corpus['phases'][1]['messages']), "Append failed")
         state = demo.demo_state(root)
         update = web.update_qa_search_db_incremental(state)
-        check(update["update_mode"] == "incremental" and update["inserted"] == 10, "Incremental index failed")
+        check(update["update_mode"] == "incremental" and update["inserted"] == added, "Incremental index failed")
         check(web.update_qa_search_db_incremental(state)["inserted"] == 0, "Index is not idempotent")
 
         startup_threads = []
@@ -75,10 +78,23 @@ def main():
                     if asset.is_file():
                         get("/static/" + asset.relative_to(web.STATIC_DIR).as_posix(), False)
                 chats = get("/api/chats")["chats"]
-                check(len(chats) == 6, "Chat list incomplete")
+                check(len(chats) == 12, "Chat list incomplete")
+                new = demo.append_phase(root, 'replies')['inserted']
+                connection = HTTPConnection(*server.server_address, timeout=10)
+                try:
+                    with patch.object(web, 'ensure_decrypted', side_effect=AssertionError('Demo must not read real WeChat')):
+                        connection.request('POST', '/api/sync', '{}', {'Content-Type':'application/json'})
+                        response = connection.getresponse()
+                        check(response.status == 200, 'Demo refresh failed')
+                        check(json.loads(response.read())['ok'], 'Demo refresh failed')
+                finally:
+                    connection.close()
+                added += new
+                check(get('/api/status')['total_messages'] == initial+added, 'Live chat counts did not refresh')
+                check(web.update_qa_search_db_incremental(state)['inserted'] == new, 'Second incremental update failed')
                 messages = [message for chat in chats for message in
                             get("/api/messages?" + urlencode({"chat": chat["chat"]}))["messages"]]
-                check(len(messages) == 40, "Message endpoints did not return all fixture messages")
+                check(len(messages) == initial+added, "Message endpoints did not return all fixture messages")
                 check(any(message["mine"] for message in messages), "Sender identity missing")
                 check(any(not message["mine"] for message in messages), "Contact identity missing")
                 for path in ("/api/status", "/api/rag/status", "/api/rag/schedule",
@@ -91,7 +107,7 @@ def main():
                 server.shutdown()
                 thread.join(timeout=10)
                 check(not thread.is_alive(), "Test server failed to stop")
-    print("PASS: import 30 + append 10, incremental index, page/assets, 6 chats/40 messages and workspace APIs.")
+    print(f"PASS: import {initial} + append {added}, incremental index, page/assets, 12 chats and workspace APIs.")
     print("No private data or cloud APIs used. Temporary server and data removed.")
     return 0
 

@@ -3713,7 +3713,17 @@ def build_qa_messages(
     context: list[dict[str, Any]],
     history: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
-    prompt_context = "\n\n".join(format_qa_context_item(i + 1, item) for i, item in enumerate(context))
+    from .evidence_context import context_windows, ordered_source_groups
+    blocks = []
+    for group in ordered_source_groups(context):
+        blocks.append('同会话按时间排列的原文（不是已判定的同一话题）：\n' +
+                      '\n\n'.join(format_qa_context_item(ref,item) for ref,item in group))
+    prompt_context = '\n\n---\n\n'.join(blocks)
+    windows = context_windows(context)
+    if windows:
+        prompt_context = ('邻接原文窗口（ordered_refs按时间排列，编号对应下方原文；仅说明相邻，'
+                          '不证明同一话题或直接回复）：\n' + json.dumps(windows, ensure_ascii=False)
+                          + '\n\n' + prompt_context)
     messages: list[dict[str, str]] = [
         {
             "role": "system",
@@ -4809,6 +4819,11 @@ def make_handler(state: AppState):
         state.last_sync_trigger = trigger
         state.sync_error = ""
         try:
+            if state.demo_mode:
+                from .demo import refresh_workspace
+                if refresh_workspace(state):
+                    reset_qa_index_cache()
+                return
             state.decrypt_summary = ensure_decrypted(state)
             if state.decrypt_summary.get("updated"):
                 state.avatar_versions = load_avatar_versions(state)
@@ -6170,7 +6185,7 @@ def sanitize_qa_messages_for_store(messages: list[dict[str, Any]]) -> list[dict[
                 row["retrieval"] = {
                     key: retrieval.get(key)
                     for key in ("mode", "scope", "time_scope", "candidate_count", "scored_count", "context_count", "matched_people", "related_people",
-                                "query_plan", "conversation_state", "trace", "coverage", "usage")
+                                "query_plan", "conversation_state", "trace", "coverage", "usage", "answer_reviews", "quality_status")
                     if key in retrieval
                 }
         out.append(row)

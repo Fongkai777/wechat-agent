@@ -16,7 +16,7 @@ def main():
     parser.add_argument("--live-config", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("artifacts/demo-task"))
     args = parser.parse_args()
-    demo.initialize(args.root)
+    demo.initialize(args.root, dataset='evaluation')
     demo.import_messages(args.root, demo.fixture()["increment"])
     state = demo.demo_state(args.root)
     web.update_qa_search_db_incremental(state)

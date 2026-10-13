@@ -34,7 +34,7 @@ def main():
     if not web.resolve_llm_api_key(qa) or not web.resolve_llm_api_key(task):
         parser.error("Q&A and task credentials must be configured.")
     args.output.mkdir(parents=True, exist_ok=True)
-    demo.initialize(args.root)
+    demo.initialize(args.root, dataset='evaluation')
     state = demo.demo_state(args.root)
     config = web.load_llm_config(state.llm_config)
     config["qa"] = dict(qa, max_context_messages=30)

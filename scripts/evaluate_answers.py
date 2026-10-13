@@ -153,7 +153,7 @@ def evaluate(args):
     results = []
     with tempfile.TemporaryDirectory(prefix="wechat-answer-eval-") as directory, UsageRecorder(args.output) as usage:
         root = Path(directory)
-        demo.initialize(root)
+        demo.initialize(root, dataset='evaluation')
         demo.import_messages(root, demo.fixture()["increment"])
         state = demo.demo_state(root)
         config = web.load_llm_config(state.llm_config)

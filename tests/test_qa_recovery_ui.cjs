@@ -33,6 +33,14 @@ test('declining unknown-charge confirmation sends no request', async () => {
   assert.equal(ctx.state.qaMessages.length, 1);
 });
 
+test('unresolved semantic checks do not display a normal completed answer status', () => {
+  const {ctx, message} = context();
+  const html = ctx.renderQaResponseMeta({...message, error:null, resumable:false,
+    retrieval:{quality_status:'unresolved'}});
+  assert.match(html, /检查未通过/);
+  assert.doesNotMatch(html, /已完成|继续回答/);
+});
+
 test('confirmation resumes the same turn without adding messages or resending history', async () => {
   const {ctx, message, calls} = context();
   await ctx.resumeQaAnswer(message.turn_id);

@@ -9,6 +9,8 @@ User question + conversational history + frozen clock
   -> execute locally, return a matching tool_call_id result
   -> repeat until the model finishes or a budget is reached
   -> structured answer with server-owned citations
+  -> semantic review: accept, revise the draft, or resume tools for missing evidence
+  -> at most two correction rounds; withhold a still-rejected draft
 ```
 
 ## Modules
@@ -26,6 +28,7 @@ User question + conversational history + frozen clock
   message; the host executes the selected local function and returns a `tool`
   message with the matching `tool_call_id`. This is not an intent-based router.
 - `qa_answers.py`: answer schema and reference validation.
+- `qa_review.py`: structured semantic review, using the configured Q&A model.
 - `web.py`: HTTP/background-job adapter and existing retrieval providers.
 
 The LangGraph 0.6 series retains compatibility with this project's Python 3.9
@@ -96,6 +99,23 @@ inspect more with `surrounding`; selecting an anchor also retains its retrieved
 context within the final answer budget. Candidate counts are not interaction counts.
 This is an available tool, not a fixed route for a particular question or person.
 
+Shared `search` now expands each ranked hit locally: three messages before and
+after it in the same chat, within 30 minutes and the effective time boundary.
+At either boundary it keeps consecutive posts by that boundary's sender together,
+provided adjacent posts are no more than two minutes apart, up to twelve messages
+per direction. This prevents a multi-message post's subject being cut off just
+outside a fixed three-row window, without inferring a semantic topic.
+`size` limits hits; neighbouring messages are additional, deduplicated evidence.
+`context_ids` and `context_for` retain their connections through tool responses,
+finish selection and recovery. The answer and review receive chronological
+citation-number windows. These are temporal neighbours, not inferred topics or
+reply edges. Longer context still requires `surrounding`, `message_context` or
+`timeline`. Skill calls to shared `search` get the same enrichment; the low-level
+`semantic_search` API retains its explicit recall-then-context contract.
+Answer evidence is displayed by chat and timestamp (a pause over 30 minutes
+starts a separate display block), retaining its original citation numbers.
+The review receives the same reading order. Display groups are not topic labels.
+
 Statistics use SQL aggregation, not sampled retrieval results, and no longer end
 retrieval automatically. Empty results can be followed by a different tool within
 the same scope. Unreplied-chat
@@ -117,21 +137,44 @@ for new turns. The
 configured answer context limit is clamped to 10-200 message rows. The retrieval
 working set is bounded at four times that limit (maximum 800), so filling one page
 does not prematurely end the loop. The model can select evidence IDs at finish;
-otherwise the most recently retrieved rows fill the answer budget, with explicit
-partial-coverage reporting. Decision text previews have a 30,000-character budget.
-Answer input is capped
-at 60,000 message characters, with an individual-message cap of 4,000 characters.
-Truncation and partial coverage are recorded, and the answer includes a limitation.
+otherwise retrieval order is used. Direct context windows are kept together under
+the message budget and a 60,000-character answer budget. Oversized windows are
+skipped whole, not tail-sliced into isolated phrases; long messages are not cut
+mid-sentence. Missing dependencies and omitted windows mark partial coverage.
+If none fit, the server returns a limitation without asking the answer model.
+Decision text previews still have a 30,000-character budget.
 The 900-second budget is checked between stages; an in-flight network request has
-its own timeout. Tool-decision token counts are labeled separately and do not
+its own timeout. Tool-decision and review token counts are labeled separately and do not
 claim to include answer, embedding or reranking costs. Each decision/execution
 round has a distinct durable receipt scope, so later rounds cannot accidentally
-reuse an earlier model response. Version 6 is the only executable Q&A protocol. Pre-v6 interrupted checkpoints
+reuse an earlier model response. Receipt scopes also include the correction round.
+Version 8 is the only executable Q&A protocol. Pre-v8 interrupted checkpoints
 cannot be resumed; their saved answers and history remain readable. New turns
 start directly with native Tool Calling. Assistant tool calls and paired tool results are
 checkpointed together with retrieval state and the shared platform evidence ledger
 and budgets; recovery reuses completed receipts
 instead of executing the same tool or paid model request again.
+
+## Answer Review
+
+Citation structure is checked deterministically. An additional model request
+reviews the draft against the question, history, retrieved sources and coverage.
+It must audit every paragraph (including negative claims), cite supporting or
+contradicting evidence, and assess question coverage. The server validates that
+no paragraph was skipped and derives a rewrite/retrieval/accept route from these
+checks, rather than trusting a single overall pass flag.
+The latter restores the pre-selection evidence pool, without expanding the
+original data boundary or the eight-tool budget. A correct draft needs only one
+review; two correction rounds are allowed, each followed by another review.
+If unresolved, only a limitation is published, with the review records retained.
+No-evidence server limitations skip this paid review.
+
+This uses the same Q&A model, not an independent judge or a correctness guarantee.
+It can miss mistakes or reject a correct answer. The loop adds latency and tokens;
+compare errors, false rejections and costs against an unrevised baseline.
+Reviews receive no evaluation gold facts. Unknown paid outcomes require explicit
+retry confirmation; completed reviews and drafts are reused after interruption.
+The task Skill runtime is unchanged and pure-rule tasks still need no model call.
 
 ## Current Boundary
 

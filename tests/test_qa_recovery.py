@@ -13,7 +13,7 @@ from wechat_agent.qa_recovery import (
     CallReceipts, checkpoint_path, durable_model_call, recorded_call, read_snapshot,
 )
 from wechat_agent.goal_checkpoints import checkpoint_session, GoalResumeRequired
-from tests.test_qa_agent import NOW, PEOPLE, completion, decision, action
+from tests.test_qa_agent import NOW, PEOPLE, completion, decision, action, accept_reviews
 from tests.test_background_jobs import finished
 
 
@@ -23,6 +23,7 @@ class ProcessExit(BaseException):
 
 class QaRecoveryTests(unittest.TestCase):
     def setUp(self):
+        accept_reviews(self)
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.store = Path(temp.name) / 'qa.json'
@@ -88,7 +89,7 @@ class QaRecoveryTests(unittest.TestCase):
 
     def test_retired_checkpoints_fail_without_model_or_tool_calls(self):
         from wechat_agent import qa_agent
-        for version in (1, 2, 3, 4, 5):
+        for version in (1, 2, 3, 4, 5, 6):
             with self.subTest(version=version), patch.object(qa_agent, 'frozen_input', return_value={'agent_version':version}):
                 with self.assertRaisesRegex(ValueError, '旧版检索'):
                     self.run_agent(resume=True)
@@ -197,6 +198,7 @@ class QaRecoveryTests(unittest.TestCase):
 
 class QaRecoveryHTTPTests(unittest.TestCase):
     def setUp(self):
+        accept_reviews(self)
         # datetime.now() is naive local time; keep this fixture in the local
         # afternoon even when the handler calls astimezone() on a UTC runner.
         clock = patch.object(web, 'datetime', wraps=datetime)

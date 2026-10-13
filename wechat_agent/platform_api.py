@@ -13,6 +13,7 @@ from .platform_tools import (SKILL_TOOL_NAMES, TOOL_PERMISSIONS, tool_definition
 from .skill_tool_calling import validate_messages
 from .platform_data_tools import DATA_TOOLS
 from .qa_tools import evidence_id
+from .evidence_context import merge_evidence
 from .platform_sql import SQLSnapshot
 
 COLUMNS = 'id chat_id chat_title chat_type timestamp time sender sender_username text type source_db source_table local_id server_id person_id person_name'.split()
@@ -52,6 +53,8 @@ class PlatformAPI:
             if not row.get('chat_id') or 'text' not in row: raise ValueError('消息缺少来源字段')
             row.setdefault('evidence_id', evidence_id(row))
             row.setdefault('evidence_role', 'primary')
+            previous = self.ledger.get(message_key(row))
+            row = merge_evidence([previous] if previous else [], [row])[0]
             self.ledger[message_key(row)] = copy.deepcopy(row)
             output.append(row)
         return output
@@ -162,6 +165,8 @@ class PlatformAPI:
             if reference is None:
                 reference = len(self.sources)+1
                 self.sources.append({**row,'reference':reference})
+            else:
+                self.sources[reference-1] = {**row, 'reference':reference}
             result.append({**row,'reference':reference})
         return result
 
@@ -220,8 +225,11 @@ class PlatformAPI:
             else:
                 cited=self.api_cite(self.remember([item]))[0]
             items.append(cited)
-        known={s['evidence_id'] for s in self.tool_sources}
-        self.tool_sources.extend(i for i in items if i['evidence_id'] not in known)
+        self.tool_sources = merge_evidence(self.tool_sources, items)
+        for source in self.tool_sources:
+            linked = result.get('context_links', {}).get(source['evidence_id'])
+            if linked is not None:
+                source['context_ids'] = list(dict.fromkeys([*source.get('context_ids', []), *linked]))
         self.tool_observations.append({k:v for k,v in result.items() if k not in ('items','diagnostics')})
         return {**result,'items':items}
 

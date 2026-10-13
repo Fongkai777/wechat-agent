@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from wechat_agent.qa_agent import run_conversation_agent
 from wechat_agent.qa_tools import ConversationTools
@@ -25,6 +25,14 @@ def completion(data):
 CALL_IDS = itertools.count()
 
 
+def accept_reviews(test):
+    """Existing tool tests isolate orchestration; review behavior has its own suite."""
+    guard = patch('wechat_agent.qa_agent.review_answer', return_value={'decision':'accept','issues':[]})
+    guard.start()
+    test.addCleanup(guard.stop)
+    return guard
+
+
 def action(tool, **changes):
     return {**dict(tool=tool,query='',chat_ids=[],source_ids=[],person_ids=[],offset=0,size=20,window_seconds=1800),**changes}
 
@@ -40,6 +48,7 @@ def decision(tool, **changes):
 
 class ToolTests(unittest.TestCase):
     def setUp(self):
+        self.review_patch = accept_reviews(self)
         temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
         path = Path(temp.name) / "messages.db"
         self.state = SimpleNamespace(qa_search_db=path, since_ts=None, account="me")
@@ -199,7 +208,9 @@ class ToolTests(unittest.TestCase):
         self.conn.executemany("INSERT INTO semantic_message_map VALUES(1, ?)", [(1,), (2,), (3,)]); self.conn.commit()
         self.hybrid.return_value = ([{"semantic_chunk_id": 1}], {})
         result = self.tools.search(self.plan)
-        self.assertEqual([i["local_id"] for i in result["items"]], ["1"])
+        self.assertEqual([i['local_id'] for i in result['items'] if i['evidence_role']=='primary'], ['1'])
+        self.assertEqual([i['local_id'] for i in result['items'] if i['evidence_role']=='surrounding'], ['2'])
+        self.assertEqual(result['items'][0]['context_ids'], [result['items'][1]['evidence_id']])
 
     def test_empty_window_does_not_fall_back_to_history(self):
         self.insert(1, days=400)

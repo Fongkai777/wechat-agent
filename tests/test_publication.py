@@ -26,7 +26,7 @@ class PublicationTests(unittest.TestCase):
         self.assertIn("provider-key", findings("code.py", b"sk-" + b"x" * 40))
         self.assertIn("personal-chatroom-id", findings("test.py", b"9" * 11 + b"@chatroom"))
         self.assertEqual(findings("test.py", b"1234567890@chatroom"), [])
-        self.assertEqual(findings("examples/chats.json", b"demo_group@chatroom"), [])
+        self.assertEqual(findings("examples/showcase.json", b"demo_group@chatroom"), [])
 
     def test_offline_evaluation_is_reproducible_without_network(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):

@@ -41,7 +41,8 @@ From the repository root, after installing the project requirements:
 python scripts/evaluate_retrieval.py --output artifacts/eval
 ```
 
-The script imports 30 messages, appends 10 and runs the application's actual
+The script imports the fixed `eval/corpus_v1.json` (30 messages plus 10 updates)
+and runs the application's actual
 incremental indexer and local retrieval path. Embedding, LLM reranking and answer
 generation are disabled. The output contains `REPORT.md`, per-question evidence
 and API usage metadata in the ignored `artifacts/` directory.

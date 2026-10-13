@@ -39,15 +39,21 @@ cd wechat-agent
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m wechat_agent.demo init --root .demo/quick
-python -m wechat_agent.demo index --root .demo/quick
-python -m wechat_agent.demo serve --root .demo/quick
+python -m wechat_agent.demo init --root .demo/story
+python -m wechat_agent.demo index --root .demo/story
+python -m wechat_agent.demo serve --root .demo/story
 ```
 
 访问 [localhost:8787](http://127.0.0.1:8787)。生成新的问答或任务结果时，
 需要在 Demo 的「模型配置」中填写自己的服务凭据，相关调用可能产生费用。
 仅观看视频无需任何安装。端口已被占用时，请先确认并停止自己已有的实例，勿重复启动。
 Demo 不会回退读取真实账号数据。
+
+新版示例包含 **12 个会话、343 条原创虚构消息**：初始 314 条，随后分批追加 21 条岗位更新、8 条后续回复。
+故事覆盖跨群与私聊的信息关联、重复转发、截止日期更正和日常闲聊。日期以创建目录的时间为基准固定下来。
+在另一终端运行 `python -m wechat_agent.demo append --root .demo/story --phase updates`，
+再将阶段改为 `--phase replies`，可以演示回复后待办消失。演示页面会检测新消息，索引在 RAG 页更新。
+旧演示目录保留原数据，不会被自动覆盖。
 
 [示例与录制说明](docs/DEMO.md) · [接入自己的微信记录](#部署与配置)
 

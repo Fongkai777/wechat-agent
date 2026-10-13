@@ -1940,7 +1940,7 @@ function renderQaAnswer(message) {
 
 function renderQaResponseMeta(message) {
   const elapsed = message.elapsed_ms || message.processing_ms || 0;
-  const status = message.pending ? (message.progress || "正在处理") : message.stopped ? "已停止" : message.error ? "已中断" : elapsed ? "已完成" : "";
+  const status = message.pending ? (message.progress || "正在处理") : message.stopped ? "已停止" : message.error ? "已中断" : message.retrieval?.quality_status === "unresolved" ? "检查未通过" : elapsed ? "已完成" : "";
   if (!status && !elapsed) return "";
   const stop = message.pending
     ? `<button class="qa-stop-answer" type="button" data-qa-stop="1">停止</button>`
@@ -2055,6 +2055,7 @@ function renderQaSearchTrace(retrieval) {
   const rows = (retrieval.trace || []).map(t => `<div class="qa-source">
     <div class="qa-source-meta">${escapeHtml(tools[t.tool] || t.tool)} · ${Number(t.elapsed_ms || 0)} ms</div>
     <div>返回 ${Number(t.returned || 0)} ${t.unit === "个人物" ? "个人物" : t.unit === "个会话" ? "个会话" : "条"} · 纳入 ${Number(t.included || 0)} 条证据${t.matched == null ? "" : ` · 匹配 ${Number(t.matched)} ${t.tool === "shared_windows" ? "个候选时间窗" : t.unit === "个人物" ? "个人物" : t.unit === "个会话" ? "个会话" : "条"}`}${t.complete ? "" : " · 部分覆盖"}</div>
+    ${t.anchor_count == null ? "" : `<div class="qa-source-meta">命中 ${Number(t.anchor_count)} 条 · 自动补充前后文 ${Number(t.context_count || 0)} 条</div>`}
     ${t.parameters?.query ? `<div class="qa-source-text">${escapeHtml(t.parameters.query)}</div>` : ""}
     ${t.parameters?.filters ? `<div class="qa-source-meta">${escapeHtml([
       ({group: "群聊", private: "私聊"})[t.parameters.filters.chat_type],
@@ -2064,11 +2065,16 @@ function renderQaSearchTrace(retrieval) {
     ].filter(Boolean).join(" · "))}</div>` : ""}
     ${t.note ? `<div class="qa-source-text">${escapeHtml(t.note)}</div>` : ""}
   </div>`).join("");
+  const reviewLabels = {accept: "未发现实质问题", revise: "现有证据需重新作答", retrieve: "需要补充检索"};
+  const reviews = (retrieval.answer_reviews || []).map(r => `<div class="qa-source">
+    <div class="qa-source-meta">模型复核 ${Number(r.attempt || 1)} · ${escapeHtml(reviewLabels[r.decision] || r.decision)} · ${Number(r.elapsed_ms || 0)} ms</div>
+    ${(r.issues || []).map(issue => `<div class="qa-source-text">${escapeHtml(issue.reason || "")}</div>`).join("")}
+  </div>`).join("");
   return `<details class="qa-sources qa-search-trace"><summary>查询过程</summary>
     <div class="qa-source"><div class="qa-source-text">${escapeHtml(plan.query || "")}</div>
       <div class="qa-source-meta">对象：${escapeHtml(retrieval.scope || people)} · ${escapeHtml(retrieval.time_scope || "未限定日期")}</div>
       ${plan.clarification ? `<div>${escapeHtml(plan.clarification)}</div>` : ""}
-    </div>${rows}</details>`;
+    </div>${rows}${reviews}${retrieval.quality_status === "unresolved" ? '<div class="qa-source">检查未通过，未发布草稿结论</div>' : ""}</details>`;
 }
 
 function setQaProgress(text) {

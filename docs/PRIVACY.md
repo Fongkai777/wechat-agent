@@ -15,8 +15,10 @@ that arbitrary personal information can be detected.
   replaced with explicit synthetic fixtures before publication.
 - `.demo/`, credentials, databases, recordings, caches and generated artifacts
   are ignored. CI checks publication files.
-- The sample has 40 wholly fictional messages. Screenshots use `demo_` identities,
-  `example.com` URLs and empty model credentials.
+- The current showcase has 343 wholly fictional messages. The original
+  40-message evaluation corpus and historical screenshots remain separate.
+  Both use `demo_` identities and `example.com` URLs; demo workspaces start
+  with empty model credentials.
 
 ## Historical Limitation
 

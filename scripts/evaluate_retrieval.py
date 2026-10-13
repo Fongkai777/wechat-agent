@@ -77,7 +77,7 @@ def evaluate(output, live_config=None, top_k=8):
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="wechat-eval-") as directory, UsageRecorder(output) as recorder:
         root = Path(directory)
-        demo.initialize(root)
+        demo.initialize(root, dataset='evaluation')
         state = demo.demo_state(root)
         web.update_qa_search_db_incremental(state)
         demo.import_messages(root, demo.fixture()["increment"])

@@ -19,6 +19,24 @@ function message() {
     chat_title: i === 12 ? 'Lin' : 'Internships', sender: 'Lin', time: '10:00', text: 'Original message'})) };
 }
 
+test('search trace distinguishes hits from automatically expanded context', () => {
+  const html = context().renderQaSearchTrace({query_plan: {tool_first: true}, trace: [
+    {tool: 'search', returned: 7, included: 7, anchor_count: 1, context_count: 6},
+  ]});
+  assert.match(html, /命中 1 条 · 自动补充前后文 6 条/);
+});
+
+test('answer checks display escaped issues without presenting a correctness guarantee', () => {
+  const html = context().renderQaSearchTrace({query_plan: {query: 'SG?'}, trace: [],
+    quality_status: 'unresolved', answer_reviews: [{attempt: 1, decision: 'revise',
+      elapsed_ms: 42, issues: [{reason: '<script>bad</script>'}]}]});
+  assert.match(html, /模型复核 1/);
+  assert.match(html, /现有证据需重新作答/);
+  assert.match(html, /检查未通过，未发布草稿结论/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.doesNotMatch(html, /<script>|保证正确/);
+});
+
 test('citation 13 uses private source metadata and can expand the original message', () => {
   const html = context().renderQaAnswer(message());
   assert.match(html, /\[13\] · 私聊 · Lin · 10:00 · Lin/);

@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 from tests.test_code_skills import package
 from tests.test_platform_unification import native_args
-from tests.test_qa_agent import decision
+from tests.test_qa_agent import decision, accept_reviews
 from wechat_agent import demo, web
 from wechat_agent.code_skill_service import run_code_skill, synthetic_api
 from wechat_agent.goal_checkpoints import GoalResumeRequired
@@ -73,6 +73,9 @@ class SQLReuseTests(unittest.TestCase):
 
 
 class PaidEntryTests(unittest.TestCase):
+    def setUp(self):
+        accept_reviews(self)
+
     def test_paid_native_metadata_matches_permissions(self):
         for name in ('search', 'semantic_search'):
             self.assertTrue(TOOL_EFFECTS[name]['may_bill'])
