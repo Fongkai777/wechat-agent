@@ -168,6 +168,8 @@ flowchart LR
 | Local data processing | PyCryptodome and Zstandard |
 
 See the [architecture and code map](docs/ARCHITECTURE.md) for implementation details.
+The [Q&A and task execution walkthrough (Chinese)](docs/EXECUTION_FLOWS.zh-CN.md)
+explains their shared platform APIs, evidence handling, and different execution loops.
 
 ## Installation and Configuration
 

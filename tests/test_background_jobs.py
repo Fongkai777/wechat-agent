@@ -145,7 +145,7 @@ class BackgroundHTTPTests(unittest.TestCase):
         config = {"qa": {"model": "test", "base_url": "https://example.test", "api_key": "fixture"}}
         for target, value in (
             ("load_llm_config", config), ("load_or_build_qa_index", {"message_count": 1, "corpus": [{}]}),
-            ("select_qa_context_with_diagnostics", ([{"text": "fixture"}], {})), ("build_person_summary", ""),
+            ("select_qa_context_with_diagnostics", ([{"text": "fixture"}], {})),
         ):
             mocked = patch.object(web, target, return_value=value)
             mocked.start()

@@ -13,7 +13,7 @@ from wechat_agent.qa_recovery import (
     CallReceipts, checkpoint_path, durable_model_call, recorded_call, read_snapshot,
 )
 from wechat_agent.goal_checkpoints import checkpoint_session, GoalResumeRequired
-from tests.test_qa_agent import NOW, PEOPLE, raw, completion, decision, action
+from tests.test_qa_agent import NOW, PEOPLE, completion, decision, action
 from tests.test_background_jobs import finished
 
 
@@ -86,21 +86,14 @@ class QaRecoveryTests(unittest.TestCase):
         self.answer.assert_not_called()
         self.complete.assert_not_called()
 
-    def test_old_graph_checkpoint_remains_resumable(self):
+    def test_retired_checkpoints_fail_without_model_or_tool_calls(self):
         from wechat_agent import qa_agent
-        original=qa_agent.frozen_input
-        def legacy(conn,value,resume):
-            return original(conn,{**value,'agent_version':1},resume)
-        self.complete.side_effect=[completion(raw(need_context=False,time_user_turn=0)),
-                                   completion({'action':'finish','query':''})]
-        self.answer.side_effect=TimeoutError('unknown')
-        with patch.object(qa_agent,'frozen_input',side_effect=legacy), self.assertRaises(TimeoutError):
-            self.run_agent()
-        self.answer.side_effect=None
-        self.complete.reset_mock()
-        result,_,_=self.run_agent(resume=True,confirm_retry=True)
-        self.assertEqual(result['paragraphs'][0]['text'],'Supported')
+        for version in (1, 2, 3, 4, 5):
+            with self.subTest(version=version), patch.object(qa_agent, 'frozen_input', return_value={'agent_version':version}):
+                with self.assertRaisesRegex(ValueError, '旧版检索'):
+                    self.run_agent(resume=True)
         self.complete.assert_not_called()
+        self.answer.assert_not_called()
 
     def test_planning_timeout_needs_confirmation_and_no_automatic_call(self):
         api = Mock(side_effect=TimeoutError('unknown'))
@@ -111,36 +104,6 @@ class QaRecoveryTests(unittest.TestCase):
             self.run_agent(complete=api, resume=True)
         api.assert_not_called()
         self.run_agent(resume=True, confirm_retry=True)
-
-    def test_v2_json_checkpoint_resumes_without_native_protocol_switch(self):
-        from wechat_agent import qa_agent
-        original=qa_agent.frozen_input
-        def legacy(conn,value,resume):
-            return original(conn,{**value,'agent_version':2},resume)
-        self.complete.side_effect=[completion(raw(time_user_turn=0)),completion(action('timeline')),
-                                   completion(action('finish'))]
-        self.tools.timeline.side_effect=ProcessExit()
-        with patch.object(qa_agent,'frozen_input',side_effect=legacy), self.assertRaises(ProcessExit):
-            self.run_agent()
-        self.tools.timeline.side_effect=None
-        self.run_agent(resume=True)
-        self.assertTrue(all(not call.kwargs for call in self.complete.call_args_list))
-        self.assertEqual(read_snapshot(self.path)['agent_version'],2)
-
-    def test_v3_checkpoint_keeps_planner_and_old_native_schema(self):
-        from wechat_agent import qa_agent
-        from wechat_agent.platform_tools import LEGACY_FUNCTION_TOOLS
-        original=qa_agent.frozen_input
-        def legacy(conn,value,resume):
-            return original(conn,{**value,'agent_version':3},resume)
-        self.complete.side_effect=[completion(raw(time_user_turn=0)),decision('timeline'),decision('finish')]
-        self.tools.timeline.side_effect=ProcessExit()
-        with patch.object(qa_agent,'frozen_input',side_effect=legacy),self.assertRaises(ProcessExit):
-            self.run_agent()
-        self.tools.timeline.side_effect=None
-        self.run_agent(resume=True)
-        self.assertEqual(read_snapshot(self.path)['agent_version'],3)
-        self.assertEqual(self.complete.call_args.kwargs['tools'],LEGACY_FUNCTION_TOOLS)
 
     def test_native_completed_tool_receipt_restores_matching_result_once(self):
         def interrupt(diag,sources):
@@ -254,6 +217,14 @@ class QaRecoveryHTTPTests(unittest.TestCase):
         tools.timeline.return_value = {'items': [{'evidence_id': 'one', 'text': 'fixture'}], 'complete': True}
         self.api = Mock(side_effect=[decision('timeline'),decision('finish')])
         self.answer = Mock(side_effect=TimeoutError('unknown'))
+        from types import SimpleNamespace
+        from wechat_agent import platform_runtime
+        runtime = SimpleNamespace(model=SimpleNamespace(complete=lambda messages, response_format=None, **options:
+                                                        self.api(messages, **options)))
+        for target, value in (('create_platform_runtime', Mock(return_value=runtime)),
+                              ('PlatformToolSession', Mock(return_value=tools))):
+            p = patch.object(platform_runtime, target, value)
+            p.start(); self.addCleanup(p.stop)
         for target, value in (
             ('load_llm_config', Mock(return_value={'qa': {'model': 'fixture', 'base_url': 'https://example.test', 'api_key': 'fixture'}})),
             ('load_or_build_qa_index', Mock(return_value={'message_count': 1, 'people_list': PEOPLE})),

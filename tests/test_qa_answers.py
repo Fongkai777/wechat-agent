@@ -96,7 +96,6 @@ class AnswerPersistenceTests(unittest.TestCase):
             ("load_llm_config", {"qa": {"api_key": "fixture"}}),
             ("load_or_build_qa_index", {"message_count": 13}),
             ("select_qa_context_with_diagnostics", (sources(), {})),
-            ("build_person_summary", ""),
         ):
             mock = patch.object(web, target, return_value=value)
             mock.start()

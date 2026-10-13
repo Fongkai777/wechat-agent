@@ -19,7 +19,7 @@ class RetrievalNetworkTests(unittest.TestCase):
                 self.assertEqual(send.call_count, 1)
 
     def test_rerank_timeout_falls_back_but_uncertain_retries_require_consent(self):
-        config = {'qa': {}, 'rerank': {'enabled': True, 'candidate_limit': 10}}
+        config = {'qa': {}, 'rerank': {'enabled': True, 'batch_size': 10}}
         items = [{'text': 'fixture'}]
         state = Mock()
         with patch.object(web, 'load_llm_config', return_value=config), \

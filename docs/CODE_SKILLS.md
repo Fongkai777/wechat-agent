@@ -63,8 +63,11 @@ data APIs. This checks source identity, not whether a model interpreted it corre
 ### Shared Tools and Multi-Turn Models
 
 `platform_tools.py` owns the same function schemas, argument checks and execution
-dispatch used by Q&A and Skills; both execute the `ConversationTools` read-only
-retriever. A Skill can inspect `api.tools()` and call `api.tool(name, arguments)`.
+dispatch used by Q&A and Skills. `platform_api.py` and `platform_runtime.py` provide
+the common data/model implementation. `platform_data_tools.py` exposes raw reads,
+scoped SQL, threshold semantic search and configurable context as paged native tools;
+the existing indexed tools still use `ConversationTools` underneath.
+A Skill can inspect `api.tools()` and call `api.tool(name, arguments)`.
 The task time window is fixed and background expansion is unavailable. Tool IDs,
 sender IDs and evidence IDs must come from actual returned data. Tool pages expose
 coverage/pagination rather than implying exhaustive retrieval.
@@ -81,13 +84,18 @@ Tool Calling and returns `{message, finish_reason}`. The package appends the
 assistant message, executes the requested tool, appends a matching `tool_call_id`
 result and submits the next model request. It owns the loop and stopping policy;
 the platform enforces permissions, message pairing and budgets. `api.llm` without
-`tools` keeps its existing text/JSON return contract. Raw reads, custom SQL and
-task-local state remain Skill-specific extensions, not Q&A model tools.
+`tools` keeps its existing text/JSON return contract. Raw reads and custom SQL are
+also available to Q&A through the same platform API. Task-private state remains
+owned by its execution context, not a global mutable store exposed to the model.
+`api.query(..., since=None, until=None)` can narrow the snapshot before loading it.
+Native SQL results preserve actual rows as messages; aggregates/expressions are
+explicitly labeled computation summaries, never passed off as original messages.
 
 Shared `search` uses the configured hybrid recall/reranking pipeline and reserves
-one embedding and one rerank call from the package budgets; it requires
-`index.query`, `embedding`, and `llm`. Its query-embedding usage is recorded;
-rerank token usage is not yet included, so totals are not complete billing figures.
+one embedding and the first rerank call from the package budgets; each additional
+rerank batch or response-repair call consumes another model call. It requires
+`index.query`, `embedding`, and `llm`. Both query-embedding and rerank token usage
+are recorded. Provider failures without usage remain unknown billing amounts.
 The lower-level `api.semantic_search` remains available for custom threshold-based
 recall. Existing packages are not rewritten or automatically switched to tool loops.
 

@@ -12,7 +12,9 @@ function setup(initialGoals = [], rangeUnits = ['days','weeks','months'], manual
   let generationResponse = null;
   const histories = new Map();
   let readHistory = id => histories.get(id) || [];
-  let generated = {schema_version:1,name:'待回检查',description:'列出末条来自对方的私聊',source:'private_latest',filters:{sender:'other',keywords:[],keyword_match:'any'},output:{mode:'list',instruction:''}};
+  let generated = {schema_version:3,name:'待回检查',description:'editable',files:[
+    {path:'workflow.py',content:'def run(api): return {}'},
+    {path:'manifest.json',content:'{"permissions":["messages.read"]}'}]};
   const element = id => {
     if (!nodes.has(id)) nodes.set(id, {value:'',checked:false,disabled:false,hidden:false,open:false,innerHTML:'',textContent:'',events:new Map(),style:{},
       addEventListener(name,fn){this.events.set(name,fn);}, focus(){}, scrollIntoView(){}, showModal(){this.open=true;}, close(){this.open=false;},
@@ -109,13 +111,11 @@ test('new task generates an editable skill before explicit save and does not exe
   await app.emit('goalForm','submit');
   assert.equal(app.requests.filter(r=>r.url==='/api/goals/skill/generate').length,1);
   assert.equal(app.requests.filter(r=>r.url==='/api/goals/save').length,0);
-  const generated=JSON.parse(app.element('goalSkillText').value);
-  assert.equal(generated.source,'private_latest');
-  generated.name='我的待回检查';
-  app.element('goalSkillText').value=JSON.stringify(generated);
+  assert.match(app.element('goalSkillText').value,/def run/);
+  app.element('goalSkillText').value='def run(api): return {"edited": True}';
   await app.emit('goalSkillText','input'); await app.emit('goalForm','submit');
   const saved=app.requests.find(r=>r.url==='/api/goals/save').data;
-  assert.equal(saved.skill.name,'我的待回检查');
+  assert.match(saved.skill.files.find(f=>f.path==='workflow.py').content,/edited/);
   assert.equal(saved.skill_prompt,'检查忘回私聊');
   assert.equal(saved.expected_skill_version,0);
   assert.ok(!app.requests.some(r=>r.url==='/api/goals/run'));
@@ -133,22 +133,14 @@ test('failed regeneration preserves edited skill and never saves or schedules it
   assert.equal(app.element('goalSaveBtn').disabled,false);
 });
 
-test('semantic Skill shows editable execution steps and persists them without auto execution',async()=>{
+test('retired declarative Skill cannot be saved or executed',async()=>{
   const app=setup([],undefined,true,true);
-  const skill={schema_version:2,name:'实习信息',description:'搜索相关消息及上下文',steps:[
-    {op:'semantic_search',source:'all_messages',query:'实习机会',keywords:['intern'],min_similarity:0.25},
-    {op:'filter',sender:'any',keywords:[],keyword_match:'any'},
-    {op:'context',before:3,after:3,max_gap_minutes:30},{op:'deduplicate'},
-    {op:'output',mode:'model',instruction:'整理岗位及来源'}]};
-  app.generate(skill);
+  app.generate({schema_version:2,name:'Old',steps:[]});
   await app.load(); await app.emit('goalNewBtn','click');
-  app.element('goalPrompt').value='查找实习信息'; await app.emit('goalForm','submit');
-  assert.match(app.element('goalSkillSummary').textContent,/语义 \+ 关键词召回 → 本地筛选 → 补齐上下文 → 去重 → 模型整理/);
-  skill.steps[2].before=5;
-  app.element('goalSkillText').value=JSON.stringify(skill); await app.emit('goalSkillText','input');
+  app.element('goalPrompt').value='任务'; await app.emit('goalForm','submit');
   await app.emit('goalForm','submit');
-  assert.equal(app.requests.find(r=>r.url==='/api/goals/save').data.skill.steps[2].before,5);
-  assert.ok(!app.requests.some(r=>r.url==='/api/goals/run'));
+  assert.match(app.element('goalFormError').textContent,/旧 Skill 格式/);
+  assert.ok(!app.requests.some(r=>r.url==='/api/goals/save'));
 });
 
 test('modified task cannot save a skill compiled for an older prompt',async()=>{

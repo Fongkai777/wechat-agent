@@ -25,6 +25,10 @@ time between submission and model completion is omitted and labeled. The task
 is scheduled daily and triggered manually for this take; the video does not
 pretend that a day elapses during recording.
 
+This is a historical recording, not a recording of the latest Skill editor.
+Current tasks use editable Python Skill packages that must pass isolated tests
+before execution. Follow the current walkthrough below for that workflow.
+
 This take uses local lexical retrieval and a full-text index, with embedding
 and reranking disabled. The sample append is performed by the recording
 helper, not a claimed production import button. The helper's append endpoint
@@ -85,11 +89,26 @@ No private source directory or existing model configuration is used as fallback.
 
 ## Suggested Walkthrough
 
-1. Import the sample and open a conversation.
-2. Append the new messages and update the index.
-3. Ask which search/RAG internships were shared in Singapore.
-4. Expand sources to compare a group posting with private interview advice.
-5. Create a task to collect internship deadlines and preparation suggestions.
+1. Import and index the initial sample, then browse a private and a group conversation.
+2. Ask which search/RAG internships were shared in Singapore; follow up about
+   application requirements in the same Q&A conversation.
+3. Expand the original sources to distinguish a group posting from private
+   interview advice. Inspect the tool trace to see how the model retrieved evidence.
+4. Create a task to collect internship deadlines and preparation suggestions,
+   with a daily schedule and a lookback covering the fictional messages.
+5. Generate its Skill, inspect the saved workflow/code and permissions, run the
+   isolated tests, and save the passing package. On supported macOS, manually
+   execute it and inspect the result and cited messages. Do not bypass validation.
+6. Append the ten new sample messages and update the index. Check that the update
+   is incremental and that repeating it adds no duplicate messages.
+
+For this sequence, append messages **after** the first Q&A/task demonstration,
+not during initial setup. The Q&A model chooses tools over multiple turns; a
+task's saved program chooses its steps. Both use the same platform data and
+model APIs. See [execution flows (Chinese)](EXECUTION_FLOWS.zh-CN.md) and
+[editable Skill packages](CODE_SKILLS.md). Embedding-based tasks also require
+an enabled embedding profile and a semantic index; the lexical-only demo does
+not provide semantic retrieval.
 
 The fixture dates are September 10-22, 2026. Task lookback windows use the
 current time; a later run may correctly find no messages. For a recording,
@@ -99,6 +118,12 @@ period. Do not substitute an authored answer for a model response.
 Screenshots and the video in the README use this fixture.
 
 ## Record a New Take
+
+The recording automation below and `scripts/run_demo_task.py --mode task`
+target the older task flow used for the September video. They have not been
+updated or revalidated for the current Skill generation/test/save workflow.
+Use a manual screen recording of the current walkthrough above for a new take;
+do not treat these historical helpers as a current end-to-end task test.
 
 The optional recording helpers require Node.js with Playwright, Chrome/Chromium,
 and FFmpeg with H.264 and drawtext support. They currently target macOS font and

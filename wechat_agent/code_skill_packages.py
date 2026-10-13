@@ -32,12 +32,13 @@ Requires messages.read. Accepts up to 100 unique chat IDs and latest=1..100 per 
 Uses the SAME raw reader, ordering, placeholders and scope checks as messages(); no index
 or model is used. Every requested ID is present (empty list if no messages). Failures
 abort the whole call, never omit failed chats. Batch larger chat lists in your program.
-api.query(sql, params=[]) -> list of dict rows. Read-only SQLite SELECT/CTE over
+api.query(sql, params=[], since=None, until=None) -> list of dict rows. Read-only SQLite SELECT/CTE over
 the logical messages and chats views. Requires index.query; the platform automatically
 prepares/updates the text index before querying it when necessary.
 messages columns: id,chat_id,chat_title,chat_type,timestamp,time,sender,sender_username,
 text,type,source_db,source_table,local_id,server_id,person_id,person_name.
 chats columns: id,title,type,last_ts. Views contain only the task window.
+since/until may narrow the snapshot before loading it; they cannot expand the task window.
 You may implement your own GROUP BY, window functions, joins and keyword matching.
 The text index may omit unrendered messages; use messages(latest=N) when physical
 message ordering matters. An unknown sender ID must not be treated as a known person.
@@ -57,6 +58,8 @@ Example: cited = api.cite(messages=rows); refs = [r['reference'] for r in cited]
 source_refs must contain these integer references, NOT the returned message objects.
 api.tools(names=None) -> shared native function definitions, filtered by package permissions.
 api.tool(name, arguments) -> execute the SAME registered tool used by chat Q&A.
+Native read_chats/read_messages/read_messages_batch/query_messages/semantic_search/message_context
+are paged views of these same Python data APIs, not separate implementations.
 Use api.tools() for current schemas; discover IDs with find_people or list_chats when needed.
 There is no mandatory slot extraction, intent routing, or global query plan.
 Optional filters apply only to that tool call, never to subsequent calls. null means no
@@ -65,7 +68,8 @@ timezone-aware ISO timestamps only when filtering message send times is intended
 Legacy calls may omit filters. Programs decide whether to search directly or discover identities.
 Results contain items with evidence_id and numeric reference, plus pagination/coverage metadata.
 Use returned reference values directly in source_refs; statistics are labeled summaries.
-All tools except finish require index.query. search also requires embedding and llm,
+Index tools require index.query; raw-data tools require messages.read;
+semantic_search requires embedding. search requires index.query, embedding and llm,
 and reserves one embedding and one reranking call from the package budgets.
 Task tools never allow background retrieval outside the task window.
 Pages are NOT complete coverage; follow next_offset where supported or report partial coverage.

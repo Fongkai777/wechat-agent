@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 from wechat_agent.code_skill_packages import validate_package
@@ -96,6 +97,55 @@ class CodeAPITests(unittest.TestCase):
         for name in ('../leak.py','/tmp/leak.py','_platform_worker.py'):
             p=package(); p['files'].append({'path':name,'content':'pass'})
             with self.assertRaises(ValueError): validate_package(p)
+
+
+class SharedRerankBudgetTests(unittest.TestCase):
+    def run_search(self, batches):
+        from wechat_agent import web, code_skill_web, platform_tools
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            root = Path(directory)
+            state = web.AppState(**{key: root/key for key in (
+                'db_storage','decrypted','keys','media_root','voice_cache','llm_config',
+                'qa_store','qa_index_cache','qa_search_db')})
+            state.account = 'self'
+            store = GoalStore(root/'goals.db')
+            with store.connect() as conn:
+                code_skill_web.setup(conn)
+            goal = {'id':'test','prompt':'Test','skill':package(),'started_at':1000,
+                    'range_type':'recent_days','range_value':1,'range_unit':'days'}
+            stack.enter_context(patch.object(code_skill_web, 'require_validated'))
+            stack.enter_context(patch.object(code_skill_web, 'prepare_code_skill_indexes'))
+            stack.enter_context(patch.object(web, 'load_llm_config', return_value={'task':{},'embedding':{}}))
+            stack.enter_context(patch.object(web, 'effective_llm_profile', return_value={}))
+            paid = stack.enter_context(patch.object(web, 'call_chat_payload', return_value={
+                'usage':{'total_tokens':5},'choices':[{'finish_reason':'stop','message':{'content':'scores'}}]}))
+            def search(*args, rerank_call, **kwargs):
+                for _ in range(batches):
+                    rerank_call({}, 'synthetic', [{'role':'user','content':'test'}])
+                return [], {'semantic':{'usage':{'total_tokens':3}}}
+            stack.enter_context(patch.object(web, 'search_qa_search_db', side_effect=search))
+            def tool(tools, plan, action, sources):
+                tools.hybrid('query', [], 0, 1000, 20, {})
+                return {'items':[], 'complete':False}
+            stack.enter_context(patch.object(platform_tools, 'execute_action', side_effect=tool))
+            def run(goal, api, *args, **kwargs):
+                if batches > 2:
+                    with self.assertRaisesRegex(ValueError, '重排调用预算'):
+                        api.api_tool('search', {'query':'test','chat_ids':[], 'person_ids':[], 'size':20})
+                else:
+                    api.api_tool('search', {'query':'test','chat_ids':[], 'person_ids':[], 'size':20})
+                    self.assertEqual(api.model_calls, 2)
+                    self.assertEqual(api.usage['total_tokens'], 13)
+                self.assertEqual(paid.call_count, 2)
+                return {}
+            stack.enter_context(patch.object(code_skill_web, 'run_code_skill', side_effect=run))
+            code_skill_web.execute_code_goal(state, store, goal, Mock(), lambda:False, threading.Lock())
+
+    def test_each_rerank_batch_counts_usage_and_call_budget(self):
+        self.run_search(2)
+
+    def test_extra_batch_stops_before_exceeding_paid_call_budget(self):
+        self.run_search(3)
 
 
 class CodeIndexPreparationTests(unittest.TestCase):

@@ -21,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from wechat_agent import demo, web
 from wechat_agent.qa_agent import run_conversation_agent
 from wechat_agent.qa_tools import ConversationTools
+from wechat_agent.platform_runtime import create_platform_runtime, PlatformToolSession, QA_LIMITS
+import threading
 from scripts.evaluate_retrieval import UsageRecorder
 from scripts.evaluate_answers import judge_answer, summarize, estimate_cost
 
@@ -93,7 +95,7 @@ def write_report(output, cases, results, calls, config, corpus, live, top_k):
               'index_cost': estimate_cost([c for c in calls if c['stage'] == 'index']),
               'limits': [
                   'Authored synthetic diagnostic set, not a representative or held-out production benchmark.',
-                  'Keyword: FTS/LIKE reciprocal-rank fusion, latest query only; hybrid: single query with production query expansion; Agent: production tool-first multi-step retrieval. No gold scopes injected.',
+                  'Keyword: FTS/LIKE reciprocal-rank fusion, latest query only; hybrid: literal query with embedding and batched API reranking; Agent: production tool-first multi-step retrieval. No gold scopes injected.',
                   'Same final raw-message limit, but Agent can make more tool calls; tokens and cost expose this tradeoff. Not an equal-token-budget experiment.',
                   'Recall counts final answer context, not all intermediate observations. No-answer cases are excluded from recall.',
                   'Quality grades are model judgments, not human validation; same-model judge bias is possible. Manual review fields remain empty.',
@@ -149,8 +151,7 @@ def evaluate(args):
         if live: web.build_or_update_qa_semantic_index(state)
         index = web.load_or_build_qa_index(state)
         def hybrid(query, people, since, until, size, scope=None):
-            plan = ({'queries':[{'text':query}]} if (scope or {}).get('tool_first')
-                    else web.build_qa_search_plan(index, query, people, since))
+            plan = {'queries':[{'text':query}]}
             plan.update(scope or {})
             plan.update(verified_people=True, time_until=until)
             return web.search_qa_search_db(state, query, people, since, size, plan)
@@ -174,10 +175,14 @@ def evaluate(args):
                         if (found['diagnostics'].get('semantic') or {}).get('error') or found['diagnostics'].get('rerank_error'):
                             raise RuntimeError('Hybrid retrieval degraded; not counted as a full hybrid run')
                     else:
+                        runtime = create_platform_runtime(state,
+                            {'task':case['question'],'since':state.since_ts or 0,'until':int(now.timestamp()),
+                             'account':state.account,'dry_run':False},
+                            QA_LIMITS, config, 'qa', lambda:None, threading.Lock())
                         answer, sources, trace = run_conversation_agent(
-                            case['question'], case.get('history',[]), index.get('people_list') or [], tools,
-                            lambda messages,schema=None,**opts:web.call_chat_payload(profile,key,messages,response_format=schema,**opts),
-                            lambda q,s,h:web.call_qa_answer(profile,key,q,s,h), lambda *a,**k:None,
+                            case['question'], case.get('history',[]), index.get('people_list') or [], PlatformToolSession(state,runtime),
+                            lambda messages,schema=None,**opts:runtime.model.complete(messages,response_format=schema,**opts),
+                            lambda q,s,h:web.call_qa_answer(profile,key,q,s,h,complete=runtime.model.complete), lambda *a,**k:None,
                             lambda trace,sources:row.update(retrieval=trace), lambda:None, limit=args.top_k, now=now)
                         row.update(answer=answer,retrieval=trace)
                     row['sources'] = sources

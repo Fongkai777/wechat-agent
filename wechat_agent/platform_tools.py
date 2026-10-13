@@ -2,23 +2,20 @@
 import json
 from datetime import datetime
 
-from .qa_planning import STRING, object_schema
+from .model_output import STRING, object_schema
+from .platform_data_tools import DATA_TOOLS, validate_data_arguments
 
 
-# 旧版统一动作与新版函数工具共用白名单、字段约束和执行器。
-TOOLS = ('list_chats','shared_windows','timeline','search','surrounding','statistics','unanswered','background','finish')
-STEP_FORMAT = {'type':'json_schema','json_schema':{'name':'retrieval_action','strict':True,
-    'schema':object_schema({
-        'tool':{'type':'string','enum':list(TOOLS)}, 'query':STRING,
-        'chat_ids':{'type':'array','items':STRING},
-        'person_ids':{'type':'array','items':STRING},
-        'source_ids':{'type':'array','items':STRING},
-        'offset':{'type':'integer','minimum':0}, 'size':{'type':'integer','minimum':1,'maximum':60},
-        'window_seconds':{'type':'integer','minimum':1,'maximum':3600},
-    })}}
-
-# The unified schema above is retained only for pre-migration checkpoints.
-# 原生工具只声明自身需要的字段；统一 STEP_FORMAT 留给旧检查点恢复。
+# One native tool contract is shared by Q&A and editable code Skills.
+ARGUMENT_SCHEMAS = {
+    'query': STRING,
+    'chat_ids': {'type':'array','items':STRING},
+    'person_ids': {'type':'array','items':STRING},
+    'source_ids': {'type':'array','items':STRING},
+    'offset': {'type':'integer','minimum':0},
+    'size': {'type':'integer','minimum':1,'maximum':60},
+    'window_seconds': {'type':'integer','minimum':1,'maximum':3600},
+}
 FUNCTION_FIELDS = {
     'list_chats': ('chat_ids','person_ids','offset','size'),
     'shared_windows': ('chat_ids','person_ids','offset','size','window_seconds'),
@@ -27,7 +24,6 @@ FUNCTION_FIELDS = {
     'surrounding': ('source_ids','size'),
     'statistics': ('chat_ids','person_ids'),
     'unanswered': ('chat_ids','person_ids','size'),
-    'background': ('chat_ids','person_ids','size'),
     'finish': ('source_ids',),
 }
 FUNCTION_DESCRIPTIONS = {
@@ -38,7 +34,6 @@ FUNCTION_DESCRIPTIONS = {
     'surrounding': '根据已取得的证据ID展开前后文，保留其他发送者的真实身份。',
     'statistics': '用本地索引统计范围内消息数，不是两人相互回复次数。',
     'unanswered': '查找指定时间窗内最后消息来自对方的私聊候选；不代表必须回复。',
-    'background': '仅在计划授权background_query且已有当前证据时补查历史背景。',
     'finish': '结束检索并选取实际取得的证据，由调用方生成最终回答。空source_ids表示不额外筛选证据。',
 }
 FIELD_DESCRIPTIONS = {
@@ -50,14 +45,6 @@ FIELD_DESCRIPTIONS = {
     'size': '本页证据数量预算，1至60；共同时间窗至少为2。',
     'window_seconds': '共同发言候选的最大间隔，1至3600秒；不是直接互动的判定标准。',
 }
-FUNCTION_TOOLS = [{'type':'function','function':{
-    'name':name, 'description':FUNCTION_DESCRIPTIONS[name], 'strict':True,
-    'parameters':object_schema({field:{**STEP_FORMAT['json_schema']['schema']['properties'][field],
-                                      'description':FIELD_DESCRIPTIONS[field]} for field in fields}),
-}} for name,fields in FUNCTION_FIELDS.items()]
-
-# Preserve legacy field sets for interrupted v1-v3 conversations.
-LEGACY_FUNCTION_TOOLS = FUNCTION_TOOLS
 FUNCTION_FIELDS['find_people'] = ('query','offset','size')
 FUNCTION_DESCRIPTIONS['find_people'] = '按姓名或账号查找真实人物，返回候选身份，不自动选择同名人物或限制后续搜索。'
 FILTER_SCHEMA = {'anyOf': [{'type':'null'}, object_schema({
@@ -68,8 +55,11 @@ FILTER_SCHEMA = {'anyOf': [{'type':'null'}, object_schema({
 })], 'description':'仅用于本次调用的可选过滤，不继承上次搜索条件。正文讨论的日期可直接放入query。null表示不加过滤；任务固定时间窗仍有效。'}
 FILTER_TOOLS = {'list_chats','shared_windows','timeline','search','statistics','unanswered'}
 FUNCTION_TOOLS = []
+for name, (_, _, description, fields) in DATA_TOOLS.items():
+    FUNCTION_FIELDS[name] = tuple(fields)
+    FUNCTION_DESCRIPTIONS[name] = description
 for name, fields in FUNCTION_FIELDS.items():
-    properties = {field:{**STEP_FORMAT['json_schema']['schema']['properties'][field],
+    properties = DATA_TOOLS[name][3] if name in DATA_TOOLS else {field:{**ARGUMENT_SCHEMAS[field],
                          'description':FIELD_DESCRIPTIONS[field]} for field in fields}
     if name in FILTER_TOOLS:
         properties['filters'] = FILTER_SCHEMA
@@ -77,11 +67,13 @@ for name, fields in FUNCTION_FIELDS.items():
         'name':name,'description':FUNCTION_DESCRIPTIONS[name],'strict':True,
         'parameters':object_schema(properties)}})
 
-# 工具从同一个目录导出；历史补查会扩大窗口，因此不开放给固定时间窗的任务。
+# A single catalog and boundary validator serve all callers.
 TOOL_PERMISSIONS = {name: {'index.query'} for name in FUNCTION_FIELDS}
 TOOL_PERMISSIONS['search'] = {'index.query', 'embedding', 'llm'}
 TOOL_PERMISSIONS['finish'] = set()
-SKILL_TOOL_NAMES = tuple(name for name in FUNCTION_FIELDS if name != 'background')
+TOOL_PERMISSIONS.update({name: permissions for name, (_, permissions, _, _) in DATA_TOOLS.items()})
+SKILL_TOOL_NAMES = tuple(FUNCTION_FIELDS)
+TOOLS = tuple(FUNCTION_FIELDS)
 
 
 def tool_definitions(names):
@@ -97,17 +89,16 @@ def action_from_arguments(name, values, sources, observations, plan):
         raise ValueError('平台不支持此工具')
     if not isinstance(values,dict):
         raise ValueError('工具参数与声明不一致，未执行工具')
+    if name in DATA_TOOLS:
+        return validate_data_arguments(name, values, sources, observations, plan)
     values = dict(values)
     filters = values.pop('filters', None) if name in FILTER_TOOLS else None
     if set(values)!=set(FUNCTION_FIELDS[name]):
         raise ValueError('工具参数与声明不一致，未执行工具')
     defaults = dict(tool=name,query='',chat_ids=[],person_ids=[],source_ids=[],offset=0,size=20,window_seconds=1800)
     action = validate_action({**defaults,**values},sources,observations,plan)
-    if (plan or {}).get('tool_first'):
-        validate_filters(filters, plan)
-        action['filters'] = filters
-    elif filters is not None:
-        raise ValueError('旧执行记录不支持修改查询范围，请新建一轮查询')
+    validate_filters(filters, plan)
+    action['filters'] = filters
     return action
 
 
@@ -202,18 +193,10 @@ INSTRUCTIONS = (
     '结论应符合证据类型与覆盖范围；候选、统计或部分结果不等于已核实的完整事实。'
 )
 
-# Old JSON-action checkpoints cannot select the new discovery tool.
-LEGACY_INSTRUCTIONS = INSTRUCTIONS + json.dumps(
-    {name:FUNCTION_DESCRIPTIONS[name] for name in TOOLS}, ensure_ascii=False)
-
-
 def validate_action(value, sources, observations, plan=None):
     value=dict(value)
-    # 为早期动作补上后来新增的字段，其余字段仍要求与统一结构完全一致。
-    value.setdefault('person_ids',[])
-    value.setdefault('window_seconds',1800)
-    fields=set(STEP_FORMAT['json_schema']['schema']['properties'])
-    if set(value)!=fields or value['tool'] not in (*TOOLS,'find_people'):
+    fields = {'tool', *ARGUMENT_SCHEMAS}
+    if set(value)!=fields or value['tool'] not in TOOLS:
         raise ValueError('检索工具调用格式无效')
     if not isinstance(value['query'],str) or len(value['query'])>500:
         raise ValueError('检索词无效')
@@ -229,18 +212,16 @@ def validate_action(value, sources, observations, plan=None):
         raise ValueError('共同发言时间窗至少需要容纳两条原文')
     if type(value['window_seconds']) is not int or not 1<=value['window_seconds']<=3600:
         raise ValueError('候选时间窗应为1到3600秒')
-    # IDs must come from real observations; legacy plans also supply verified people.
+    # Scope IDs must have been returned by real tool observations.
     chat_ids={s.get('chat_id') for s in sources}
     for observation in observations:
         chat_ids.update(c['chat_id'] for c in observation.get('chats',[]))
     if not set(value['chat_ids'])<=chat_ids:
         raise ValueError('只能查询已返回的会话ID，请先调用list_chats')
-    known_people = {p['id'] for p in (plan or {}).get('people',[])}
-    if (plan or {}).get('tool_first'):
-        known_people.update(s.get('sender_username') for s in sources if s.get('sender_username'))
-        for observation in observations:
-            known_people.update(p['id'] for p in observation.get('people',[]))
-            known_people.update(p['sender_username'] for c in observation.get('chats',[]) for p in c.get('senders',[]) if p.get('sender_username'))
+    known_people = {s.get('sender_username') for s in sources if s.get('sender_username')}
+    for observation in observations:
+        known_people.update(p['id'] for p in observation.get('people',[]))
+        known_people.update(p['sender_username'] for c in observation.get('chats',[]) for p in c.get('senders',[]) if p.get('sender_username'))
     if not set(value['person_ids'])<=known_people:
         raise ValueError('不能增加未验证的人物')
     ids={s['evidence_id'] for s in sources}
@@ -252,13 +233,15 @@ def validate_action(value, sources, observations, plan=None):
 
 
 def execute_action(tools, plan, action, sources):
-    # New calls choose their own filters; legacy calls retain their saved plan.
+    # A bound platform session supplies both Python and native-tool execution.
+    executor = getattr(type(tools), 'execute_platform_action', None)
+    if executor is not None:
+        return executor(tools, plan, action, sources)
+    if action['tool'] in DATA_TOOLS:
+        raise ValueError('数据工具需要绑定平台运行时')
     plan=dict(plan,chat_ids=action['chat_ids'])
-    if plan.get('tool_first'):
-        plan.update(validate_filters(action.get('filters'), plan))
-        plan['people'] = [{'id':p,'name':p} for p in action['person_ids']]
-    elif action.get('person_ids'):
-        plan['people']=[p for p in plan['people'] if p['id'] in action['person_ids']]
+    plan.update(validate_filters(action.get('filters'), plan))
+    plan['people'] = [{'id':p,'name':p} for p in action['person_ids']]
     name, size, offset=action['tool'],action['size'],action['offset']
     if name=='find_people': return tools.find_people(plan,action['query'],offset,size)
     if name=='list_chats': return tools.list_chats(plan,offset,size)
@@ -270,9 +253,4 @@ def execute_action(tools, plan, action, sources):
     if name=='surrounding':
         seeds=[s for s in sources if s['evidence_id'] in action['source_ids']]
         return tools.surrounding(plan,seeds,size)
-    if name=='background':
-        # 历史补查必须有计划授权且已有证据，查询词固定取计划中的背景问题。
-        if not plan.get('background_query') or not sources:
-            raise ValueError('未授权扩大历史范围，或尚无当前范围的证据')
-        return tools.search(plan,plan['background_query'],size,True)
     raise ValueError('未知检索工具')

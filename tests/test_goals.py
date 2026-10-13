@@ -8,11 +8,9 @@ import unittest
 import urllib.error
 from pathlib import Path
 from datetime import datetime
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from wechat_agent.goals import GoalStore, GoalScheduler, GoalConflict, GoalCancelled, GoalReferenceError, GoalCoverageError, run_goal_agent, observation_window, GOAL_RESULT_FORMAT, validate_goal_result
-from wechat_agent.goal_tools import GoalChatTools
+from wechat_agent.goals import GoalStore, GoalScheduler, GoalConflict, GoalCancelled, GoalReferenceError, GoalCoverageError, observation_window, GOAL_RESULT_FORMAT, validate_goal_result
 from wechat_agent import web
 
 
@@ -330,217 +328,6 @@ def response(name=None, arguments=None, text=None, usage=10):
     return {'choices': [{'message': message, 'finish_reason': 'tool_calls' if name else 'stop'}], 'usage': {'prompt_tokens': usage, 'completion_tokens': 2, 'total_tokens': usage+2}}
 
 
-class GoalAgentTests(unittest.TestCase):
-    def setUp(self):
-        self.goal = {'prompt': 'Check forgotten replies', 'started_at': 1789261200, 'last_success_at': 1789257600, 'previous_result': 'Untrusted previous report'}
-        self.invoke = Mock(return_value={'messages': [{'chat_id': 'friend', 'local_id': 1, 'timestamp': 1, 'text': 'Hello'}]})
-        self.reports = []
-
-    def run_agent(self, complete, cancel=lambda: False):
-        return run_goal_agent(self.goal, complete, self.invoke, lambda data: self.reports.append(copy.deepcopy(data)), cancel, 'configured-model')
-
-    def test_model_selects_tools_receives_results_and_usage_is_summed(self):
-        complete = Mock(side_effect=[response('list_private_chats'), response('read_chat', {'chat_id': 'friend'}), response()])
-        self.assertEqual(json.loads(self.run_agent(complete)), result_fixture())
-        self.assertEqual([call.args[0] for call in self.invoke.call_args_list], ['list_private_chats','read_chat'])
-        self.assertEqual(complete.call_args_list[0].args[2], 'required')
-        self.assertEqual(complete.call_args_list[1].args[2], 'auto')
-        for call in complete.call_args_list:
-            self.assertEqual(call.args[3], GOAL_RESULT_FORMAT)
-        self.assertEqual(self.reports[-1]['usage']['total_tokens'], 36)
-        self.assertEqual(len(self.reports[-1]['sources']), 1)
-        self.assertEqual(self.reports[-1]['sources'][0]['reference'], 1)
-
-    def test_cannot_answer_without_reading_any_data(self):
-        with self.assertRaises(RuntimeError):
-            self.run_agent(Mock(return_value=response()))
-
-    def test_result_prompt_requests_concise_items_without_hiding_uncertainty(self):
-        complete = Mock(side_effect=[response('list_private_chats'), response()])
-        self.run_agent(complete)
-        prompt = complete.call_args.args[0][0]['content']
-        for requirement in ('JSON Schema', '合并重复事项', '简洁展示业务内容', 'notice', '尚未解决的限制', '回复建议标为草稿'):
-            self.assertIn(requirement, prompt)
-
-    def test_task_prompt_does_not_inject_reply_filters_or_a_business_workflow(self):
-        for task in ('列出未回复的私聊，包括表情和分享', '查看最新实习信息', '整理邮箱通知'):
-            with self.subTest(task=task):
-                self.goal['prompt'] = task
-                complete = Mock(side_effect=[response('list_private_chats'), response()])
-                self.run_agent(complete)
-                messages = complete.call_args.args[0]
-                system = messages[0]['content']
-                self.assertEqual(json.loads(messages[1]['content'])['goal'], task)
-                self.assertIn('以用户设置为准', system)
-                self.assertIn('不额外增加业务门槛', system)
-                self.assertIn('根据本轮工具证据', system)
-                self.assertIn('能力限于读取和建议', system)
-                for rule in ('必须有尚未回应的问题', '值得用户关注', '不展开已回复',
-                             '最后一条来自对方不等于', '不默认列为待回复',
-                             '系统和邮箱通知不列为', '已接通的通话', '调用 read_chat'):
-                    self.assertNotIn(rule, system)
-
-    def test_malformed_result_and_unknown_sources_are_not_success(self):
-        for text in ('Plain text report', '{"summary":'):
-            with self.subTest(text=text), self.assertRaises(ValueError):
-                self.run_agent(Mock(side_effect=[response('read_chat'), response(text=text)]))
-            self.assertEqual(self.reports[-1]['usage']['total_tokens'], 24)
-
-    def test_no_findings_remains_empty_and_failed_tool_gets_a_notice(self):
-        empty = {'summary': 'No clear findings in inspected messages', 'items': [], 'notice': None}
-        complete = Mock(side_effect=[response('send_message'), response('read_chat'), response(text=json.dumps(empty))])
-        result = json.loads(self.run_agent(complete))
-        self.assertEqual(result['items'], [])
-        self.assertIn('失败', result['notice'])
-
-    def test_refusal_truncated_and_filtered_json_are_not_success(self):
-        for reason in ('length', 'content_filter', None, 'refusal'):
-            final = response()
-            if reason == 'refusal':
-                final['choices'][0]['message']['refusal'] = 'Sensitive provider text'
-            else:
-                final['choices'][0]['finish_reason'] = reason
-            with self.subTest(reason=reason), self.assertRaises(RuntimeError) as error:
-                self.run_agent(Mock(side_effect=[response('read_chat'), final]))
-            self.assertNotIn('Sensitive provider text', str(error.exception))
-
-    def test_truncation_records_round_reason_and_reasoning_tokens_without_retry(self):
-        final = response(text='')
-        final['choices'][0]['finish_reason'] = 'length'
-        final['usage'].update(completion_tokens=3000, completion_tokens_details={'reasoning_tokens':3000})
-        complete = Mock(side_effect=[response('read_chat'), final])
-        with self.assertRaisesRegex(RuntimeError, '截断.*第 2 轮.*3000 tokens'):
-            self.run_agent(complete)
-        self.assertEqual(complete.call_count, 2)
-        telemetry = self.reports[-1]['usage']['model_calls'][-1]
-        self.assertEqual(telemetry['finish_reason'], 'length')
-        self.assertEqual(telemetry['reasoning_tokens'], 3000)
-
-    def test_configured_range_is_not_shortened_by_previous_success(self):
-        self.goal.update(range_type='recent_days', range_days=7)
-        complete = Mock(side_effect=[response('search_messages', {'query': 'intern'}), response()])
-        self.run_agent(complete)
-        since, until = self.invoke.call_args.args[2:]
-        self.assertEqual(since, self.goal['started_at'] - 7 * 86400)
-        self.assertEqual(until, self.goal['started_at'])
-        instruction = json.loads(complete.call_args.args[0][1]['content'])
-        self.assertEqual(instruction['search_range'], {'type':'recent_days', 'value':7, 'unit':'days'})
-        self.assertEqual(datetime.fromisoformat(instruction['observation_start']).timestamp(), since)
-
-    def test_today_starts_at_local_midnight_and_rolls_over(self):
-        for stamp in (datetime(2026, 9, 13, 23, 59, 59), datetime(2026, 9, 14, 0, 0, 1)):
-            goal = {**self.goal, 'started_at': stamp.timestamp(), 'range_type': 'today'}
-            since, until = observation_window(goal)
-            self.assertEqual(since, stamp.replace(hour=0, minute=0, second=0).timestamp())
-            self.assertEqual(until, stamp.timestamp())
-
-    def test_recent_days_are_rolling_24_hour_periods(self):
-        for days in (1, 3, 90):
-            since, until = observation_window({**self.goal, 'range_type': 'recent_days', 'range_days': days})
-            self.assertEqual(until - since, days * 86400)
-
-    def test_weeks_and_calendar_months_cover_month_ends_and_leap_years(self):
-        since, until = observation_window({**self.goal, 'range_type': 'recent_days', 'range_value': 2, 'range_unit': 'weeks'})
-        self.assertEqual(until - since, 14 * 86400)
-        for current, months, expected in [
-            (datetime(2026, 3, 31, 17), 1, datetime(2026, 2, 28, 17)),
-            (datetime(2024, 3, 31, 17), 1, datetime(2024, 2, 29, 17)),
-            (datetime(2026, 1, 31, 17), 3, datetime(2025, 10, 31, 17)),
-            (datetime(2026, 9, 13, 17), 3, datetime(2026, 6, 13, 17)),
-        ]:
-            since, until = observation_window({'started_at':current.timestamp(), 'range_type':'recent_days', 'range_value':months, 'range_unit':'months'})
-            self.assertEqual(since, expected.timestamp())
-            self.assertEqual(until, current.timestamp())
-
-    def test_invalid_tool_not_executed_and_error_returned_to_model(self):
-        complete = Mock(side_effect=[response('send_message'), response('search_messages', {'query': 'intern'}), response()])
-        self.run_agent(complete)
-        self.invoke.assert_called_once()
-        self.assertIn('error', self.reports[-1]['steps'][0])
-
-    def test_more_than_eight_tools_are_not_forced_to_stop(self):
-        complete = Mock(side_effect=[response('search_messages', {'query': str(i)}) for i in range(12)] + [response()])
-        self.run_agent(complete)
-        self.assertEqual(self.invoke.call_count, 12)
-        self.assertEqual(complete.call_args_list[-1].args[2], 'auto')
-
-    def test_invalid_citation_is_corrected_without_repeating_retrieval(self):
-        invalid = {**result_fixture(), 'items': [{**result_fixture()['items'][0], 'source_refs': [999]}]}
-        complete = Mock(side_effect=[response('read_chat'), response(text=json.dumps(invalid)), response()])
-        self.assertEqual(json.loads(self.run_agent(complete)), result_fixture())
-        self.invoke.assert_called_once()
-        feedback = json.loads(complete.call_args.args[0][-1]['content'])
-        self.assertEqual(feedback['invalid_refs'], [999])
-        self.assertEqual(feedback['valid_refs'], [1])
-        self.assertEqual(self.reports[-1]['usage']['total_tokens'], 36)
-        self.assertEqual(self.reports[-1]['steps'][-1]['tool'], '引用校验')
-
-    def test_invalid_citations_remain_failure_after_two_corrections(self):
-        invalid = {**result_fixture(), 'items': [{**result_fixture()['items'][0], 'source_refs': [999]}]}
-        complete = Mock(side_effect=[response('read_chat')] + [response(text=json.dumps(invalid))] * 3)
-        with self.assertRaises(GoalReferenceError):
-            self.run_agent(complete)
-        self.assertEqual(complete.call_count, 4)
-        self.assertEqual(self.reports[-1]['steps'][-1]['invalid_refs'], [999])
-        self.assertEqual(self.reports[-1]['usage']['total_tokens'], 48)
-
-    def test_sources_accumulate_across_tools_without_mutating_provider_data(self):
-        item = {'chat_id':'friend', 'source_db':'message.db', 'source_table':'one', 'local_id':1, 'timestamp':1, 'text':'a'}
-        first = {'messages':[item]}
-        second = {'messages':[dict(item), {**item, 'source_table':'two'}]}
-        self.invoke.side_effect = [first, second]
-        final = {**result_fixture(), 'items':[{**result_fixture()['items'][0], 'source_refs':[1,2]}]}
-        complete = Mock(side_effect=[response('search_messages', {'query':'a'}), response('read_chat'), response(text=json.dumps(final))])
-        self.assertEqual(json.loads(self.run_agent(complete)), final)
-        tool_messages = [json.loads(m['content']) for m in complete.call_args.args[0] if m['role']=='tool']
-        self.assertEqual([m['reference'] for m in tool_messages[1]['messages']], [1,2])
-        self.assertEqual(len(self.reports[-1]['sources']), 2)
-        self.assertNotIn('reference', item)
-        self.assertNotIn('reference', second['messages'][1])
-
-    def test_sixty_sources_are_all_forwarded_and_last_source_is_valid(self):
-        self.invoke.return_value = {'messages':[{'chat_id':'group','local_id':i,'text':str(i)} for i in range(60)], 'matched':60}
-        final = {**result_fixture(), 'items':[{**result_fixture()['items'][0], 'source_refs':[60]}]}
-        complete = Mock(side_effect=[response('search_messages', {'query':'intern'}), response(text=json.dumps(final))])
-        self.assertEqual(json.loads(self.run_agent(complete)), final)
-        self.assertEqual(len(self.reports[-1]['sources']), 60)
-        self.assertEqual(len(json.loads(complete.call_args.args[0][-1]['content'])['messages']), 60)
-
-    def test_partial_tool_results_cannot_be_saved_as_success(self):
-        for partial in ({'matched':60}, {'next_offset':20}, {'complete':False}):
-            self.invoke.return_value = {'messages':[{'text':'one'}], **partial}
-            complete = Mock(side_effect=[response('search_messages', {'query':'intern'}), response()])
-            with self.subTest(partial=partial), self.assertRaises(GoalCoverageError):
-                self.run_agent(complete)
-            self.assertEqual(complete.call_count, 1)
-
-    def test_cancel_before_and_after_request_preserves_known_usage(self):
-        complete = Mock(return_value=response())
-        with self.assertRaises(GoalCancelled):
-            self.run_agent(complete, lambda: True)
-        complete.assert_not_called()
-        with self.assertRaises(GoalCancelled):
-            self.run_agent(Mock(return_value=response('search_messages')), Mock(side_effect=[False,True]))
-        self.assertEqual(self.reports[-1]['usage']['total_tokens'], 12)
-
-    def test_all_tool_failures_are_not_success(self):
-        self.invoke.side_effect = RuntimeError('Missing snapshots')
-        with self.assertRaises(RuntimeError):
-            self.run_agent(Mock(side_effect=[response('read_chat'), response()]))
-
-    def test_timeout_keeps_sources_and_marks_unknown_usage_without_retry(self):
-        complete = Mock(side_effect=[response('read_chat'), TimeoutError('模型响应读取超时（等待上限 300 秒）')])
-        with self.assertRaisesRegex(RuntimeError, '第 2 轮.*300 秒.*1 条.*用量未知'):
-            self.run_agent(complete)
-        self.assertEqual(complete.call_count, 2)
-        last = self.reports[-1]
-        self.assertEqual(len(last['sources']), 1)
-        self.assertEqual(last['usage']['total_tokens'], 12)
-        self.assertEqual(last['usage']['model_calls'][-1]['finish_reason'], 'timeout')
-        self.assertTrue(last['usage']['model_calls'][-1]['usage_unknown'])
-        self.assertGreater(last['usage']['model_calls'][-1]['input_chars'], 0)
-
-
 class GoalResultTests(unittest.TestCase):
     def test_nullable_fields_and_empty_results_are_valid(self):
         data = {'summary': 'Nothing actionable in inspected messages', 'items': [], 'notice': None}
@@ -590,105 +377,13 @@ class GoalResultTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = GoalStore(Path(directory) / 'goals.sqlite3')
             goal_id = store.save({'title': 'Test', 'prompt': 'Test', 'cadence': 'hourly'}, now=100)
-            complete = Mock(side_effect=[response('read_chat'), response(text='Not JSON')])
-            invoke = Mock(return_value={'messages': []})
-            scheduler = GoalScheduler(store, lambda goal, report, cancelled: run_goal_agent(goal, complete, invoke, report, cancelled, 'fixture-model'))
+            scheduler = GoalScheduler(store, lambda goal, report, cancelled: validate_goal_result('Not JSON', set()))
             scheduler.tick(3700)
             run = store.history(goal_id)[0]
             self.assertEqual(run['status'], 'failed')
             self.assertEqual(run['result'], '')
             self.assertIn('格式无效', run['error'])
             self.assertIsNone(store.list()[0]['last_success_at'])
-
-
-class GoalToolsTests(unittest.TestCase):
-    def setUp(self):
-        self.state = SimpleNamespace(since_ts=None, account='me', sync_error='', last_synced_at='today', chats=[
-            {'id': 'friend', 'type': 'private', 'last_ts': 100000}, {'id': 'group', 'type': 'group', 'last_ts': 100000}])
-        self.state.chat_by_id = lambda key: next((c for c in self.state.chats if c['id']==key), None)
-        self.reader = Mock(side_effect=lambda state, chat, **kw: [{'chat_id': chat['id'], 'text': 'Singapore internship', 'timestamp': 100000, 'mine': chat['id']=='friend'}])
-        self.tools = GoalChatTools(self.state, self.reader, lambda q:q.split(), lambda: False)
-
-    def test_search_covers_group_content_and_current_snapshots(self):
-        result = self.tools('search_messages', {'query':'internship'}, 90000, 100000)
-        self.assertEqual({m['chat_id'] for m in result['messages']}, {'friend','group'})
-        self.assertEqual(self.reader.call_args.kwargs['until_ts'], 100000)
-
-    def test_private_tool_excludes_groups_and_preserves_sender_direction(self):
-        result = self.tools('list_private_chats', {}, 90000, 100000)
-        self.assertEqual([m['chat_id'] for m in result['messages']], ['friend'])
-        self.assertTrue(result['messages'][0]['mine'])
-        self.assertEqual(result['total_chats'], 1)
-
-    def test_bad_dates_ids_and_limits_are_rejected(self):
-        for name,args in [('read_chat',{'chat_id':'missing'}), ('search_messages',{'query':'intern','since':'bad'})]:
-            with self.assertRaises(ValueError):
-                self.tools(name,args,90000,100000)
-
-    def test_all_tools_cannot_expand_user_range(self):
-        since = datetime.fromtimestamp(1000).isoformat()
-        until = datetime.fromtimestamp(200000).isoformat()
-        for name, args in [('search_messages', {'query':'intern'}), ('read_chat', {'chat_id':'friend'}), ('list_private_chats', {})]:
-            self.reader.reset_mock()
-            result = self.tools(name, {**args, 'since':since, 'until':until}, 90000, 100000)
-            self.assertEqual((result['since'], result['until']), (90000, 100000))
-            self.assertIn('设定范围', result['warning'])
-            for call in self.reader.call_args_list:
-                self.assertEqual((call.kwargs['since_ts'], call.kwargs['until_ts']), (90000, 100000))
-
-    def test_model_can_narrow_but_not_search_outside_range(self):
-        since = datetime.fromtimestamp(95000).isoformat()
-        until = datetime.fromtimestamp(99000).isoformat()
-        result = self.tools('read_chat', {'chat_id':'friend', 'since':since, 'until':until}, 90000, 100000)
-        self.assertEqual((result['since'], result['until']), (95000, 99000))
-        self.reader.reset_mock()
-        with self.assertRaises(ValueError):
-            self.tools('read_chat', {'chat_id':'friend', 'until':datetime.fromtimestamp(80000).isoformat()}, 90000, 100000)
-        self.reader.assert_not_called()
-
-    def test_full_scan_keeps_sync_warning_without_truncation(self):
-        self.state.sync_error='failure'
-        self.reader.return_value=None
-        self.reader.side_effect=lambda *a,**kw:[{'text':'intern','timestamp':100000}]*1001
-        result=self.tools('search_messages',{'query':'intern'},90000,100000)
-        self.assertEqual(len(result['messages']), 2002)
-        self.assertEqual(result['matched'], 2002)
-        self.assertNotIn('1000',result['warning'])
-        self.assertIn('同步失败',result['warning'])
-
-    def test_legacy_limit_does_not_discard_matches_or_long_text(self):
-        self.state.chats = self.state.chats[:1]
-        self.reader.side_effect = lambda *a, **kw: [{'text':'intern ' + 'x'*2000, 'local_id':i} for i in range(60)]
-        result = self.tools('search_messages', {'query':'intern','limit':30}, 90000, 100000)
-        self.assertEqual((result['matched'], result['returned']), (60,60))
-        self.assertTrue(result['complete'])
-        self.assertGreater(len(result['messages'][-1]['text']), 1200)
-        self.assertIsNone(self.reader.call_args.kwargs['max_items'])
-        self.assertIsNone(self.reader.call_args.kwargs['max_text_chars'])
-
-    def test_reads_all_private_conversations_and_full_context(self):
-        self.state.chats = [{'id':str(i), 'type':'private', 'last_ts':100000} for i in range(25)]
-        self.reader.side_effect = lambda state, chat, **kw: [{'chat_id':chat['id'], 'text':'message'} for _ in range(45)]
-        result = self.tools('list_private_chats', {}, 90000, 100000)
-        self.assertEqual(result['total_chats'], 25)
-        self.assertEqual(len(result['messages']), 25*45)
-        self.assertIsNone(result['next_offset'])
-        result = self.tools('read_chat', {'chat_id':'0'}, 90000, 100000)
-        self.assertEqual(len(result['messages']), 45)
-
-    def test_cancellation_still_stops_full_scan(self):
-        self.tools.cancelled = lambda: True
-        with self.assertRaises(GoalCancelled):
-            self.tools('search_messages', {'query':'intern'}, 90000, 100000)
-        self.reader.assert_not_called()
-
-    def test_search_does_not_stop_after_fifty_thousand_messages(self):
-        self.state.chats = [{'id':str(i), 'type':'group', 'last_ts':100000} for i in range(51)]
-        self.reader.side_effect = lambda state, chat, **kw: ([{'text':'other'}]*1000 if chat['id'] != '50' else [{'text':'intern'}])
-        result = self.tools('search_messages', {'query':'intern'}, 90000, 100000)
-        self.assertEqual(result['scanned'], 50001)
-        self.assertEqual(result['matched'], 1)
-        self.assertEqual(self.reader.call_count, 51)
 
 
 class GoalAPITests(unittest.TestCase):
@@ -740,17 +435,12 @@ class GoalAPITests(unittest.TestCase):
         self.assertEqual(self.handler.json_response.call_args.kwargs['status'], 202)
         self.assertEqual(self.handler.json_response.call_args.args[0]['run_id'], 'existing')
 
-    def test_task_uses_five_minute_timeout_with_independent_profile(self):
-        def run(goal, complete, invoke, report, cancelled, model):
-            return complete([], [], 'required', GOAL_RESULT_FORMAT)
-        with patch.object(web, 'load_llm_config', return_value={'qa':{'model':'qa-only'}, 'task':{'model':'task-only'}}), \
-             patch.object(web, 'resolve_llm_api_key', return_value='fixture-only-key'), \
-             patch.object(web, 'load_voice_cache', return_value={}), \
-             patch.object(web, 'run_goal_agent', side_effect=run), \
-             patch.object(web, 'call_chat_payload', return_value={}) as send:
-            self.handler_class.goal_scheduler.execute({'started_at':1}, Mock(), lambda:False)
-        self.assertEqual(send.call_args.kwargs['timeout'], 300)
-        self.assertEqual(send.call_args.args[0]['model'], 'task-only')
+    def test_task_entrypoint_executes_code_skill_only(self):
+        from tests.test_code_skills import package
+        goal = {'started_at':1, 'skill':package(), 'skill_version':1}
+        with patch('wechat_agent.code_skill_web.execute_code_goal', return_value='done') as run:
+            self.assertEqual(self.handler_class.goal_scheduler.execute(goal, Mock(), lambda:False), 'done')
+        self.assertIs(run.call_args.args[2], goal)
 
 
 class GoalSnapshotTests(unittest.TestCase):

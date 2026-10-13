@@ -5,10 +5,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from wechat_agent import web
-from wechat_agent.qa_actions import FUNCTION_FIELDS, FUNCTION_TOOLS, parse_tool_call
+from wechat_agent.platform_tools import FUNCTION_FIELDS, FUNCTION_TOOLS, parse_tool_call
 from wechat_agent.platform_tools import FILTER_TOOLS
 from wechat_agent.qa_agent import run_conversation_agent
-from tests.test_qa_agent import NOW, PEOPLE, raw, completion, decision
+from tests.test_qa_agent import NOW, PEOPLE, completion, decision
 
 
 class NativeToolTests(unittest.TestCase):

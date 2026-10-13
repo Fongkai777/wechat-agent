@@ -33,13 +33,10 @@ class ConversationTools:
         finally:
             conn.close()
 
-    def filters(self, plan, background=False):
-        # 统一生成参数化范围条件；历史模式转到起始时间之前，仍受索引下界限制。
+    def filters(self, plan):
+        # Only explicit per-call filters within the platform boundary apply.
         filters, params = ["timestamp <= ?"], [plan["until_ts"]]
         since = plan.get("since_ts")
-        if background and since is not None:
-            filters, params = ["timestamp < ?"], [since]
-            since = None
         floor = self.state.since_ts
         if floor is not None:
             since = max(since, floor) if since is not None else floor
@@ -136,15 +133,15 @@ class ConversationTools:
                 'complete':offset+len(pairs)>=total, 'tool':'shared_windows', 'window_seconds':window_seconds,
                 'note':f'匹配数为候选时间窗数，不是互动次数；双方发言间隔不超过{window_seconds}秒，可能夹有其他人发言，需展开前后文核实。'}
 
-    def search(self, plan, query=None, size=60, background=False):
+    def search(self, plan, query=None, size=60):
         # 混合检索负责召回；语义块先映射回消息，再由规范索引过滤并返回可引用原文。
         self.check()
         retrieval_plan = dict(plan, query=query or plan["query"])
-        filters, params = self.filters(plan, background)
-        since = None if background else plan.get("since_ts")
+        filters, params = self.filters(plan)
+        since = plan.get("since_ts")
         if self.state.since_ts is not None:
             since = max(since, self.state.since_ts) if since is not None else self.state.since_ts
-        until = plan["since_ts"] - 1 if background and plan.get("since_ts") is not None else plan["until_ts"]
+        until = plan["until_ts"]
         hits, diagnostics = self.hybrid(retrieval_plan["query"], plan.get("people", []), since, until, size,
                                         scope=plan)
         ids = []
@@ -169,7 +166,7 @@ class ConversationTools:
                                     + " AND id IN (" + ",".join("?" for _ in batch) + ")", [*params, *batch]).fetchall()
                 by_id = {r["id"]: r for r in rows}
                 bounds=dict(plan,since_ts=since,until_ts=until)
-                items.extend(self.item(by_id[i], "background" if background else "primary", bounds) for i in batch if i in by_id)
+                items.extend(self.item(by_id[i], "primary", bounds) for i in batch if i in by_id)
         note = "相关性检索，不代表穷尽时间范围内全部消息"
         if diagnostics.get('rerank_error'):
             note += '；重排未完成，使用已有排序：'+diagnostics['rerank_error']
@@ -251,6 +248,6 @@ class ConversationTools:
             rows = conn.execute(
                 "SELECT * FROM (SELECT m.*, ROW_NUMBER() OVER (PARTITION BY chat_id ORDER BY timestamp DESC, id DESC) AS pos "
                 "FROM messages m WHERE chat_type='private' AND " + " AND ".join(filters) + ") WHERE pos=1 ORDER BY timestamp DESC", params).fetchall()
-        pending = [r for r in rows if r["sender_username"] != self.state.account and r["chat_id"] not in ("qqmail", "filehelper")]
+        pending = [r for r in rows if r["sender_username"] != self.state.account]
         return {"items": [self.item(r) for r in pending[:size]], "matched": len(pending), "complete": len(pending) <= size,
                 "tool": "unanswered", "note": "窗口内最后消息来自对方仅是待核查线索，不等于必须回复；需结合前后文。"}

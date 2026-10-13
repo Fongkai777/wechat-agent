@@ -304,15 +304,14 @@ class GoalStore:
             skill_version = old['skill_version'] if old else 0
             skill_json = old_skill
             if 'skill' in data:
-                from .task_skills import validate_skill
+                from .code_skill_packages import validate_package as validate_skill
                 if data.get('skill_prompt') != prompt:
                     raise ValueError('任务内容已变化，请重新生成或确认编辑后的 Skill')
                 if data.get('expected_skill_version', skill_version) != skill_version:
                     raise GoalConflict('Skill 已被其他窗口修改，请刷新后重试')
                 validated = validate_skill(data['skill'])
-                if validated.get('schema_version') == 3:
-                    from .code_skill_service import require_validated
-                    require_validated(conn, validated, prompt)
+                from .code_skill_service import require_validated
+                require_validated(conn, validated, prompt)
                 skill_json = json.dumps(validated, ensure_ascii=False, sort_keys=True)
             elif old and skill_version and prompt != old['prompt']:
                 raise ValueError('修改任务时必须同时确认对应 Skill')
@@ -353,7 +352,7 @@ class GoalStore:
         return goal_id
 
     def save_skill_draft(self, goal_id, prompt, skill, model, usage):
-        from .task_skills import validate_skill
+        from .code_skill_packages import validate_package as validate_skill
         draft_id = uuid.uuid4().hex
         with self.connect() as conn:
             conn.execute('INSERT INTO goal_skill_drafts VALUES(?,?,?,?,?,?,?)',
@@ -601,27 +600,3 @@ class GoalScheduler:
             self.thread.join(timeout=2)
         if self.manual_thread:
             self.manual_thread.join(timeout=2)
-
-
-def tool(name, description, properties, required):
-    return {"type": "function", "function": {"name": name, "description": description,
-        "parameters": {"type": "object", "properties": properties, "required": required, "additionalProperties": False}}}
-
-
-TIME_ARG = {"type": "string", "description": "Local date/time YYYY-MM-DD or YYYY-MM-DD HH:MM:SS. Empty uses the supplied observation window. May narrow but never expand that window."}
-TOOLS = [
-    tool("search_messages", "Search all synced messages in the observation window by keywords (any keyword can match). Includes groups and private chats. Returns ALL matching messages, not a top-k subset. Keyword matching is not proof that all relevant information was found.", {
-        "query": {"type": "string"}, "since": TIME_ARG, "until": TIME_ARG,
-    }, ["query"]),
-    tool("list_private_chats", "Read ALL private conversations and their messages in the observation window, including who sent them. No conversation or message count limit. This is NOT an unread/needs-reply judgment; use the context to decide.", {
-        "since": TIME_ARG,
-    }, []),
-    tool("read_chat", "Read ALL chronological messages in a known chat within the observation window, including mine flags and voice transcriptions. No message count limit.", {
-        "chat_id": {"type": "string"}, "since": TIME_ARG, "until": TIME_ARG,
-    }, ["chat_id"]),
-]
-
-
-def run_goal_agent(goal, completion, invoke, report, cancelled, model):
-    from .goal_agent import run_goal_graph
-    return run_goal_graph(goal, completion, invoke, report, cancelled, model)

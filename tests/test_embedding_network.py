@@ -54,6 +54,43 @@ class EmbeddingNetworkTests(unittest.TestCase):
                 self.assertEqual(api.call_count, 1)
                 wait.assert_not_called()
 
+    def rate_error(self, code='rate_limit_exceeded', headers=None):
+        return urllib.error.HTTPError('https://api.example.test', 429, 'fixture', headers or {},
+            io.BytesIO(json.dumps({'error':{'code':code}}).encode()))
+
+    def test_rate_limit_retries_same_batch_and_respects_retry_after(self):
+        with patch.object(web.urllib.request, 'urlopen', side_effect=[
+                self.rate_error(headers={'Retry-After':'5'}), self.response()]) as api, \
+             patch.object(web, 'wait_for_job_retry') as wait, patch.object(web.random, 'uniform', return_value=0):
+            vectors, usage = web.call_embeddings(self.profile, 'synthetic', ['fixture'])
+        self.assertEqual(vectors, [[0.1,0.2]])
+        self.assertEqual(usage['total_tokens'], 2)
+        wait.assert_called_once_with(5)
+        self.assertIs(api.call_args_list[0].args[0], api.call_args_list[1].args[0])
+
+    def test_rate_limit_retry_is_bounded_and_quota_is_not_retried(self):
+        with patch.object(web.urllib.request, 'urlopen', side_effect=[self.rate_error() for _ in range(7)]) as api, \
+             patch.object(web, 'wait_for_job_retry') as wait, self.assertRaises(RuntimeError):
+            web.call_embeddings(self.profile, 'synthetic', ['fixture'])
+        self.assertEqual(api.call_count, 7)
+        self.assertEqual(wait.call_count, 6)
+        with patch.object(web.urllib.request, 'urlopen', side_effect=self.rate_error('insufficient_quota')) as api, \
+             patch.object(web, 'wait_for_job_retry') as wait, self.assertRaises(RuntimeError):
+            web.call_embeddings(self.profile, 'synthetic', ['fixture'])
+        self.assertEqual(api.call_count, 1)
+        wait.assert_not_called()
+
+    def test_cancellation_interrupts_rate_limit_wait(self):
+        ready = threading.Event()
+        registry = JobRegistry()
+        with patch.object(web.urllib.request, 'urlopen', side_effect=self.rate_error()) as api:
+            job = registry.start('/api/rag/prepare', {}, 'maintenance', lambda job:
+                web.call_embeddings(self.profile, 'synthetic', ['fixture'], progress=lambda *a, **kw:ready.set()))
+            self.assertTrue(ready.wait(2))
+            registry.stop(job.id)
+            self.assertEqual(finished(job)['status'], 'cancelled')
+            self.assertEqual(api.call_count, 1)
+
     def test_ambiguous_timeout_and_certificate_errors_do_not_replay_paid_requests(self):
         for error, message in ((TimeoutError(), "超时"), (urllib.error.URLError(socket.timeout()), "超时"),
                                (urllib.error.URLError(ssl.SSLCertVerificationError()), "证书验证失败"),

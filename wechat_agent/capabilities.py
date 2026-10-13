@@ -4,7 +4,7 @@ import json
 import copy
 
 from .platform_tools import FUNCTION_DESCRIPTIONS, SKILL_TOOL_NAMES, TOOL_PERMISSIONS
-from .qa_planning import object_schema, parse_json_completion
+from .model_output import object_schema, parse_json_completion
 
 
 def capability_catalog():

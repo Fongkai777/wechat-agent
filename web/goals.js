@@ -262,11 +262,7 @@
         $('goalSkillText').value=skill.files.find(f=>f.path===skillFile).content;
       }
     }
-    const steps = Array.isArray(skill?.steps) ? skill.steps : [];
-    const output = steps.find(s=>s.op==='output') || skill?.output;
-    const source = {private_latest:'私聊末条消息',private_messages:'私聊消息',all_messages:'全部聊天消息'}[steps[0]?.source || skill?.source];
-    const labels = {read:source,semantic_search:'语义 + 关键词召回',filter:'本地筛选',context:'补齐上下文',deduplicate:'去重',output:output?.mode==='list'?'直接列出':'模型整理'};
-    $('goalSkillSummary').textContent = skill ? `${skill.name || ''} · ${steps.length ? steps.map(s=>labels[s.op] || s.op).join(' → ') : `${source || ''} · ${output?.mode==='list'?'本地执行，不调用模型':'筛选后由模型整理'}`}` : '';
+    $('goalSkillSummary').textContent = skill && skill.schema_version!==3 ? '此旧格式已停用，请重新生成代码 Skill' : '';
     if (skill?.schema_version===3) {
       let permissions=[];
       try { permissions=JSON.parse(skill.files.find(f=>f.path==='manifest.json').content).permissions; } catch {}
@@ -322,7 +318,7 @@
     if (skill?.schema_version===3) {
       skill.files.find(f=>f.path===skillFile).content=$('goalSkillText').value;
       skillText=JSON.stringify(skill,null,2);
-    } else skillText=$('goalSkillText').value;
+    }
     $('goalSkillStatus').textContent='已修改 · 保存前需重新测试';
   });
   $('goalSkillFile')?.addEventListener('change',()=>{skillFile=$('goalSkillFile').value; renderSkillEditor();});
@@ -434,7 +430,8 @@
       if (skillsSupported) {
         let skill;
         try { skill=JSON.parse(skillText); } catch { throw new Error('Skill JSON 格式无效，请检查后保存'); }
-        if (skill.schema_version===3) await validateCodeSkill(skill);
+        if (skill.schema_version!==3) throw new Error('旧 Skill 格式已停用，请重新生成代码包');
+        await validateCodeSkill(skill);
         skillFields={skill,skill_prompt:skillPrompt,expected_skill_version:editing?.skill_version || 0};
       }
       await request('/api/goals/save',{id:editing?.id,title,prompt,interval_value,interval_unit,range_type,range_value,range_unit,enabled:editing?.enabled ?? true,...skillFields});

@@ -12,7 +12,8 @@ browser, indexer, query planner, background jobs and model configuration.
 | Web and retrieval | `wechat_agent/web.py` | HTTP routes, normalization, contact signals, FTS/LIKE, semantic chunks, RRF and answer generation |
 | Q&A citation contract | `wechat_agent/qa_answers.py` | Strict answer schema, reference validation and plain-text compatibility |
 | Background work | `wechat_agent/jobs.py`, `web/jobs.js` | Job state, progress, cancellation and browser reconnect |
-| Recurring assistant | `wechat_agent/goals.py`, `wechat_agent/goal_tools.py` | Schedule, bounded read-only tools, structured output and source validation |
+| Recurring assistant | `wechat_agent/goals.py`, `wechat_agent/code_skill_web.py` | Schedule, editable code Skills, shared tools and source validation |
+| Shared platform | `wechat_agent/platform_api.py`, `wechat_agent/platform_runtime.py`, `wechat_agent/platform_data_tools.py` | Common raw reads, scoped SQL, retrieval, model service and provenance; Python/native adapters |
 | Index scheduling | `wechat_agent/rag_schedule.py` | Recurring transcription → text → semantic preparation |
 | Transcription | `wechat_agent/voice_transcribe.py`, functions in `web.py` | Local audio handling, cloud transcription and saved-text reuse |
 | UI | `web/index.html`, `web/styles.css`, `web/app.js`, `web/goals.js` | Five workspaces; custom CSS, not a TDesign dependency |
@@ -27,10 +28,12 @@ timeline/context reads or statistics without filling a global slot plan.
 person, conversation and date filters apply before recall and ranking; they do
 not persist into the next query. Fixed task/data boundaries remain enforced.
 
-`search_qa_search_db` fuses semantic and keyword candidates, locally ranks them
-and optionally calls a reranking model. Query reformulation belongs to the tool
-loop. The standalone retrieval debugger retains its legacy query expansion path;
-old Q&A checkpoints retain the planner needed for faithful recovery. See
+`search_qa_search_db` fuses semantic and keyword candidates with equal-weight RRF
+and optionally reranks all recalled candidates in API batches, without business
+heuristic scoring. Query reformulation belongs to the tool loop. Q&A and Skills
+use the same platform runtime, including raw-message reads, custom read-only SQL,
+threshold semantic search, index preparation and model transport. Older interrupted
+Q&A protocols cannot resume; saved conversations remain readable. See
 [Conversational Search](CONVERSATIONAL_SEARCH.md) for protocols and limits.
 
 ## Answer Provenance
@@ -82,86 +85,48 @@ the server stopped until it finishes, then restart it with the usual settings.
 
 ## Task Loop
 
-`goal_agent.py` runs a LangGraph state graph: model decision -> dispatch ->
-one read-only tool at a time -> model decision, or reference validation -> finish.
-Invalid reference IDs can return to the model for correction. This is an
-execution protocol, not a preset business workflow or a top-k result filter.
+Tasks execute only schema-v3 editable Python packages. The platform no longer
+contains a declarative Skill interpreter, preset task-category workflow or a
+fallback task agent. Tasks without a valid code package require generation and
+isolated testing; saved historical results remain readable.
 
-`goal_checkpoints.py` uses the official SQLite checkpointer, synchronously saved
-after each node. Each run has a private file under `web_cache/goal_checkpoints/`.
-Only the latest two checkpoints are retained. Completed/cancelled runs, deleted
-tasks and runs removed by the 20-run history policy have their checkpoints removed.
-These files contain private evidence; they are ignored by Git and local tracing
-is disabled. The saved graph contains no API credentials.
+`code_skill_packages.py` defines the portable contract;
+`code_skill_runtime.py` runs the OS-isolated worker;
+`platform_api.py` provides generic bounded capabilities for both orchestrators;
+`code_skill_api.py` adapts package manifests to that common API;
+`code_skill_service.py` validates, publishes and records durable execution;
+`code_skill_web.py` binds task state to `platform_runtime.py`, which also serves Q&A.
 
-Interrupted/failed runs with checkpoints expose **Resume** in their card/history.
-Recovery is explicit, never automatically launched at service startup. It reuses
-the run ID, original task/window, evidence IDs and model profile; editing the task
-does not change an old run. Model-profile changes require restoring the profile
-or starting a new run. Read-only tools interrupted before a checkpoint may replay
-against the currently synced data, within the original time window.
+A Skill owns its SQL, workflow, filtering and model prompts. It may use the shared
+native tools or generic semantic/SQL/raw-message APIs. Index-backed operations
+prepare stale indexes under the maintenance lock before querying. Raw-message
+reads do not require an index. See [Code Skills](CODE_SKILLS.md).
 
-Before a paid model request, a local receipt is marked pending. A received reply
-is saved before graph advancement, so it can be reused after a crash. A pending
-receipt without a reply requires explicit duplicate-charge confirmation before
-retry; remote exactly-once execution cannot be guaranteed. Unknown attempts are
-marked separately from confirmed token totals. Results are saved idempotently;
-if the graph finishes before history is saved, Resume can save that result without
-another model request. Q&A uses a separate bounded graph with the same SQLite
-checkpointer and explicit recovery. `qa_recovery.py` stores frozen inputs and nested
-call receipts; `/api/qa/resume` shares the conversation lock with new questions.
-It updates the original turn instead of replacing conversation history. See
-`CONVERSATIONAL_SEARCH.md` for Q&A recovery and data freshness boundaries.
+The platform preserves the task time window, read-only sandbox, actual source IDs
+and explicit resource limits. Every additional rerank batch/repair counts against
+the Skill's model-call budget and records returned token usage. There is no hidden
+business-topic scoring or date interpretation in the shared search provider.
 
-New tasks use schema-v3 Python code packages. `code_skill_packages.py` defines the
-portable contract, `code_skill_runtime.py` runs the OS-isolated worker,
-`code_skill_api.py` mediates generic capabilities, and `code_skill_service.py`
-handles tests, publication checks and durable execution. `code_skill_web.py` binds
-those capabilities to existing application services. No v3 task-category workflow
-is selected by platform code. On-demand index APIs acquire the maintenance lock,
-automatically prepare missing or stale text/vector indexes and report progress.
-Preparation time is separate from the isolated program's execution budget; raw
-message reads do not trigger indexing. See [Code Skills](CODE_SKILLS.md).
+Interrupted code execution uses local call receipts and explicit recovery.
+Completed API responses can be reused; requests with unknown outcomes require
+confirmation before retry because they may already have incurred charges.
+Browser changes do not cancel backend execution. Q&A has its own SQLite graph
+checkpoints and follows the same no-automatic-paid-replay rule.
 
-Earlier tasks used `task_skills.py` to generate a versioned declarative plan from the
-task description alone. Generation runs as a background job and saves a draft;
-it does not publish or execute the task. Users review/edit the JSON before saving.
-`goals.py` stores confirmed versions with optimistic concurrency checks. Each run
-freezes its original plan, task text and time window for history and recovery.
+## Retrieval Upgrade
 
-Version 1 Skills retain the read -> filter -> output graph. Version 2 is an editable
-step list: read or semantic_search -> filter -> optional context -> deduplicate -> output.
-Supported sources are private chat tails, private messages and all messages;
-filters cover sender and literal keywords. `skill_retrieval.py` connects semantic
-tasks to the existing Embedding profile and local SQLite vector index. Query
-embeddings have durable receipts separate from answer requests. Retrieval hydrates
-chunk matches into individual messages and rechecks both time boundaries. Literal
-keyword recall is unioned with semantic hits, never used as an implicit AND filter.
-There is no top-K cap; the explicit cosine threshold is editable and recall is not
-claimed to be exhaustive. Stale or missing indexes fail before requesting embeddings.
-Context is restricted to the same conversation, task window, configured message
-counts and maximum time gap. Index-backed seeds use index neighbours; raw private
-tails can read context without any index. Context sources are marked separately,
-deduplicated by message identity and are not listed as independent matches. Model
-calls receive numbered evidence; history records counts and embedding/answer usage.
-Legacy Skill versions remain executable without silent migration.
-Private chat tails are selected per database shard with a bounded last-row query
-before sender filtering, rather than sending whole conversations to a model.
-Local list output makes no model request and does not cap the number of matches.
-Model output receives only matching candidates and must cite retrieved sources.
-Plans cannot execute Python, shell commands or arbitrary SQL. Unsupported semantic
-criteria require model output rather than hidden task-specific heuristics.
+Text index version 3 removes injected business keywords. Updating a version-2
+index performs a transactional, one-way data migration while preserving message
+IDs and source text. Affected semantic mappings are invalidated for re-embedding;
+the original messages are not deleted. If an old compacted index no longer stores
+embedding inputs, all its vector blocks must be regenerated because unchanged
+inputs cannot be verified. The migration itself does not call an API.
+No retired retrieval implementation is retained.
 
-Existing tasks without a confirmed Skill retain the tool-calling graph:
-the task model chooses `search_messages`, `list_private_chats` or `read_chat`.
-`GoalChatTools` clamps calls to the task's time window and returns source metadata.
-The agent validates citations before persisting a successful structured report.
-This is a read-only tool loop, not desktop control or automatic reply sending.
-All task cards use the same generic execution contract. The user's task text is
-passed unchanged; there are no hidden task-category filters or preset criteria
-for deciding which replies, opportunities or other findings matter. The shared
-contract only governs read-only access, the configured time window, evidence,
-uncertainty and the structured result format.
+Vector batches are committed individually. Explicit `rate_limit_exceeded`
+responses use bounded, cancellable backoff and respect `Retry-After`; quota
+errors, timeouts and connection resets are not automatically replayed. A later
+incremental run reuses committed batches rather than embedding them again.
 
 ## Model Roles
 

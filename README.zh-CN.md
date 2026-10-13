@@ -157,6 +157,7 @@ flowchart LR
 | 本地数据处理 | PyCryptodome、Zstandard |
 
 实现细节和代码入口见[架构说明](docs/ARCHITECTURE.md)。
+问答与任务如何共用平台能力、返回证据和恢复执行，见[执行流程说明](docs/EXECUTION_FLOWS.zh-CN.md)。
 
 ## 部署与配置
 

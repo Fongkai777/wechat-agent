@@ -22,13 +22,16 @@ class ScopedRecallTests(unittest.TestCase):
 
     def test_lexical_scope_applies_before_top_k_for_ids_kind_and_title(self):
         plan=self.populate()
+        self.conn.execute('UPDATE messages SET id=100 WHERE id=1')
+        self.conn.execute('UPDATE messages_fts SET rowid=100 WHERE rowid=1')
+        self.conn.commit()
         for query in (web.query_qa_search_fts,web.query_qa_search_like):
             global_rows=query(self.conn,'internship',[],None,20)
             self.assertNotIn('target@chatroom',{r[5] for r in global_rows})
             self.conn.row_factory=sqlite3.Row
             for scope in (plan,dict(plan,chat_ids=[],chat_scope={'type':'group','keyword':'target'})):
                 rows=query(self.conn,'internship',[],None,20,scope=scope)
-                self.assertEqual([r['id'] for r in rows],[1])
+                self.assertEqual([r['id'] for r in rows],[100])
 
     def test_end_to_end_hybrid_scopes_before_rerank(self):
         plan=self.populate()

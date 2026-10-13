@@ -104,7 +104,7 @@ const rerankBaseUrl = document.querySelector("#rerankBaseUrl");
 const rerankModel = document.querySelector("#rerankModel");
 const rerankApiKey = document.querySelector("#rerankApiKey");
 const rerankApiKeyEnv = document.querySelector("#rerankApiKeyEnv");
-const rerankCandidateLimit = document.querySelector("#rerankCandidateLimit");
+const rerankBatchSize = document.querySelector("#rerankBatchSize");
 const saveLlmConfigBtn = document.querySelector("#saveLlmConfigBtn");
 const voiceTranscribeAllBtn = document.querySelector("#voiceTranscribeAllBtn");
 const voiceStopBatchBtn = document.querySelector("#voiceStopBatchBtn");
@@ -565,7 +565,7 @@ function renderLLMConfig(config) {
   embeddingApiKeyEnv.value = embedding.api_key_env || "";
   embeddingDimensions.value = embedding.dimensions ?? 0;
   embeddingBatchSize.value = embedding.batch_size ?? 64;
-  embeddingQueryCandidates.value = embedding.query_candidates ?? 80;
+  embeddingQueryCandidates.value = embedding.query_candidates ?? 120;
   rerankEnabled.checked = rerank.enabled !== false;
   rerankBaseUrl.value = rerank.base_url || "";
   rerankModel.value = rerank.model || "gpt-5-nano";
@@ -574,7 +574,7 @@ function renderLLMConfig(config) {
     ? `已保存：${rerank.api_key_preview || "API Key"}`
     : "留空继承问答 API Key";
   rerankApiKeyEnv.value = rerank.api_key_env || "";
-  rerankCandidateLimit.value = rerank.candidate_limit ?? 48;
+  rerankBatchSize.value = rerank.batch_size ?? 48;
   saveLlmConfigBtn.disabled = !config.task;
   settingsStatus.textContent = config.task ? "配置就绪" : "请重启服务以启用任务助手独立配置";
 }
@@ -1293,7 +1293,7 @@ async function saveLLMConfig(event) {
         api_key_env: embeddingApiKeyEnv.value.trim(),
         dimensions: Number(embeddingDimensions.value || 0),
         batch_size: Number(embeddingBatchSize.value || 64),
-        query_candidates: Number(embeddingQueryCandidates.value || 80),
+        query_candidates: Number(embeddingQueryCandidates.value || 120),
       },
       rerank: {
         enabled: rerankEnabled.checked,
@@ -1301,7 +1301,7 @@ async function saveLLMConfig(event) {
         model: rerankModel.value.trim(),
         api_key: rerankApiKey.value.trim(),
         api_key_env: rerankApiKeyEnv.value.trim(),
-        candidate_limit: Number(rerankCandidateLimit.value || 48),
+        batch_size: Number(rerankBatchSize.value || 48),
       },
     };
     const result = await postJSON("/api/llm/config", payload);
@@ -1583,44 +1583,38 @@ function renderRagSearchResult(result) {
   const retrieval = result.retrieval || {};
   const search = retrieval.search || {};
   const plan = route.plan || retrieval.query_plan || search.plan || {};
-  const relatedPeople = route.related_people || plan.related_people || [];
   const terms = route.terms || plan.terms || search.terms || [];
   const branches = search.branches || [];
   const queries = plan.queries || [];
   const chips = [
     route.strategy || retrieval.mode,
-    plan.intent_label,
     route.scope || retrieval.scope,
     plan.time_since_label || (route.time_scope ? `自 ${route.time_scope}` : ""),
-    relatedPeople.length ? `相关联系人 ${relatedPeople.length}` : "",
-    route.wants_person_summary ? "联系人摘要" : "",
   ].filter(Boolean);
   const diagnostics = [
     ["主路", search.primary === "embedding" ? "Embedding" : "本地"],
-    ["计划 Query", queries.length || 1],
+    ["检索 Query", queries.length || 1],
     ["分路", branches.length],
     ["唯一候选", retrieval.candidate_count],
-    ["粗排", retrieval.scored_count],
+    ["已重排", search.rerank_count],
     ["入模", retrieval.context_count],
     ["FTS", search.fts_count],
     ["LIKE", search.like_count],
     ["Embedding", search.embedding_count],
-    ["Rerank", search.rerank_used ? search.rerank_count : 0],
+    ["重排批次", search.rerank_batches || 0],
   ];
   const semantic = search.semantic || {};
   const apiNotes = [
     semantic.error ? `Embedding：${semantic.error}` : "",
     search.rerank_error ? `Rerank：${search.rerank_error}` : "",
   ].filter(Boolean);
-  const summary = result.person_summary
-    ? `<pre class="rag-summary">${escapeHtml(result.person_summary)}</pre>`
-    : "";
+  const summary = "";
   const planHtml = `
     <div class="rag-plan-grid">
       <div class="rag-plan-card">
-        <div class="rag-section-title">Query Planner</div>
+        <div class="rag-section-title">检索请求</div>
         <div class="rag-plan-meta">
-          <span>${escapeHtml(plan.intent_label || "普通聊天检索")}</span>
+          <span>多路召回</span>
           <span>${escapeHtml(plan.scope_label || "全库")}</span>
           ${plan.time_since_label ? `<span>自 ${escapeHtml(plan.time_since_label)}</span>` : ""}
         </div>
@@ -1630,7 +1624,7 @@ function renderRagSearchResult(result) {
               <strong>${index + 1}</strong>
               <div>
                 <span>${escapeHtml(query.text || "")}</span>
-                <small>${escapeHtml(query.reason || "")}${query.weight ? ` · 权重 ${escapeHtml(String(query.weight))}` : ""}</small>
+                <small>${escapeHtml(query.reason || "")}</small>
               </div>
             </div>
           `).join("") : `<div class="rag-muted">使用原始问题检索。</div>`}

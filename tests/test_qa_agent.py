@@ -8,21 +8,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from wechat_agent.qa_planning import validate_plan, make_plan, calendar_window, PLAN_FORMAT
 from wechat_agent.qa_agent import run_conversation_agent
 from wechat_agent.qa_tools import ConversationTools
 from wechat_agent import web
-from wechat_agent.qa_actions import FUNCTION_FIELDS
+from wechat_agent.platform_tools import FUNCTION_FIELDS
 
 
 NOW = datetime(2026, 9, 30, 16, 30, tzinfo=timezone(timedelta(hours=8)))
 PEOPLE = [{"id": "alice", "name": "小林", "aliases": ["小林"]}, {"id": "bob", "name": "小王", "aliases": ["小王"]}]
-
-
-def raw(**changes):
-    return dict({"query": "小林今天下午对实习的态度", "intent": "analysis", "people": [{"name": "小林", "user_turn": 0}],
-                 "time_expression": "今天下午", "time_user_turn": 1, "since": "2025-08-25T00:00:00", "until": "2025-08-25T23:59:59",
-                 "need_context": True, "background_query": "", "clarification": ""}, **changes)
 
 
 def completion(data):
@@ -45,83 +38,6 @@ def decision(tool, **changes):
         {'id':f'call_{next(CALL_IDS)}','type':'function','function':{'name':tool,'arguments':json.dumps(args)}}]}}]}
 
 
-class PlanningTests(unittest.TestCase):
-    def test_group_scope_is_grounded_and_preserved(self):
-        p=validate_plan(raw(people=[],time_expression='',since='',until='',
-            chat_scope={'type':'group','keyword':'NTU','user_turn':0}),['看下ntu相关群'],PEOPLE,{},NOW)
-        self.assertEqual(p['chat_scope']['keyword'],'NTU')
-        with self.assertRaisesRegex(ValueError,'群名关键词'):
-            validate_plan(raw(people=[],time_expression='',since='',until='',
-                chat_scope={'type':'group','keyword':'OTHER','user_turn':0}),['看下ntu相关群'],PEOPLE,{},NOW)
-
-    def test_pronoun_and_today_do_not_follow_wrong_model_dates(self):
-        p = validate_plan(raw(), ["小林想找实习吗", "她今天下午什么态度"], PEOPLE, {}, NOW)
-        self.assertEqual(p["people"][0]["id"], "alice")
-        self.assertEqual(p["since_ts"], int(NOW.replace(hour=12, minute=0).timestamp()))
-        self.assertEqual(p["until_ts"], int(NOW.timestamp()))
-
-    def test_same_nickname_requires_clarification(self):
-        p = validate_plan(raw(), ["小林想找实习吗", "她今天下午什么态度"], PEOPLE + [{"id": "other", "name": "小林"}], {}, NOW)
-        self.assertTrue(p["clarification"])
-        self.assertFalse(p["people"])
-
-    def test_person_cannot_be_invented_from_assistant_answer(self):
-        p = validate_plan(raw(people=[{"name": "小王", "user_turn": 0}]), ["小林想找实习吗", "她今天下午什么态度"], PEOPLE, {}, NOW)
-        self.assertTrue(p["clarification"])
-
-    def test_explicit_new_person_overrides_previous(self):
-        p = validate_plan(raw(people=[{"name": "小王", "user_turn": 1}]), ["小林想找实习吗", "小王今天下午说什么"], PEOPLE, {}, NOW)
-        self.assertEqual(p["people"][0]["id"], "bob")
-        wrong = validate_plan(raw(), ["小林想找实习吗", "小王今天下午说什么"], PEOPLE, {}, NOW)
-        self.assertTrue(wrong["clarification"])
-
-    def test_location_query_is_global_and_no_invented_time(self):
-        p = validate_plan(raw(people=[], query="新加坡实习", intent="search", time_expression="", since="", until=""), ["新加坡有哪些实习"], PEOPLE, {}, NOW)
-        self.assertEqual(p["people"], [])
-        self.assertIsNone(p["since_ts"])
-        with self.assertRaises(ValueError):
-            validate_plan(raw(people=[], time_expression=""), ["实习信息"], PEOPLE, {}, NOW)
-
-    def test_today_is_recomputed_across_days(self):
-        self.assertNotEqual(calendar_window("今天下午", NOW)[0], calendar_window("今天下午", NOW + timedelta(days=1))[0])
-
-    def test_content_dates_do_not_create_message_timestamp_filters(self):
-        for question in ('青叶食堂周一开门吗？','今天餐厅营业吗？','项目去年收入是多少？'):
-            with self.subTest(question=question):
-                p=validate_plan(raw(people=[],time_expression='',since='',until=''),[question],PEOPLE,{},NOW)
-                self.assertIsNone(p['since_ts'])
-                self.assertEqual(p['until_ts'],int(NOW.timestamp()))
-
-    def test_only_extracted_message_date_is_converted_locally(self):
-        p=validate_plan(raw(people=[],time_expression='昨天',time_user_turn=0),
-                        ['查昨天发来的关于今天开门的消息'],PEOPLE,{},NOW)
-        self.assertEqual(p['since_ts'],int((NOW-timedelta(days=1)).replace(hour=0,minute=0,second=0,microsecond=0).timestamp()))
-
-    def test_nullable_message_time_filter_is_distinct_from_content_dates(self):
-        data=raw(people=[])
-        for key in ('time_expression','time_user_turn','since','until'): data.pop(key)
-        data['message_time_filter']=None
-        plan=validate_plan(data,['今天餐厅开门吗'],PEOPLE,{},NOW)
-        self.assertIsNone(plan['since_ts'])
-        data['message_time_filter']={'expression':'昨天','user_turn':0,'since':'','until':''}
-        plan=validate_plan(data,['昨天的消息'],PEOPLE,{},NOW)
-        self.assertEqual(plan['since_ts'],int((NOW-timedelta(days=1)).replace(hour=0,minute=0,second=0,microsecond=0).timestamp()))
-        data['since']='2000-01-01'
-        with self.assertRaisesRegex(ValueError,'混用'):
-            validate_plan(data,['昨天的消息'],PEOPLE,{},NOW)
-
-    def test_yesterday_has_upper_bound(self):
-        start, end = calendar_window("昨天下午", NOW)
-        self.assertEqual((start.day, start.hour, end.hour, end.minute, end.second), (29, 12, 17, 59, 59))
-
-    def test_planner_receives_users_not_untrusted_assistant_guesses(self):
-        complete = Mock(return_value=completion(raw()))
-        p = make_plan("她今天下午什么态度", [{"role": "user", "content": "小林想找实习吗"},
-                                            {"role": "assistant", "content": "UNTRUSTED_GUESS"}], PEOPLE, NOW, complete)
-        self.assertNotIn("UNTRUSTED_GUESS", str(complete.call_args))
-        self.assertEqual(p["people"][0]["id"], "alice")
-
-
 class ToolTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
@@ -132,7 +48,9 @@ class ToolTests(unittest.TestCase):
           local_id TEXT, server_id TEXT, chat_id TEXT, chat_title TEXT, chat_type TEXT, person_id TEXT,
           person_name TEXT, sender TEXT, sender_username TEXT, timestamp INTEGER, time TEXT, type TEXT, text TEXT, search_text TEXT);
           CREATE TABLE semantic_message_map(chunk_id INTEGER, message_id INTEGER);""")
-        self.plan = validate_plan(raw(), ["小林想找实习吗", "她今天下午什么态度"], PEOPLE, {}, NOW)
+        self.plan = {"tool_first": True, "people": [PEOPLE[0]], "query": "实习",
+                     "since_ts": int(NOW.replace(hour=12, minute=0).timestamp()),
+                     "until_ts": int(NOW.timestamp()), "chat_scope": {"type": "all", "keyword": ""}}
         self.hybrid = Mock(return_value=([], {}))
         self.tools = ConversationTools(self.state, self.hybrid, web.qa_item_from_search_row, lambda: None)
 
@@ -165,12 +83,10 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(json.loads(self.tools.statistics(scoped)['items'][0]['text'])['messages'],2)
         self.assertEqual(self.tools.timeline(dict(scoped,chat_ids=['OTHER@chatroom']))['items'],[])
 
-    def test_statistics_intent_can_find_groups_then_read_messages(self):
+    def test_statistics_can_find_groups_then_read_messages(self):
         self.insert(1,chat='NTU@chatroom'); self.insert(2,person='bob',chat='NTU@chatroom')
         self.insert(3,chat='alice'); self.insert(4,chat='OTHER@chatroom')
         question='小林和小王在NTU群互动多不多'
-        proposed=raw(intent='statistics',people=[{'name':p['name'],'user_turn':0} for p in PEOPLE],
-            time_expression='',since='',until='',chat_scope={'type':'group','keyword':'NTU','user_turn':0})
         calls=[]
         def choose(messages,schema,**options):
             calls.append(json.loads(messages[-1]['content']))
@@ -199,17 +115,17 @@ class ToolTests(unittest.TestCase):
         self.assertEqual([t['tool'] for t in diag['trace']],['search','timeline'])
 
     def test_invented_chat_id_rejected_before_tool_execution(self):
-        from wechat_agent.qa_actions import validate_action
+        from wechat_agent.platform_tools import validate_action
         value=action('timeline',chat_ids=['invented'])
         with self.assertRaisesRegex(ValueError,'已返回的会话ID'):
             validate_action(value,[],[])
 
     def test_person_subset_can_narrow_but_not_expand_verified_people(self):
-        from wechat_agent.qa_actions import validate_action, execute_action
+        from wechat_agent.platform_tools import validate_action, execute_action
         self.insert(1); self.insert(2,person='bob')
         plan=dict(self.plan,people=PEOPLE,chat_scope={'type':'group','keyword':'','user_turn':0})
         value=action('timeline',person_ids=['bob'])
-        validated=validate_action(value,[],[],plan)
+        validated=validate_action(value,[],[{'people':PEOPLE}],plan)
         self.assertEqual([x['sender_username'] for x in execute_action(self.tools,plan,validated,[])['items']],['bob'])
         with self.assertRaisesRegex(ValueError,'未验证的人物'):
             validate_action({**value,'person_ids':['stranger']},[],[],plan)
@@ -264,7 +180,6 @@ class ToolTests(unittest.TestCase):
 
     def test_shared_windows_can_be_followed_by_surrounding_in_model_loop(self):
         self.insert(1); self.insert(2,person='bob'); self.insert(3,person='third')
-        proposed=raw(time_user_turn=0,people=[{'name':p['name'],'user_turn':0} for p in PEOPLE])
         inputs=[]
         def choose(messages,schema,**options):
             inputs.append(json.loads(messages[-1]['content']))

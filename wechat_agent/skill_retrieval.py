@@ -23,9 +23,9 @@ def deduplicate(items):
 
 
 class SkillRetrieval:
-    # 任务检索适配器，由旧声明式 Skill 和新代码包共同复用，不在这里决定任务业务流程。
-    def __init__(self, state, status, semantic, embed, row_to_item, reader, check, voice_cache):
-        self.state, self.status, self.semantic, self.embed = state, status, semantic, embed
+    # Generic semantic/context APIs for code packages; task logic lives in the package.
+    def __init__(self, state, status, semantic, row_to_item, reader, check, voice_cache):
+        self.state, self.status, self.semantic = state, status, semantic
         self.row_to_item, self.reader, self.check, self.voice_cache = row_to_item, reader, check, voice_cache
 
     @contextmanager
@@ -39,7 +39,7 @@ class SkillRetrieval:
             conn.close()
 
     def prepare(self):
-        # 这里只检查依赖；代码包入口会先按需更新索引，旧 Skill 则直接收到未就绪错误。
+        # The platform prepares dependencies before entering this read-only adapter.
         self.check()
         text, semantic = self.status()
         if not text.get('ready') or text.get('soft_stale'):
@@ -55,17 +55,15 @@ class SkillRetrieval:
                 'mine': bool(self.state.account and sender == self.state.account),
                 'sender_known': bool(self.state.account and sender and not sender.isdigit())}
 
-    def search(self, step, embedding, since, until):
-        # 先按语义阈值选块，再还原为窗口内的原始消息；关键词是并集补漏，不是二次 AND 筛选。
+    def search(self, query, embedding, since, until, min_similarity):
+        # This low-level API applies the threshold requested by the Skill itself.
         self.prepare()
         since = max(since, self.state.since_ts or 0)
-        hits, diagnostics = self.semantic(step['query'], since, until, embedding)
+        hits, diagnostics = self.semantic(query, since, until, embedding)
         if diagnostics.get('error') or not diagnostics.get('ready'):
             raise RuntimeError(diagnostics.get('error') or '语义检索不可用，未以关键词检索冒充成功')
-        chunks = [h for h in hits if h['semantic_score'] >= step['min_similarity']]
+        chunks = [h for h in hits if h['semantic_score'] >= min_similarity]
         filters, params = ['timestamp>=?', 'timestamp<=?'], [since, until]
-        if step['source'] == 'private_messages':
-            filters.append("chat_type='private'")
         where = ' AND '.join(filters)
         by_id = {}
         with self.connection() as conn:
@@ -78,25 +76,10 @@ class SkillRetrieval:
                                     [*params, *ids]).fetchall()
                 for row in rows:
                     by_id[row['id']] = {**self.item(row), 'matched_by': ['semantic']}
-            semantic_count = len(by_id)
-            # Literal matching uses instr, so % and _ are not SQL wildcards.
-            conn.create_function('casefold', 1, lambda value: str(value or '').casefold())
-            terms = list(dict.fromkeys(t.casefold() for t in step['keywords']))
-            keyword_count = 0
-            if terms:
-                rows = conn.execute('SELECT * FROM messages WHERE ' + where + ' AND ('
-                                    + ' OR '.join('instr(casefold(text),?)>0' for _ in terms) + ')', [*params, *terms])
-                for row in rows:
-                    self.check()
-                    keyword_count += 1
-                    if row['id'] in by_id:
-                        by_id[row['id']]['matched_by'].append('keyword')
-                    else:
-                        by_id[row['id']] = {**self.item(row), 'matched_by': ['keyword']}
         return {'messages': list(by_id.values()), 'complete': True,
-                'scanned': diagnostics.get('candidate_count', 0), 'semantic_messages': semantic_count,
-                'keyword_messages': keyword_count, 'min_similarity': step['min_similarity'],
-                'query': step['query'], 'warning': '语义与关键词召回不保证穷尽主题相关消息；相似度门槛为 ' + str(step['min_similarity'])}
+                'scanned': diagnostics.get('candidate_count', 0), 'semantic_messages': len(by_id),
+                'min_similarity': min_similarity,
+                'query': query, 'warning': '语义召回不保证穷尽主题相关消息；相似度门槛为 ' + str(min_similarity)}
 
     def context(self, seeds, step, since, until):
         # 上下文只在同一会话、任务窗口和最大时间间隔内扩展，并标记 context，不能当独立命中计数。
@@ -105,7 +88,9 @@ class SkillRetrieval:
         contexts = []
         indexed = [s for s in seeds if s.get('index_row_id') is not None]
         if indexed:
-            self.prepare()
+            text, _ = self.status()
+            if not text.get('ready') or text.get('soft_stale'):
+                raise ValueError('上下文查询需要可用的全文索引')
             with self.connection() as conn:
                 for seed in indexed:
                     self.check()
@@ -145,15 +130,3 @@ class SkillRetrieval:
         matches = {message_key(s) for s in seeds}
         contexts = [c for c in deduplicate(contexts) if message_key(c) not in matches]
         return {'messages': contexts, 'complete': True, 'warning': '', 'count': len(contexts)}
-
-    def __call__(self, name, arguments, since, until):
-        self.check()
-        if name == 'skill_search_prepare':
-            return self.prepare()
-        if name == 'skill_embed':
-            return self.embed(arguments['query'])
-        if name == 'skill_search':
-            return self.search(arguments['step'], arguments['embedding'], since, until)
-        if name == 'skill_context':
-            return self.context(arguments['seeds'], arguments['step'], since, until)
-        raise ValueError('不支持的 Skill 检索操作')

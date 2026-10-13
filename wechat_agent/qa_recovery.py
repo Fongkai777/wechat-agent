@@ -15,6 +15,7 @@ from .goal_checkpoints import GoalResumeRequired, checkpoint_info, remove_checkp
 
 
 _scope = ContextVar('qa_receipts', default=None)
+AGENT_VERSION = 6
 
 
 def checkpoint_path(store, turn_id):
@@ -31,6 +32,8 @@ def recovery_info(store, message):
         path = checkpoint_path(store, message.get('turn_id'))
         result = checkpoint_info(path)
         if result['resumable']:
+            if read_snapshot(path).get('agent_version') != AGENT_VERSION:
+                return {'resumable': False, 'retry_confirmation_required': False}
             with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True)) as conn:
                 result['retry_confirmation_required'] = bool(conn.execute(
                     "SELECT 1 FROM qa_calls WHERE status='pending' AND billable=1 LIMIT 1").fetchone())

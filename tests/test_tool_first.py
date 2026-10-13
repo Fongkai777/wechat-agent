@@ -20,8 +20,7 @@ class ToolFirstTests(unittest.TestCase):
     insert = fixtures.ToolTests.insert
 
     def run_agent(self, complete, question='周一营业吗', history=None):
-        with patch('wechat_agent.qa_agent.make_plan', side_effect=AssertionError('planner must not run')):
-            return run_conversation_agent(question, history or [], PEOPLE, self.tools, complete,
+        return run_conversation_agent(question, history or [], PEOPLE, self.tools, complete,
                 Mock(return_value={'paragraphs':[]}), Mock(), Mock(), lambda:None, now=NOW)
 
     def test_first_call_is_native_search_with_history_not_slot_schema(self):
