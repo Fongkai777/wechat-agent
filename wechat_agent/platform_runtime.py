@@ -136,11 +136,8 @@ def create_platform_runtime(state, context, limits, config, profile_name, check,
             return app.collect_qa_items_for_chat(state,chat,since_ts=start,until_ts=end,max_items=latest,
                 voice_cache=voice,max_text_chars=None,check_cancelled=check,strict=True,include_empty=True)
         return locked(read)
-    indexed_cache = {}
-    # 首次 SQL 查询准备并缓存任务时间窗快照，后续查询复用，超量时明确失败而不截断。
+    # SQLSnapshot owns the reusable table; do not retain a second full row cache.
     def indexed(start=since, end=until):
-        key = (start, end)
-        if key in indexed_cache: return indexed_cache[key]
         def read():
             prepare_indexes()
             conn = sqlite3.connect(state.qa_search_db.resolve().as_uri()+'?mode=ro',uri=True,timeout=10)
@@ -153,11 +150,7 @@ def create_platform_runtime(state, context, limits, config, profile_name, check,
                     if len(rows)>300000: raise ValueError('索引时间范围超过安全预算，请缩小范围；未截断')
                 return rows
             finally: conn.close()
-        # Retain only the latest window to avoid accumulating multiple full snapshots.
-        rows = locked(read)
-        indexed_cache.clear()
-        indexed_cache[key] = rows
-        return rows
+        return locked(read)
     def embed(query):
         key = app.resolve_llm_api_key(config['embedding'],config.get('qa'))
         if not key: raise ValueError('请先配置 Embedding API Key')
@@ -211,6 +204,13 @@ def create_platform_runtime(state, context, limits, config, profile_name, check,
                 raise ValueError('共享检索未完整执行：'+str(semantic.get('error') or diagnostics.get('rerank_error')))
             return result,diagnostics
         def run():
+            if action['tool'] == 'search':
+                # Fail before index preparation or any paid call when either
+                # required retrieval service is missing its configuration.
+                for name in ('embedding', 'rerank'):
+                    effective = app.effective_llm_profile(config, name)
+                    if not effective.get('model') or not app.resolve_llm_api_key(config.get(name, {}), config.get('qa')):
+                        raise ValueError('混合检索需要配置 Embedding 和 Rerank，请在「模型配置」中完成 '+name+' 配置')
             prepare_indexes(semantic=action['tool']=='search')
             return execute_action(ConversationTools(state,hybrid,app.qa_item_from_search_row,check),plan,action,sources)
         return locked(run)

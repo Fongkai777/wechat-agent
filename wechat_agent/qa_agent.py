@@ -14,7 +14,7 @@ from typing import TypedDict
 from .goal_checkpoints import checkpoint_session
 from .qa_recovery import AGENT_VERSION, CallReceipts, frozen_input, recorded_call
 from .platform_tools import (INSTRUCTIONS, FUNCTION_TOOLS, execute_action,
-                             parse_tool_call, tool_result_message)
+                             parse_tool_call, tool_result_message, call_may_bill)
 
 
 # 图内共享计划、证据和覆盖率；原生调用消息与调用 ID 一并保存，供恢复后续接。
@@ -115,7 +115,7 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         def invoke():
             result = call()
             return {**result, '_platform_state':tools.snapshot()} if snapshot else result
-        result = dict(recorded_call(name, invoke))
+        result = dict(recorded_call(name, invoke, call_may_bill('tool', {'name':name})))
         # A completed tool receipt must also restore its evidence ledger and budgets.
         platform_state = result.pop('_platform_state', None)
         if platform_state is not None:

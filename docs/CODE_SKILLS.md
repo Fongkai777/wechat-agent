@@ -125,6 +125,13 @@ The runtime restricts CPU, wall time, file descriptors, output size, call counts
 checks resident memory periodically. Memory monitoring is not a hard kernel memory
 quota. SQL runs against an in-memory task-window snapshot with an authorizer and
 query timeout; it cannot access the original database connection or attach files.
+The same execution reuses one connection and provenance map for an identical
+time window, including calls through `query_messages`. Changing the window replaces
+the snapshot rather than merely appending a SQL filter. Completion or failure
+closes it. Snapshots are not shared across tasks or persisted across restarts.
+Potential billing is derived from the shared tool capability catalog: both
+`api.semantic_search(...)` and `api.tool("semantic_search", ...)` require explicit
+retry confirmation after an uncertain request, as does hybrid `search`.
 Large results fail explicitly rather than silently truncating. This is a local
 single-user boundary, not a multi-tenant hostile-code hosting service. `sandbox-exec`
 is a platform-specific dependency; Linux/Windows execution is not yet implemented.

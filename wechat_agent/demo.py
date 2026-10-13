@@ -63,8 +63,6 @@ def initialize(root):
         profiles = json.loads(json.dumps(web.DEFAULT_LLM_CONFIG))
         for profile in profiles.values():
             profile["api_key_env"] = "WECHAT_DEMO_API_KEY"
-        profiles["embedding"]["enabled"] = False
-        profiles["rerank"]["enabled"] = False
         config.write_text(json.dumps(profiles, indent=2), encoding="utf-8")
         config.chmod(0o600)
     return import_messages(root, data["messages"])

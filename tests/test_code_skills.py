@@ -116,7 +116,8 @@ class SharedRerankBudgetTests(unittest.TestCase):
             stack.enter_context(patch.object(code_skill_web, 'require_validated'))
             stack.enter_context(patch.object(code_skill_web, 'prepare_code_skill_indexes'))
             stack.enter_context(patch.object(web, 'load_llm_config', return_value={'task':{},'embedding':{}}))
-            stack.enter_context(patch.object(web, 'effective_llm_profile', return_value={}))
+            stack.enter_context(patch.object(web, 'effective_llm_profile', return_value={'model':'fixture'}))
+            stack.enter_context(patch.object(web, 'resolve_llm_api_key', return_value='fixture'))
             paid = stack.enter_context(patch.object(web, 'call_chat_payload', return_value={
                 'usage':{'total_tokens':5},'choices':[{'finish_reason':'stop','message':{'content':'scores'}}]}))
             def search(*args, rerank_call, **kwargs):

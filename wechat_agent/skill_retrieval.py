@@ -22,6 +22,12 @@ def deduplicate(items):
     return list(unique.values())
 
 
+def raw_message_order(item):
+    # Physical row order, not local_id or sender, breaks ties within a shard.
+    return (item['timestamp'], str(item.get('source_db') or ''),
+            str(item.get('source_table') or ''), int(item.get('source_rowid') or 0))
+
+
 class SkillRetrieval:
     # Generic semantic/context APIs for code packages; task logic lives in the package.
     def __init__(self, state, status, semantic, row_to_item, reader, check, voice_cache):
@@ -117,9 +123,10 @@ class SkillRetrieval:
                 raise ValueError('上下文所属会话已不可用，请重新同步')
             rows = self.reader(self.state, chat, since_ts=max(since, min(s['timestamp'] for s in anchors)-gap),
                                until_ts=min(until, max(s['timestamp'] for s in anchors)+gap), max_items=None,
-                               max_text_chars=None, voice_cache=self.voice_cache, check_cancelled=self.check, strict=True)
+                               max_text_chars=None, voice_cache=self.voice_cache, check_cancelled=self.check,
+                               strict=True, include_empty=True)
             rows = deduplicate(rows)
-            rows.sort(key=lambda r: (r['timestamp'], str(r.get('source_db') or ''), int(r.get('local_id') or 0)))
+            rows.sort(key=raw_message_order)
             positions = {message_key(r): i for i, r in enumerate(rows)}
             for seed in anchors:
                 pos = positions.get(message_key(seed))

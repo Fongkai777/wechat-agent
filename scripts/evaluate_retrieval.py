@@ -86,6 +86,10 @@ def evaluate(output, live_config=None, top_k=8):
         if live_config:
             state.llm_config = Path(live_config).resolve()
         config = web.load_llm_config(state.llm_config)
+        if not live_config:
+            # An explicit offline benchmark is not a configurable production mode.
+            config['embedding']['enabled'] = config['rerank']['enabled'] = False
+            recorder.stack.enter_context(patch.object(web, 'load_llm_config', return_value=config))
         if live_config and config["embedding"].get("enabled"):
             web.build_or_update_qa_semantic_index(state)
         index = web.load_or_build_qa_index(state)

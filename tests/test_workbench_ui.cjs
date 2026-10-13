@@ -36,6 +36,12 @@ test('conversation action icons use local assets and keep accessible labels', ()
   }
 });
 
+test('retrieval services have configuration fields but no enable switches', () => {
+  assert.doesNotMatch(html + app, /embeddingEnabled|rerankEnabled/);
+  assert.match(html, /id="embeddingModel"/);
+  assert.match(html, /id="rerankModel"/);
+});
+
 test('model form loads and saves task settings independently without exposing saved keys', async () => {
   const context = {Number, settingsStatus: {}, saveLlmConfigBtn: {}, state: {}};
   const ids = [...html.matchAll(/<input id="([^"]+)"/g)].map(match => match[1]);

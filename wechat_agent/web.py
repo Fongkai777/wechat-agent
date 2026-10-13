@@ -762,12 +762,12 @@ def collect_qa_items_for_chat(
         finally:
             conn.close()
     if include_empty:
-        from .skill_retrieval import deduplicate
+        from .skill_retrieval import deduplicate, raw_message_order
         items = deduplicate(items)
-        items.sort(key=lambda item: (item['timestamp'],item.get('source_db') or '',item.get('source_rowid') or 0))
+        items.sort(key=raw_message_order)
         if items and max_items:
             tails = [item for item in items if item['timestamp']==items[-1]['timestamp']]
-            uncertain = len({r['source_db'] for r in tails})>1 and len({r['sender_username'] for r in tails})>1
+            uncertain = len({(r['source_db'], r['source_table']) for r in tails})>1 and len({r['sender_username'] for r in tails})>1
             for item in tails: item['order_uncertain']=uncertain
     else:
         items.sort(key=lambda item: (item["timestamp"] or 0, item.get("sender_username") or ""))
@@ -1436,7 +1436,8 @@ def normalize_llm_config(config: dict[str, Any]) -> dict[str, Any]:
         else:
             out[name]["api_key_env"] = str(api_key_env or default_api_key_env).strip()
         if "enabled" in out[name]:
-            out[name]["enabled"] = parse_bool(profile.get("enabled"), bool(out[name]["enabled"]))
+            # Retrieval services are required; migrate old disabled profiles in memory.
+            out[name]["enabled"] = True
     try:
         out["qa"]["temperature"] = float(config.get("qa", {}).get("temperature", out["qa"]["temperature"]))
     except (TypeError, ValueError, AttributeError):
@@ -5617,6 +5618,7 @@ def make_handler(state: AppState):
                 emit("error", error=message, turn_id=turn_id,
                      conversation=get_qa_conversation(state.qa_store, stored['id']))
 
+            runtime = None
             try:
                 save_answer("正在后台回答", pending=True, retrieval=latest_retrieval, sources=latest_sources,
                             processing_ms=previous_ms)
@@ -5688,6 +5690,9 @@ def make_handler(state: AppState):
             except Exception as exc:
                 logging.getLogger(__name__).error("Q&A turn %s failed: %s", turn_id, type(exc).__name__)
                 fail(str(exc) if isinstance(exc, (RuntimeError, ValueError, TimeoutError)) else f"问答执行异常（{type(exc).__name__}），执行记录已保留")
+            finally:
+                if runtime is not None:
+                    runtime.api.close()
 
         def run_rag_search(self, payload, emit) -> None:
             question = str(payload.get("question") or "").strip()

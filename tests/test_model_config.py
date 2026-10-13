@@ -54,6 +54,16 @@ class ModelConfigTests(unittest.TestCase):
     def test_fresh_config_has_five_profiles(self):
         self.assertEqual(set(web.load_llm_config(self.path)), {"voice", "qa", "task", "embedding", "rerank"})
 
+    def test_retrieval_profiles_cannot_be_disabled_by_legacy_config_or_save(self):
+        old = {name: {'enabled':False, 'api_key':'fixture', 'model':'custom'}
+               for name in ('embedding', 'rerank')}
+        self.path.write_text(json.dumps(old))
+        for config in (web.load_llm_config(self.path), web.save_llm_config(self.path, old)):
+            for name in old:
+                self.assertIs(config[name]['enabled'], True)
+                self.assertEqual(config[name]['model'], 'custom')
+                self.assertEqual(config[name]['api_key'], 'fixture')
+
 
 if __name__ == "__main__":
     unittest.main()

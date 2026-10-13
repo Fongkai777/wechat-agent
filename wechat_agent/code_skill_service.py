@@ -144,12 +144,15 @@ def validate_code_skill(package, prompt, store):
     run_package(package,{},lambda *args:None,mode='test')
     for empty in (True,False):
         api = synthetic_api(package,empty)
-        result = run_package(package,api.context,api.dispatch)
         try:
-            validate_goal_result(json.dumps(result,ensure_ascii=False),{s['reference'] for s in api.sources})
-        except ValueError as exc:
-            raise ValueError(str(exc)+'; synthetic_case='+('empty' if empty else 'nonempty')+
-                             '; result='+json.dumps(result,ensure_ascii=False)[:1500]) from None
+            result = run_package(package,api.context,api.dispatch)
+            try:
+                validate_goal_result(json.dumps(result,ensure_ascii=False),{s['reference'] for s in api.sources})
+            except ValueError as exc:
+                raise ValueError(str(exc)+'; synthetic_case='+('empty' if empty else 'nonempty')+
+                                 '; result='+json.dumps(result,ensure_ascii=False)[:1500]) from None
+        finally:
+            api.close()
     report = {'passed':True,'checks':['package tests','empty synthetic integration','synthetic integration'],
               'note':'隔离测试使用虚构消息和模拟模型，不代表真实回答质量'}
     with store.connect() as conn:
@@ -191,7 +194,8 @@ def run_code_skill(goal, api, report, cancelled, model, preparation_time=lambda:
             if cached and cached[0]=='done' and json.loads(cached[1]).get('digest')!=digest:
                 raise ValueError('恢复时 Skill 调用顺序变化，已停止以避免重复调用')
             # 模型和语义检索可能计费，未完成调用的重试受 confirm_retry 控制。
-            billable=method in ('llm','semantic_search') or (method=='tool' and arguments.get('name')=='search')
+            from .platform_tools import call_may_bill
+            billable = call_may_bill(method, arguments)
             data, _ = receipts.call(position,perform,allow_retry=not billable or bool(goal.get('confirm_retry')),keep_all=True)
             if cached and cached[0]=='done':
                 # 命中回执时同步恢复引用、用量和状态，保证后续调用看到与原执行一致的数据。

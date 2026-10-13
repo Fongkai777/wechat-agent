@@ -45,5 +45,8 @@ def execute_code_goal(state, store, goal, report, cancelled, maintenance_lock):
          'dry_run':False,'synced_at':state.last_synced_at,'sync_error':state.sync_error or ''},
         manifest(goal['skill']), config, 'task', check, maintenance_lock,
         local_state=local_state, prepare=prepare_code_skill_indexes)
-    return run_code_skill(goal, runtime.api, report, cancelled, str(profile.get('model') or '代码 Skill'),
-                          preparation_time=runtime.preparation_time)
+    try:
+        return run_code_skill(goal, runtime.api, report, cancelled, str(profile.get('model') or '代码 Skill'),
+                              preparation_time=runtime.preparation_time)
+    finally:
+        runtime.api.close()

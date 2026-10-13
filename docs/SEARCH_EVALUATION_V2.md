@@ -120,20 +120,26 @@ The new hosted CI job has not been claimed as passed before it runs on GitHub.
 ## SQL Materialization Benchmark
 
 `python scripts/benchmark_skill_sql.py` measures five identical aggregate queries
-over 100 synthetic chats. Local single-run results:
+over 100 synthetic chats. Both paths now use the production capability boundary:
+one reconstructs the snapshot on every query, the other reuses it. Local single-run
+results from October 13, 2026, including first-query setup:
 
-| Messages | Current total | Reused prototype, including setup |
+| Messages | Rebuild on each query | Reuse one snapshot |
 |---|---:|---:|
-| 10,000 | 0.136s | 0.025s |
-| 50,000 | 0.727s | 0.134s |
-| 100,000 | 1.386s | 0.301s |
+| 10,000 | 0.652s | 0.127s |
+| 50,000 | 3.508s | 0.634s |
+| 100,000 | 6.571s | 1.304s |
 
-Repeated materialization is measurable, but this is not a production speedup:
-the prototype omits authorization/provenance/recovery bookkeeping and does not
-measure retained memory or concurrency. Production behavior remains unchanged.
-A follow-up should introduce a per-run lazy snapshot with explicit cleanup,
-per-query time budgets, read-only authorization, source-ledger equivalence and
-restart reconstruction tests. Do not share a mutable snapshot between tasks.
+All result rows matched. Unlike the earlier prototype, both paths include
+authorization and provenance bookkeeping. This is a SQL-only measurement, not
+an end-to-end Agent speedup or a historical-version comparison. It does not
+measure retained memory, concurrent workloads or recovery latency.
+
+Production now reuses one lazy read-only snapshot for an identical execution
+window. Changing the window replaces it; completion/failure closes it. Tests
+cover Python/native parity, source-ledger equivalence, warm-query write/file
+denial, scope isolation, cross-thread reuse and connection cleanup. Different
+tasks never share a connection; snapshots are rebuilt after process restart.
 
 ## Remaining Validation
 

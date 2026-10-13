@@ -91,7 +91,6 @@ const qaApiKey = document.querySelector("#qaApiKey");
 const qaApiKeyEnv = document.querySelector("#qaApiKeyEnv");
 const qaTemperature = document.querySelector("#qaTemperature");
 const qaContextLimit = document.querySelector("#qaContextLimit");
-const embeddingEnabled = document.querySelector("#embeddingEnabled");
 const embeddingBaseUrl = document.querySelector("#embeddingBaseUrl");
 const embeddingModel = document.querySelector("#embeddingModel");
 const embeddingApiKey = document.querySelector("#embeddingApiKey");
@@ -99,7 +98,6 @@ const embeddingApiKeyEnv = document.querySelector("#embeddingApiKeyEnv");
 const embeddingDimensions = document.querySelector("#embeddingDimensions");
 const embeddingBatchSize = document.querySelector("#embeddingBatchSize");
 const embeddingQueryCandidates = document.querySelector("#embeddingQueryCandidates");
-const rerankEnabled = document.querySelector("#rerankEnabled");
 const rerankBaseUrl = document.querySelector("#rerankBaseUrl");
 const rerankModel = document.querySelector("#rerankModel");
 const rerankApiKey = document.querySelector("#rerankApiKey");
@@ -555,7 +553,6 @@ function renderLLMConfig(config) {
     ? `已保存：${task.api_key_preview || "API Key"}`
     : "留空则使用环境变量";
   taskApiKeyEnv.value = task.api_key_env || "OPENAI_API_KEY";
-  embeddingEnabled.checked = embedding.enabled !== false;
   embeddingBaseUrl.value = embedding.base_url || "";
   embeddingModel.value = embedding.model || "text-embedding-3-small";
   embeddingApiKey.value = "";
@@ -566,7 +563,6 @@ function renderLLMConfig(config) {
   embeddingDimensions.value = embedding.dimensions ?? 0;
   embeddingBatchSize.value = embedding.batch_size ?? 64;
   embeddingQueryCandidates.value = embedding.query_candidates ?? 120;
-  rerankEnabled.checked = rerank.enabled !== false;
   rerankBaseUrl.value = rerank.base_url || "";
   rerankModel.value = rerank.model || "gpt-5-nano";
   rerankApiKey.value = "";
@@ -1286,7 +1282,6 @@ async function saveLLMConfig(event) {
         api_key_env: taskApiKeyEnv.value.trim(),
       },
       embedding: {
-        enabled: embeddingEnabled.checked,
         base_url: embeddingBaseUrl.value.trim(),
         model: embeddingModel.value.trim(),
         api_key: embeddingApiKey.value.trim(),
@@ -1296,7 +1291,6 @@ async function saveLLMConfig(event) {
         query_candidates: Number(embeddingQueryCandidates.value || 120),
       },
       rerank: {
-        enabled: rerankEnabled.checked,
         base_url: rerankBaseUrl.value.trim(),
         model: rerankModel.value.trim(),
         api_key: rerankApiKey.value.trim(),

@@ -27,8 +27,8 @@ daily task → inspect findings → import 10 messages and update the index.
 
 Recorded from the real application with fictional data and live model answers.
 English captions, Chinese interface, no audio. Model waiting time is edited out
-and labeled. This take uses local keyword retrieval; embedding and reranking
-are optional and are not demonstrated in the video.
+and labeled. This historical take uses local keyword retrieval. The current
+hybrid search requires Embedding and Rerank, which are not shown in this video.
 
 ### Run the Fictional Workspace
 
@@ -135,7 +135,7 @@ flowchart LR
     I --> E[Embedding index]
     Q[Question + history + tool-calling agent] --> K
     Q --> E
-    K --> R[RRF fusion + optional reranking]
+    K --> R[RRF fusion + API reranking]
     E --> R
     R --> G[Answer model + conversation history]
     G --> O[Structured answer + source validation]
@@ -148,7 +148,7 @@ flowchart LR
 
 - **Adaptive retrieval:** the agent searches, reads context and follows up without
   mandatory intent slots. Search combines semantic and keyword recall, RRF fusion
-  and optional LLM reranking; query filters apply before ranking.
+  and required LLM reranking; query filters apply before ranking.
 - **Evidence-backed answers:** the model returns conclusions and source IDs;
   code validates the references and renders source metadata from retrieved records.
 - **Task execution:** a local scheduler runs a LangGraph tool-calling agent over
@@ -360,7 +360,9 @@ inherit the Q&A URL/key when left blank. Q&A, tasks and voice have separate
 profiles; they can also read the configured API-key environment variable
 (default `OPENAI_API_KEY`) from the server process. Settings entered in the UI
 are stored locally in `web_cache/llm_config.json`, so protect this directory.
-Disable optional embedding/reranking if you do not intend to use them.
+Embedding and Rerank are required for hybrid search, with no enable switches.
+Legacy disabled profiles are treated as enabled. Browsing, raw-message tasks,
+and read-only SQL do not require model calls.
 Cloud calls transmit relevant content and may incur usage charges.
 
 ## Using the App

@@ -5,7 +5,6 @@ import copy
 import hashlib
 import json
 import math
-import sqlite3
 import time
 
 from .skill_retrieval import message_key
@@ -14,6 +13,7 @@ from .platform_tools import (SKILL_TOOL_NAMES, TOOL_PERMISSIONS, tool_definition
 from .skill_tool_calling import validate_messages
 from .platform_data_tools import DATA_TOOLS
 from .qa_tools import evidence_id
+from .platform_sql import SQLSnapshot
 
 COLUMNS = 'id chat_id chat_title chat_type timestamp time sender sender_username text type source_db source_table local_id server_id person_id person_name'.split()
 FUNCTIONS = set('abs coalesce ifnull nullif lower upper length substr substring instr like glob replace trim ltrim rtrim printf round min max sum avg count total group_concat row_number rank dense_rank lag lead first_value last_value nth_value ntile percent_rank cume_dist datetime date time strftime julianday unixepoch typeof cast'.split())
@@ -33,6 +33,10 @@ class PlatformAPI:
         self.usage = {'total_tokens':0, 'model_calls':[]}
         self.tool_backend = tools
         self.tool_sources, self.tool_observations = [], []
+        self.sql_snapshot = SQLSnapshot()
+
+    def close(self):
+        self.sql_snapshot.close()
 
     def remember(self, rows):
         # 所有返回消息都需处于任务时间窗内；留存独立副本作为后续引用核验的依据。
@@ -115,32 +119,16 @@ class PlatformAPI:
         until = self.context['until'] if until is None else until
         if any(type(v) not in (int,float) or not math.isfinite(v) for v in (since,until)) or not self.context['since']<=since<=until<=self.context['until']:
             raise ValueError('不能扩大平台时间范围')
-        reader = self.backends.get('indexed_window')
-        rows = reader(since, until) if reader else [r for r in self.backends['indexed']() if since<=r['timestamp']<=until]
-        # 将时间窗内快照装入独立内存库，Skill 的 SQL 不接触真实索引连接或宿主路径。
-        # The SQL engine sees only a task-window snapshot, never the source connection or host paths.
-        if len(rows)>300000: raise ValueError('SQL 时间范围超过 300000 条安全预算，请缩小范围；未截断')
-        conn = sqlite3.connect(':memory:')
-        conn.row_factory = sqlite3.Row
-        try:
-            conn.execute('PRAGMA temp_store=MEMORY')
-            conn.execute('CREATE TABLE messages ('+','.join(c+' '+('INTEGER' if c in ('id','timestamp') else 'TEXT') for c in COLUMNS)+')')
-            for row in rows:
-                if not since <= row['timestamp'] <= until: raise ValueError('索引快照越界')
-            conn.executemany('INSERT INTO messages VALUES('+','.join('?' for _ in COLUMNS)+')',
-                             [[r.get(c) for c in COLUMNS] for r in rows])
-            conn.execute('CREATE VIEW chats AS SELECT chat_id AS id,chat_title AS title,chat_type AS type,max(timestamp) AS last_ts FROM messages GROUP BY chat_id')
-            deadline = time.monotonic()+8
-            conn.set_progress_handler(lambda: int(time.monotonic()>deadline), 1000)
-            # 按 SQLite 操作类型放行读取和指定函数，拒绝写入、附加数据库等其他操作。
-            def authorize(action, arg1, arg2, database, source):
-                if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_RECURSIVE): return sqlite3.SQLITE_OK
-                if action == sqlite3.SQLITE_READ and arg1 in ('messages','chats') and database in ('main',None): return sqlite3.SQLITE_OK
-                if action == sqlite3.SQLITE_FUNCTION and str(arg2).lower() in FUNCTIONS: return sqlite3.SQLITE_OK
-                return sqlite3.SQLITE_DENY
-            conn.set_authorizer(authorize)
+        def read():
+            reader = self.backends.get('indexed_window')
+            return reader(since, until) if reader else [r for r in self.backends['indexed']() if since<=r['timestamp']<=until]
+        # Reuse only an identical scope. A narrower call gets its own physically
+        # bounded table, so user SQL cannot escape via CTEs, joins or subqueries.
+        with self.sql_snapshot.lock:
+            conn = self.sql_snapshot.prepare((since, until), read, COLUMNS, FUNCTIONS)
+            self.sql_snapshot.deadline()
             result, size = [], 0
-            originals = {message_key(r):r for r in rows}
+            originals = self.sql_snapshot.originals
             for row in conn.execute(sql, params or []):
                 item = dict(row)
                 size += len(json.dumps(item).encode())
@@ -151,8 +139,6 @@ class PlatformAPI:
                 if original and all(item.get(k)==original.get(k) for k in COLUMNS if k != 'id'):
                     self.remember([item])
             return result
-        finally:
-            conn.close()
 
     def api_semantic_search(self, query, min_similarity=.25):
         if not isinstance(query,str) or not 1<=len(query)<=4000 or type(min_similarity) not in (int,float) or not 0<=min_similarity<=1:

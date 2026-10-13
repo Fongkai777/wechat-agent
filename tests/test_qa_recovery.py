@@ -219,7 +219,7 @@ class QaRecoveryHTTPTests(unittest.TestCase):
         self.answer = Mock(side_effect=TimeoutError('unknown'))
         from types import SimpleNamespace
         from wechat_agent import platform_runtime
-        runtime = SimpleNamespace(model=SimpleNamespace(complete=lambda messages, response_format=None, **options:
+        runtime = SimpleNamespace(api=Mock(), model=SimpleNamespace(complete=lambda messages, response_format=None, **options:
                                                         self.api(messages, **options)))
         for target, value in (('create_platform_runtime', Mock(return_value=runtime)),
                               ('PlatformToolSession', Mock(return_value=tools))):

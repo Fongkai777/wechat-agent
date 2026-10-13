@@ -29,7 +29,7 @@ person, conversation and date filters apply before recall and ranking; they do
 not persist into the next query. Fixed task/data boundaries remain enforced.
 
 `search_qa_search_db` fuses semantic and keyword candidates with equal-weight RRF
-and optionally reranks all recalled candidates in API batches, without business
+and reranks all recalled candidates in API batches, without business
 heuristic scoring. Query reformulation belongs to the tool loop. Q&A and Skills
 use the same platform runtime, including raw-message reads, custom read-only SQL,
 threshold semantic search, index preparation and model transport. Older interrupted

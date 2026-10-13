@@ -72,6 +72,17 @@ TOOL_PERMISSIONS = {name: {'index.query'} for name in FUNCTION_FIELDS}
 TOOL_PERMISSIONS['search'] = {'index.query', 'embedding', 'llm'}
 TOOL_PERMISSIONS['finish'] = set()
 TOOL_PERMISSIONS.update({name: permissions for name, (_, permissions, _, _) in DATA_TOOLS.items()})
+# Billing follows capability metadata, including native wrappers of Python APIs.
+TOOL_EFFECTS = {name: {'may_bill': bool(permissions & {'embedding', 'llm'})}
+                for name, permissions in TOOL_PERMISSIONS.items()}
+
+
+def call_may_bill(method, arguments):
+    if method == 'tool':
+        return TOOL_EFFECTS.get(arguments.get('name'), {'may_bill': True})['may_bill']
+    return method in ('llm', 'semantic_search')
+
+
 SKILL_TOOL_NAMES = tuple(FUNCTION_FIELDS)
 TOOLS = tuple(FUNCTION_FIELDS)
 

@@ -78,8 +78,9 @@ the command exits instead of taking over the running service or opening another
 port. Stop it with Ctrl+C. Automatic syncing from real WeChat is disabled.
 
 Browse the six conversations, inspect the index, and try retrieval debugging.
-The local demo starts with embedding and reranking disabled. Chat Q&A and task
-generation need a model service: configure their independent profiles in the
+The demo includes no credentials. Browsing and text indexing work offline;
+hybrid search requires Embedding and Rerank configuration. Chat Q&A and task
+generation also need model services: configure their independent profiles in the
 demo's **Model Settings** page. This can incur provider charges; only sample
 messages should be used. Never record or publish the credential fields.
 
@@ -106,9 +107,8 @@ For this sequence, append messages **after** the first Q&A/task demonstration,
 not during initial setup. The Q&A model chooses tools over multiple turns; a
 task's saved program chooses its steps. Both use the same platform data and
 model APIs. See [execution flows (Chinese)](EXECUTION_FLOWS.zh-CN.md) and
-[editable Skill packages](CODE_SKILLS.md). Embedding-based tasks also require
-an enabled embedding profile and a semantic index; the lexical-only demo does
-not provide semantic retrieval.
+[editable Skill packages](CODE_SKILLS.md). Configure the required retrieval
+services and prepare the semantic index before demonstrating hybrid search.
 
 The fixture dates are September 10-22, 2026. Task lookback windows use the
 current time; a later run may correctly find no messages. For a recording,

@@ -13,9 +13,11 @@ class SearchEvaluationTests(unittest.TestCase):
     def test_sql_benchmark_preserves_results_and_counts_setup(self):
         result=benchmark(200,2)
         self.assertTrue(result['results_equal'])
-        self.assertEqual(len(result['current_query_seconds']),2)
-        self.assertAlmostEqual(result['prototype_total_including_setup_s'],
-                               result['prototype_setup_s']+sum(result['prototype_query_seconds']))
+        self.assertEqual(len(result['rebuild_query_seconds']),2)
+        self.assertEqual(len(result['reuse_query_seconds']),2)
+        self.assertEqual(result['reuse_snapshot_builds'],1)
+        self.assertAlmostEqual(result['reuse_total_s'], sum(result['reuse_query_seconds']))
+        self.assertEqual(result['reuse_first_query_s'],result['reuse_query_seconds'][0])
 
     def test_independent_questions_and_valid_fictional_evidence(self):
         corpus,cases,now=dataset()
