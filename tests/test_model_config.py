@@ -54,6 +54,15 @@ class ModelConfigTests(unittest.TestCase):
     def test_fresh_config_has_five_profiles(self):
         self.assertEqual(set(web.load_llm_config(self.path)), {"voice", "qa", "task", "embedding", "rerank"})
 
+    def test_context_budget_defaults_and_round_trips_independently_of_hit_target(self):
+        self.path.write_text(json.dumps({'qa':{'max_context_messages':20}}))
+        config = web.load_llm_config(self.path)
+        self.assertEqual(config['qa']['context_char_budget'],120000)
+        config = web.save_llm_config(self.path,{'qa':{'context_char_budget':240000}})
+        self.assertEqual(config['qa']['max_context_messages'],20)
+        self.assertEqual(config['qa']['context_char_budget'],240000)
+        self.assertNotIn('context_char_budget',config['task'])
+
     def test_retrieval_profiles_cannot_be_disabled_by_legacy_config_or_save(self):
         old = {name: {'enabled':False, 'api_key':'fixture', 'model':'custom'}
                for name in ('embedding', 'rerank')}

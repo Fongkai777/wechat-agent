@@ -1343,6 +1343,7 @@ DEFAULT_LLM_CONFIG = {
         "api_key_env": "OPENAI_API_KEY",
         "temperature": 1.0,
         "max_context_messages": 60,
+        "context_char_budget": 120000,
     },
     "task": {
         "base_url": "https://api.openai.com/v1",
@@ -1450,6 +1451,11 @@ def normalize_llm_config(config: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError, AttributeError):
         out["qa"]["max_context_messages"] = DEFAULT_LLM_CONFIG["qa"]["max_context_messages"]
     out["qa"]["max_context_messages"] = max(8, min(160, out["qa"]["max_context_messages"]))
+    try:
+        out["qa"]["context_char_budget"] = int(config.get("qa", {}).get("context_char_budget", 120000))
+    except (TypeError, ValueError, AttributeError):
+        out["qa"]["context_char_budget"] = 120000
+    out["qa"]["context_char_budget"] = max(10000, min(1000000, out["qa"]["context_char_budget"]))
     embedding_config = config.get("embedding", {}) if isinstance(config, dict) else {}
     try:
         out["embedding"]["dimensions"] = int(embedding_config.get("dimensions", out["embedding"]["dimensions"]))
@@ -5677,6 +5683,7 @@ def make_handler(state: AppState):
                     emit, checkpoint, check_job_cancelled, limit=limit, now=requested_at,
                     checkpoint_path=path, resume=resume, confirm_retry=payload.get('confirm_retry') is True,
                     identity=qa_execution_identity(state, config, conversation_id),
+                    context_char_budget=profile.get('context_char_budget', 120000),
                 )
                 answer = qa_answer_text(answer_data)
                 check_job_cancelled()

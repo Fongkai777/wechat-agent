@@ -21,6 +21,10 @@ Use `--cases E08,E17,E22,E24,E35,E45,E49,E50` for the diagnostic subset or
 `--judge-model` for another judge supported by the configured provider.
 All modes use the same final raw-message cap (default 20). Agent exploration can
 consume more messages/calls; this is not an equal-token-budget comparison.
+The cap is applied **after** context expansion and before answer generation in
+every mode. A shared 120,000-character body budget also applies. Production Q&A
+does not use this experimental row cap: its configurable character budget defaults
+to 120,000, with up to 800 rows retained in the retrieval working set.
 Gold evidence is used **only for scoring**, never query construction or routing.
 
 The report records final-context recall, structured answer correctness, expected
@@ -32,6 +36,36 @@ HTTP status only, never provider response bodies or credentials.
 
 See [the current findings and limitations](../docs/SEARCH_EVALUATION_V2.md).
 Manual-review fields are intentionally blank until a person reviews them.
+
+## Seven Showcase Diagnostics
+
+The separate 343-message staged showcase adds seven authored questions. Run the
+offline keyword baseline with the production neighbour expansion and a final cap
+of 60 messages:
+
+```bash
+python scripts/evaluate_showcase.py --offline --top-k 60 --output artifacts/showcase-offline-context
+```
+
+On October 13, 2026, **6/7 questions contained all annotated evidence**. S01
+retrieved five of six annotated messages, missing private message 69: the advice
+that an evaluation link should show questions and evidence, not just percentages.
+That message was present in the expanded candidates and was lost to the 60-row
+budget, rather than absent from the index. The report includes a same-candidate
+character-budget-only selection to isolate this truncation effect.
+S02-S07 each retrieved every annotation. This is evidence recall, **not answer
+accuracy**; no model, answer generation or judge was used. S04's annotations
+support the absence of a published salary, not a concrete salary answer. Queries
+use only the latest question, without injecting gold facts or rewritten history.
+Reports distinguish missing recall from evidence lost to the final window budget.
+
+These results do not establish that keyword search outperforms hybrid or Agent:
+the dataset and 60-row budget differ from the 50-question, 20-row comparison.
+To run the real multi-turn Agent on the showcase, explicitly opt into paid calls:
+
+```bash
+python scripts/evaluate_showcase.py --live-config .demo/showcase/models.json --output artifacts/showcase-live
+```
 
 ## Offline Run
 

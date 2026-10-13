@@ -48,7 +48,8 @@ def limitation(text):
 
 def run_conversation_agent(question, history, people, tools, complete, answer, emit, checkpoint,
                            check, limit=60, now=None, checkpoint_path=None, resume=False,
-                           confirm_retry=False, identity=None):
+                           confirm_retry=False, identity=None, context_char_budget=120000,
+                           final_message_limit=None):
     now = now or datetime.now().astimezone()
     with checkpoint_session(checkpoint_path) as (saver, receipts):
         # 入口冻结问题、历史、时钟和版本；恢复读取原快照，并核对模型与数据来源标识。
@@ -56,6 +57,8 @@ def run_conversation_agent(question, history, people, tools, complete, answer, e
             'question': question, 'history': history, 'people': people, 'limit': limit,
             'now': now.isoformat(), 'identity': identity,
             'agent_version': AGENT_VERSION,
+            'context_char_budget': context_char_budget,
+            'final_message_limit': final_message_limit,
         }, resume)
         if inputs.get("agent_version") != AGENT_VERSION:
             raise ValueError("旧版检索执行记录已停用，请重新提问；已保存的历史回答不受影响")
@@ -70,7 +73,11 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
     question, history, people = inputs['question'], inputs['history'], inputs['people']
     now = datetime.fromisoformat(inputs['now'])
     limit = max(10, min(int(inputs['limit']), 200))
-    retrieval_limit = min(800, limit * 4)
+    # Search targets count hits, not the neighbours needed to interpret them.
+    # A row cap is opt-in for controlled evaluations, not production answers.
+    final_message_limit = inputs['final_message_limit']
+    char_budget = max(10000, min(int(inputs['context_char_budget']), 1000000))
+    retrieval_limit = 800
     started = time.monotonic()
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0,
              "scope": "tool_decisions_and_reviews"}
@@ -154,7 +161,8 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
         s["trace"] = [*s.get("trace", []), event]
         # 任一工具未完整返回或证据被预算截断，均不能标为穷尽覆盖。
         s["coverage"] = {"exhaustive": all(t["complete"] for t in s["trace"]),
-                         "context_limit": limit, "included": len(s["sources"]),
+                         "context_limit": final_message_limit, "context_char_budget": char_budget,
+                         "included": len(s["sources"]),
                          "note": "仅覆盖本地索引；相关性检索和上下文预算不代表遍历全部消息"}
         save(s, f"{name}：返回 {event['returned']} 条，纳入 {event['included']} 条")
         # Tool previews must not advertise IDs removed from the working set;
@@ -193,7 +201,9 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
             'answer_review_feedback':s.get('review_feedback'),
             'trace':s.get('trace',[]),'evidence':previews,'calls_remaining':8-s.get('rounds',0),
             'evidence_slots_remaining':retrieval_limit-len(s.get('sources',[])),
-            'answer_evidence_limit':limit,
+            'search_hit_target':limit,
+            'answer_evidence_limit':final_message_limit,
+            'answer_context_char_budget':char_budget,
             'source_catalog':[{'evidence_id':x['evidence_id'],'chat_title':x.get('chat_title'),
                                'sender':x.get('sender'),'time':x.get('time')} for x in s.get('sources',[])]}
         request.update(current_time=now.isoformat(), platform_boundary={
@@ -246,12 +256,12 @@ def _run_agent(inputs, tools, complete, answer, emit, checkpoint, check, saver, 
             save(s, "根据已核实的消息生成回答")
             # Retain whole local windows under both budgets. Never turn a
             # contextualised hit back into a dangling phrase by tail-slicing.
-            context, trimmed = select_evidence(s['sources'], limit=limit, char_limit=60000)
+            context, trimmed = select_evidence(s['sources'], limit=final_message_limit, char_limit=char_budget)
             s["sources"] = context
             if trimmed:
                 s["coverage"] = dict(s.get("coverage", {}), exhaustive=False, context_incomplete=True, included=len(context))
             if not context:
-                s['answer_data'] = limitation('完整上下文超过本轮证据预算，未截取孤立短句作答。请缩小问题范围或提高入模片段数量。')
+                s['answer_data'] = limitation('完整上下文超过本轮证据预算，未截取孤立短句作答。请缩小问题范围或提高证据文本预算。')
                 return s
             grounded_question = question + "\n\n本轮工具执行记录与覆盖范围（查询条件不代表用户意图已经核实）：\n" + json.dumps({
                 "platform_boundary": plan, "coverage": s.get("coverage"), "trace": s["trace"],

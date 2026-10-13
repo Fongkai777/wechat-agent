@@ -147,7 +147,7 @@ class ToolTests(unittest.TestCase):
         _,sources,diag=run_conversation_agent('小林今天下午说什么',[],PEOPLE,self.tools,complete,answer,
                                               Mock(),Mock(),lambda:None,now=NOW,limit=10)
         self.assertEqual(len(diag['trace']),2)
-        self.assertEqual(len(sources),10)
+        self.assertEqual(len(sources),12)
         self.assertFalse(diag['coverage']['exhaustive'])
 
     def test_repeated_call_stops_without_infinite_retrieval(self):

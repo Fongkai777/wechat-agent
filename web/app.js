@@ -91,6 +91,7 @@ const qaApiKey = document.querySelector("#qaApiKey");
 const qaApiKeyEnv = document.querySelector("#qaApiKeyEnv");
 const qaTemperature = document.querySelector("#qaTemperature");
 const qaContextLimit = document.querySelector("#qaContextLimit");
+const qaContextCharBudget = document.querySelector("#qaContextCharBudget");
 const embeddingBaseUrl = document.querySelector("#embeddingBaseUrl");
 const embeddingModel = document.querySelector("#embeddingModel");
 const embeddingApiKey = document.querySelector("#embeddingApiKey");
@@ -546,6 +547,7 @@ function renderLLMConfig(config) {
   qaApiKeyEnv.value = qa.api_key_env || "OPENAI_API_KEY";
   qaTemperature.value = qa.temperature ?? 1;
   qaContextLimit.value = qa.max_context_messages ?? 40;
+  qaContextCharBudget.value = qa.context_char_budget ?? 120000;
   taskBaseUrl.value = task.base_url || "";
   taskModel.value = task.model || "";
   taskApiKey.value = "";
@@ -1274,6 +1276,7 @@ async function saveLLMConfig(event) {
         api_key_env: qaApiKeyEnv.value.trim(),
         temperature: Number(qaTemperature.value || 1),
         max_context_messages: Number(qaContextLimit.value || 40),
+        context_char_budget: Number(qaContextCharBudget.value || 120000),
       },
       task: {
         base_url: taskBaseUrl.value.trim(),

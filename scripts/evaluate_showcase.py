@@ -21,6 +21,9 @@ from wechat_agent.qa_recovery import AGENT_VERSION
 from wechat_agent.platform_runtime import create_platform_runtime, PlatformToolSession, QA_LIMITS
 from scripts.evaluate_retrieval import UsageRecorder, evidence_ids
 from scripts.evaluate_answers import judge_answer
+from scripts.evaluate_search_v2 import keyword, final_context, EVALUATION_CHAR_BUDGET
+from wechat_agent.qa_tools import ConversationTools
+from wechat_agent.evidence_context import select_evidence
 
 CASES = Path(__file__).resolve().parents[1] / 'eval/showcase_cases.json'
 
@@ -39,6 +42,60 @@ def conversation_history(case, completed):
     return row['history'] + [
         {'role':'user', 'content':row['question']},
         {'role':'assistant', 'content':web.qa_answer_text(row['answer'])}]
+
+
+def evaluate_offline(output, top_k=60):
+    """Latest-query keyword hits plus production context; no model or gold routing."""
+    data = load_cases()
+    now = datetime.fromisoformat(data['anchor'])
+    results = []
+    with tempfile.TemporaryDirectory(prefix='wechat-showcase-offline-') as directory:
+        root = Path(directory)
+        demo.initialize(root, anchor=data['anchor'])
+        state = demo.demo_state(root)
+        for phase in demo.workspace_manifest(root)['corpus']['phases']:
+            if phase['name'] != 'initial':
+                demo.append_phase(root,phase['name'])
+                demo.refresh_workspace(state)
+            web.update_qa_search_db_incremental(state)
+            tools = ConversationTools(state,
+                lambda query,people,since,until,size,scope=None:(keyword(state,query,size,until),{}),
+                web.qa_item_from_search_row,lambda:None)
+            for case in (c for c in data['cases'] if c['phase']==phase['name']):
+                started = time.perf_counter()
+                found = tools.search({'query':case['question'],'people':[],
+                    'since_ts':0,'until_ts':int(now.timestamp())},size=top_k)
+                sources, trimmed = final_context(found['items'],top_k)
+                retrieved = {int(s['local_id']) for s in sources if s.get('local_id')}
+                expected = set(case['evidence'])
+                expanded_ids = {int(s['local_id']) for s in found['items'] if s.get('local_id')}
+                uncapped, _ = select_evidence(found['items'],char_limit=EVALUATION_CHAR_BUDGET)
+                uncapped_ids = {int(s['local_id']) for s in uncapped if s.get('local_id')}
+                row = {'id':case['id'],'question':case['question'],
+                    'expected_message_ids':sorted(expected),'retrieved_message_ids':sorted(retrieved),
+                    'missing_message_ids':sorted(expected-retrieved),
+                    'missing_before_budget':sorted(expected-expanded_ids),
+                    'lost_to_budget':sorted((expected & expanded_ids)-retrieved),
+                    'without_row_cap':{'final_context_count':len(uncapped),
+                        'missing_message_ids':sorted(expected-uncapped_ids)},
+                    'all_evidence_found':expected <= retrieved,
+                    'evidence_recall':len(expected & retrieved)/len(expected),
+                    'pre_budget_count':len(found['items']),'final_context_count':len(sources),
+                    'context_chars':sum(len(s.get('text','')) for s in sources),
+                    'context_trimmed':trimmed,'sources':sources,
+                    'latency_s':round(time.perf_counter()-started,3)}
+                results.append(row)
+                print(f"{case['id']}: recall={row['evidence_recall']} missing={row['missing_message_ids']} rows={len(sources)}",flush=True)
+    report = {'anchor':data['anchor'],'mode':'keyword_with_context','top_k_raw_messages':top_k,
+        'all_evidence_hits':sum(r['all_evidence_found'] for r in results),
+        'cases':len(results),'results':results,'api_calls':0,
+        'limits':['Authored diagnostic set, not held-out answer accuracy.',
+                  'Latest question only; no rewritten query, answer or judge model.',
+                  'Post-expansion row cap; complete windows only. No gold evidence enters retrieval.',
+                  'S04 labels evidence of unavailable salary, not a known salary answer.']}
+    output.mkdir(parents=True,exist_ok=True)
+    (output/'results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    return report
 
 
 def evaluate(config_path, output, judge=False, case_ids=None):
@@ -160,11 +217,21 @@ def evaluate(config_path, output, judge=False, case_ids=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--live-config', type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--live-config', type=Path)
+    mode.add_argument('--offline', action='store_true')
+    parser.add_argument('--top-k',type=int,default=60,help='Offline final raw-message cap')
     parser.add_argument('--output', type=Path, default=Path('artifacts/showcase'))
     parser.add_argument('--judge', action='store_true')
     parser.add_argument('--cases', help='Comma-separated IDs; preceding conversation turns are included')
     args = parser.parse_args()
+    if args.offline:
+        if args.judge or args.cases:
+            parser.error('--offline runs all seven cases without a judge')
+        if not 8 <= args.top_k <= 160:
+            parser.error('--top-k must be 8..160')
+        evaluate_offline(args.output,args.top_k)
+        return 0
     result = evaluate(args.live_config,args.output,args.judge,args.cases.split(',') if args.cases else None)
     return int(bool(result.get('setup_error')) or any(
         r.get('error_type') or r.get('judge_error_type') or not r.get('citation_refs_valid')

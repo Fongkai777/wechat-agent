@@ -25,6 +25,8 @@ minimum timestamp are also covered.
 - Agent: the production native-tool search loop, then structured generation.
 - Final answer context cap: 20 raw messages in each mode. Exploration budgets differ;
   report latency and tokens alongside quality, not an equal-budget superiority claim.
+  This is an evaluation-only cap, applied after neighbour expansion and before
+  generation. Production Q&A uses a configurable character budget instead.
 - Gold evidence never enters search/planning. The judge receives the fictional
   corpus for correctness, and only cited evidence for citation support.
 - The same `gpt-5-mini` answers and judges unless explicitly overridden. This is
@@ -35,6 +37,12 @@ minimum timestamp are also covered.
 Reproduction commands and output fields are in [eval/README.md](../eval/README.md).
 The original top-8 legacy evaluator is kept separately; do not compare its score
 directly with top-20 v2 on a different corpus.
+
+October 13 correction: hybrid neighbour expansion previously bypassed the final
+row cap. The evaluator now applies the same final row/character budgets to all
+three modes. Existing reports are historical observations, not a rerun of the
+corrected paired experiment. See [the seven showcase diagnostics](../eval/README.md#seven-showcase-diagnostics)
+for the separate offline 60-message context check and its truncation failure.
 
 ## Offline Findings: October 12, 2026
 

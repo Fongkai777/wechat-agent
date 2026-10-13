@@ -116,7 +116,7 @@ class SearchWindowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '锚点'):
             self.tools.surrounding(self.plan, [seed])
 
-    def test_working_set_budget_keeps_windows_and_hides_discarded_tool_ids(self):
+    def test_small_hit_target_does_not_discard_context_windows(self):
         for group in range(8):
             for offset in range(7):
                 self.insert(group*7+offset+1,chat=f'g{group}@chatroom')
@@ -130,13 +130,49 @@ class SearchWindowTests(unittest.TestCase):
             request = json.loads(messages[-1]['content'])
             tool = json.loads(next(m['content'] for m in messages if m['role']=='tool'))
             ids = {s['evidence_id'] for s in request['source_catalog']}
-            self.assertEqual(len(ids),35)
+            self.assertEqual(len(ids),56)
             self.assertEqual({s['evidence_id'] for s in tool['items']}, ids)
-            self.assertFalse(tool['complete'])
-            return decision('finish',source_ids=[hits[0]['evidence_id']])
+            return decision('finish',source_ids=[s['evidence_id'] for s in hits])
         _, sources, _ = run_conversation_agent('fragment?',[],[],self.tools,choose,
             Mock(return_value={'paragraphs':[]}),Mock(),Mock(),lambda:None,now=NOW,limit=10)
-        self.assertEqual({s['local_id'] for s in sources},{str(i) for i in range(1,8)})
+        self.assertEqual({s['local_id'] for s in sources},{str(i) for i in range(1,57)})
+
+    def test_evaluation_cap_is_explicit_and_keeps_whole_windows(self):
+        from scripts.evaluate_search_v2 import final_context
+        for group in range(4):
+            for offset in range(7):
+                self.insert(group*7+offset+1,chat=f'g{group}@chatroom')
+        hits = [self.hit(group*7+4) for group in range(4)]
+        self.hybrid.return_value = (hits,{})
+        answer = Mock(return_value={'paragraphs':[]})
+        choose = Mock(side_effect=[decision('search',query='deadline',size=4),
+                                   decision('finish',source_ids=[s['evidence_id'] for s in hits])])
+        _, sources, diag = run_conversation_agent('deadline?',[],[],self.tools,choose,answer,
+            Mock(),Mock(),lambda:None,now=NOW,limit=20,final_message_limit=20)
+        self.assertEqual(len(sources),14)
+        self.assertTrue(diag['coverage']['context_incomplete'])
+        raw = self.tools.search(dict(self.plan,people=[]),size=4)['items']
+        baseline, trimmed = final_context(raw,20)
+        self.assertTrue(trimmed)
+        self.assertEqual([s['evidence_id'] for s in baseline],[s['evidence_id'] for s in sources])
+
+    def test_configured_character_budget_keeps_or_omits_whole_long_message(self):
+        self.insert(1)
+        self.conn.execute('UPDATE messages SET text=? WHERE id=1',('x'*11000,))
+        self.conn.commit()
+        hit = self.hit(1)
+        self.hybrid.return_value = ([hit],{})
+        for budget, count in [(10000,0),(20000,1)]:
+            answer = Mock(return_value={'paragraphs':[]})
+            choose = Mock(side_effect=[decision('search',query='long',size=1),
+                decision('finish',source_ids=[hit['evidence_id']])])
+            _,sources,diag = run_conversation_agent('long?',[],[],self.tools,choose,answer,
+                Mock(),Mock(),lambda:None,now=NOW,context_char_budget=budget)
+            self.assertEqual(len(sources),count)
+            self.assertEqual(answer.call_count,count)
+            self.assertEqual(diag['coverage']['context_char_budget'],budget)
+            if sources:
+                self.assertEqual(len(sources[0]['text']),11000)
 
 
 if __name__ == '__main__': unittest.main()

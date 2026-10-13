@@ -134,11 +134,16 @@ runs interrupted; automatic paid replay/resume is deliberately not implemented.
 There are at most eight model-selected tool executions. Exact repeated calls stop
 the loop with partial-coverage reporting. There is no fixed intent-to-tool dispatch
 for new turns. The
-configured answer context limit is clamped to 10-200 message rows. The retrieval
-working set is bounded at four times that limit (maximum 800), so filling one page
-does not prematurely end the loop. The model can select evidence IDs at finish;
+configured message count is a search-hit target, not a final-answer row cap. The
+retrieval working set is independently bounded at 800 rows, so a small search
+target does not discard the context needed to interpret its hits. The model can select evidence IDs at finish;
 otherwise retrieval order is used. Direct context windows are kept together under
-the message budget and a 60,000-character answer budget. Oversized windows are
+the configurable answer body-text budget (default 120,000 characters). Production
+answers have no additional 20/60-row cap; controlled evaluations explicitly pass
+the same final row cap to every mode, after expansion and before generation.
+This is a character budget, not a tokenizer or automatic model-capacity detection;
+prompts, source metadata, history, tools and output need additional capacity.
+Oversized windows are
 skipped whole, not tail-sliced into isolated phrases; long messages are not cut
 mid-sentence. Missing dependencies and omitted windows mark partial coverage.
 If none fit, the server returns a limitation without asking the answer model.
@@ -148,7 +153,7 @@ its own timeout. Tool-decision and review token counts are labeled separately an
 claim to include answer, embedding or reranking costs. Each decision/execution
 round has a distinct durable receipt scope, so later rounds cannot accidentally
 reuse an earlier model response. Receipt scopes also include the correction round.
-Version 8 is the only executable Q&A protocol. Pre-v8 interrupted checkpoints
+Version 9 is the only executable Q&A protocol. Pre-v9 interrupted checkpoints
 cannot be resumed; their saved answers and history remain readable. New turns
 start directly with native Tool Calling. Assistant tool calls and paired tool results are
 checkpointed together with retrieval state and the shared platform evidence ledger

@@ -11,7 +11,7 @@ from wechat_agent import demo, web
 from wechat_agent.demo_scenario import build_showcase
 from wechat_agent.platform_runtime import create_platform_runtime, QA_LIMITS
 from tests.test_platform_unification import native_args
-from scripts.evaluate_showcase import load_cases, conversation_history
+from scripts.evaluate_showcase import load_cases, conversation_history, evaluate_offline
 from wechat_agent.qa_tools import ConversationTools
 from wechat_agent.evidence_context import select_evidence, context_windows
 from wechat_agent.platform_tools import execute_action
@@ -34,6 +34,16 @@ class ShowcaseTests(unittest.TestCase):
             QA_LIMITS,web.load_llm_config(state.llm_config),'qa',lambda:None,threading.Lock())
         self.addCleanup(runtime.api.close)
         return runtime.api
+
+    def test_offline_seven_cases_distinguish_recall_from_final_budget_loss(self):
+        with patch('urllib.request.urlopen',side_effect=AssertionError('Offline must not call API')):
+            report = evaluate_offline(self.root/'report',60)
+        self.assertEqual((report['all_evidence_hits'],report['cases'],report['api_calls']),(6,7,0))
+        first = report['results'][0]
+        self.assertEqual(first['missing_before_budget'],[])
+        self.assertEqual(first['lost_to_budget'],[69])
+        self.assertTrue(all(len(r['sources']) <= 60 for r in report['results']))
+        self.assertTrue(all(not r['without_row_cap']['missing_message_ids'] for r in report['results']))
 
     def test_authored_corpus_has_twelve_chats_and_stable_unique_ids(self):
         data = build_showcase(ANCHOR)

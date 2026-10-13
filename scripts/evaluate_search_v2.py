@@ -21,12 +21,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from wechat_agent import demo, web
 from wechat_agent.qa_agent import run_conversation_agent
 from wechat_agent.qa_tools import ConversationTools
+from wechat_agent.evidence_context import select_evidence
 from wechat_agent.platform_runtime import create_platform_runtime, PlatformToolSession, QA_LIMITS
 import threading
 from scripts.evaluate_retrieval import UsageRecorder
 from scripts.evaluate_answers import judge_answer, summarize, estimate_cost
 
 ROOT = Path(__file__).resolve().parents[1]
+EVALUATION_CHAR_BUDGET = 120000
+
+
+def final_context(sources, top_k):
+    """Apply the same post-expansion budget before scoring or answering."""
+    return select_evidence(sources, limit=top_k, char_limit=EVALUATION_CHAR_BUDGET)
 
 
 def dataset():
@@ -90,7 +97,8 @@ def write_report(output, cases, results, calls, config, corpus, live, top_k):
             summaries[mode].update(generation_failures=0, answer_status='not_run')
     report = {'generated_at': datetime.now(timezone.utc).isoformat(), 'selected_cases': len(cases),
               'fixture_messages': len(corpus['messages']) + len(corpus['increment']),
-              'top_k_raw_messages': top_k, 'summaries': summaries, 'results': results,
+              'top_k_raw_messages': top_k, 'context_char_budget': EVALUATION_CHAR_BUDGET,
+              'summaries': summaries, 'results': results,
               'models': {k: v.get('model') for k,v in config.items()} if live else {},
               'index_cost': estimate_cost([c for c in calls if c['stage'] == 'index']),
               'limits': [
@@ -183,8 +191,15 @@ def evaluate(args):
                             case['question'], case.get('history',[]), index.get('people_list') or [], PlatformToolSession(state,runtime),
                             lambda messages,schema=None,**opts:runtime.model.complete(messages,response_format=schema,**opts),
                             lambda q,s,h:web.call_qa_answer(profile,key,q,s,h,complete=runtime.model.complete), lambda *a,**k:None,
-                            lambda trace,sources:row.update(retrieval=trace), lambda:None, limit=args.top_k, now=now)
+                            lambda trace,sources:row.update(retrieval=trace), lambda:None, limit=args.top_k, now=now,
+                            final_message_limit=args.top_k, context_char_budget=EVALUATION_CHAR_BUDGET)
                         row.update(answer=answer,retrieval=trace)
+                    # Agent applies this before generation, so never renumber
+                    # its citations after answering. Baselines are capped here.
+                    if mode != 'agent':
+                        row['pre_budget_count'] = len(sources)
+                        sources, row['context_trimmed'] = final_context(sources, args.top_k)
+                    row['final_context_count'] = len(sources)
                     row['sources'] = sources
                     row['retrieved_message_ids'] = list(dict.fromkeys(int(s['local_id']) for s in sources if s.get('local_id')))
                     row['context_chars'] = sum(len(s.get('text','')) for s in sources)

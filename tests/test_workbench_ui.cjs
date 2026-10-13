@@ -60,6 +60,8 @@ test('model form loads and saves task settings independently without exposing sa
     api_key_preview: 'fix...test', api_key_env: 'TASK_KEY',
   }};
   context.renderLLMConfig(context.state.llmConfig);
+  assert.equal(context.qaContextCharBudget.value, 120000);
+  context.qaContextCharBudget.value = '240000';
   assert.equal(context.taskModel.value, 'task-only');
   assert.equal(context.qaModel.value, 'qa-only');
   assert.equal(context.taskApiKey.value, '');
@@ -67,6 +69,7 @@ test('model form loads and saves task settings independently without exposing sa
   await context.saveLLMConfig({preventDefault() {}});
   assert.equal(saved.task.model, 'task-only');
   assert.equal(saved.qa.model, 'qa-only');
+  assert.equal(saved.qa.context_char_budget, 240000);
   assert.equal(saved.task.api_key, '');
   assert.equal(saved.task.api_key_env, 'TASK_KEY');
   assert.equal(context.settingsStatus.textContent, '已保存');
